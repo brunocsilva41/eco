@@ -46,3 +46,38 @@ Teste de API (1 amostra, `--reasoning off`, pergunta: sair a que horas para reun
 - Gemma 4 E4B: respondeu "7h20" (ERRADO); tool call correto.
 - Resumo de tool calling (Bloco de Notas): Qwen3-VL 4B ok, Qwen3-VL 8B ok, Qwen3.5 4B ok, Qwen3.5 9B ok, Gemma 4 E4B ok, Gemma 3 4B falhou.
 Não testado: áudio do Gemma 4 no llama.cpp (fica para a F2), visão, Qwen3-ASR, TTS, vídeo.
+
+---
+# Rodada 3 — MoE, KV cache, MTP, RAM (2026-11-19), build b12531
+
+## RAM
+`Win32_PhysicalMemory`: 2 pentes de 8 GB, DDR4 a 2133 MT/s (configurado 2133), fabricante "Undefined". Sobraram 6–7 GB livres durante os testes com o MoE. Quantos canais estão ativos NÃO deu para confirmar por software (o Xeon E5 v4 suporta 4; só 2 slots estão ocupados). Teórico: 2133 MT/s x 8 B = ~17 GB/s por canal; com 2 canais ~34 GB/s (conta minha, não medida). `wmic` não usado (obsoleto); usei CIM.
+
+## KV cache (Qwen3-VL 4B Q4_K_M, -fa 1)
+| ctk / ctv | pp512 | tg128 |
+|---|---:|---:|
+| f16 / f16 | 196,3 ± 0,1 | 21,95 ± 0,24 |
+| f16 / q8_0 | 189,4 ± 4,7 | 20,60 ± 0,39 |
+| q8_0 / f16 | 157,3 ± 2,8 | 19,06 ± 0,22 |
+| q8_0 / q8_0 | 145,8 ± 1,1 | 18,25 ± 0,11 |
+KV q8_0 funciona no Vulkan com -fa 1, mas é 7–25% MAIS LENTO e não medi a qualidade. Só vale para economizar VRAM em contexto longo; com contexto 4096 não é necessário. Manter f16.
+
+## MoE: gpt-oss-20b MXFP4 (ggml-org, 11,27 GiB, 24 camadas), -ngl 99, --n-cpu-moe N
+| N (camadas c/ experts na CPU) | pp512 | tg128 | VRAM máx | RAM livre |
+|---:|---:|---:|---:|---:|
+| 24 (= --cpu-moe) | 7,6 ± 1,2 | 2,52 ± 0,08 | 2,62 GB | 7,0 GB |
+| 20 | 16,1 ± 5,7 | 4,25 ± 1,97 | 4,18 GB | 6,6 GB |
+| 16 | 47 ± 46 | 8,87 ± 0,91 | 7,77 GB | 7,1 GB |
+| 12 | 93,1 ± 5,4 | 9,98 ± 1,46 | 7,15 GB | 6,0 GB |
+| 8 | falhou: "unable to allocate Vulkan0 buffer" | | | |
+(`-r 2`; alta variância; VRAM = pico do contador, inclui ~0,9 GB do Windows. N=16 gravou 7,77 GB, acima do N=12: provavelmente buffer de computação maior, não investigado.)
+Conclusão: o melhor ponto é N=12 (~10 tok/s, 93 pp), preso à RAM DDR4-2133 e quase sem folga de VRAM (7,15 de 8 GB), sem visão/áudio. É PIOR que o Qwen3-VL 4B (~20 tok/s, 200 pp, 3,7 GB). MoE não compensa nesta máquina com 16 GB de RAM; -fit off não foi necessário (usei -ncmoe manual).
+
+## MTP / speculative (Gemma 4 E4B Q4_0, llama-server, 144 tokens, temp 0)
+O build aceita `--spec-type` (none, draft-simple, draft-eagle3, draft-mtp, draft-dflash, ..., ngram-*).
+| Config | tg t/s | aceitação |
+|---|---:|---|
+| sem spec | 14,9 | — |
+| `--spec-type draft-mtp -md mtp-gemma-4-E4B-it-Q4_0.gguf` (57 MB) | 18,0 | 74/210 (35%) |
+| `--spec-type ngram-mod` | 14,9 (1ª vez) / 56 (repetindo o MESMO prompt) | 128/128 só na repetição |
+MTP deu +21% no Gemma 4 E4B (continua abaixo do Qwen3-VL 4B puro: 18 contra ~20 t/s, e com a conta de hora errada). O 56 t/s do ngram é artefato de repetir o mesmo prompt; não é ganho real em conversa. MTP não testado no Qwen3.5 (não baixei GGUF com cabeças MTP).
