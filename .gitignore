@@ -1,0 +1,5 @@
+bin/
+models/
+venv/
+logs/
+__pycache__/
