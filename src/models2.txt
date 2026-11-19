@@ -1,0 +1,6 @@
+gemma4-e4b|ggml-org/gemma-4-E4B-it-GGUF|gemma-4-E4B-it-Q4_0.gguf|a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2
+gemma4-e4b|ggml-org/gemma-4-E4B-it-GGUF|mmproj-gemma-4-E4B-it-Q8_0.gguf|9257f21a0f5358204b4a612cff83fad2e56412f4f607f0049331ce60c0cf9d34
+qwen35-4b|unsloth/Qwen3.5-4B-GGUF|Qwen3.5-4B-Q4_K_M.gguf|00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4
+qwen35-4b|unsloth/Qwen3.5-4B-GGUF|mmproj-F16.gguf|cd88edcf8d031894960bb0c9c5b9b7e1fea6ebee02b9f7ce925a00d12891f864
+qwen35-9b|unsloth/Qwen3.5-9B-GGUF|Qwen3.5-9B-Q4_K_M.gguf|03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8
+qwen35-9b|unsloth/Qwen3.5-9B-GGUF|mmproj-F16.gguf|f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f
