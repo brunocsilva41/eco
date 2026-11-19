@@ -58,6 +58,15 @@ Projetos prontos para estudar (não adotar às cegas; só lemos resumos): Jarvis
 **Fase 0 — Base (pasta e ambiente).** Estrutura em `F:\Jarvis` (`bin`, `models`, `src`, `logs`, `docs`, `tests`), Python venv, git local. Atualizar driver AMD. Pronto = `vulkaninfo` mostra a RX 580.
 **Fase 1 — Cérebro na GPU.** llama.cpp Vulkan + Qwen3-VL 4B Q4_K_M. Pronto = `llama-bench` registrado (pp e tg), resposta em pt-BR via API local, uso de VRAM anotado. Comparar com Gemma 3 4B e com um 8B Q4.
 **Fase 2 — Voz.** faster-whisper + Piper + VAD, com tecla para falar. Pronto = fala->texto->fala em menos de ~5 s para frases curtas; medir WER em 20 frases do Bruno.
+**Fases I0–I5 — Ilha do Jarvis (interface "Dynamic Island").** Entram DEPOIS da Fase 2 (voz). Spec completa e decisões do Bruno em `docs/ILHA-SPEC.md` (v0.2). Itens [P]/[R] precisam de prova na máquina dele.
+- Regras base: janela Qt/PySide6 em processo separado do núcleo (IPC local em 127.0.0.1); por cima de tudo no topo central do monitor principal; sem roubar foco (`WS_EX_NOACTIVATE`); renderização por CPU (QPainter) a 30 fps, timer parado em repouso, para não disputar a VRAM com o LLM; 3 tamanhos (pequeno/médio/grande) com troca automática e manual; avisos e confirmação Sim/Não dentro da ilha; espectro de voz (microfone e áudio do TTS) além do círculo de pontos.
+- **I0** Protótipo visual: janela, 3 tamanhos, pontos + espectro com áudio de teste, tokens de design. Pronto = vídeo/capturas por tamanho e estado + CPU/RAM medidos (meta: <2% em repouso, <8% ativa; a medir).
+- **I1** Ligar ao núcleo por IPC: estados reais e transcrição.
+- **I2** Avisos de ação e confirmação Sim/Não por clique e por voz (timeout = NÃO).
+- **I3** Gatilhos personalizáveis: palavra de ativação "Jarvis" (openWakeWord; gravar amostras reais), combinação de teclas (`RegisterHotKey`), API local com token; clique.
+- **I4** Modo integrada (AppBar), multi-monitor, configurações, inicialização com o Windows, instalador.
+- **I5** Profissionalização: config tipada, logs e auditoria, `doctor`, testes, watchdog.
+- Perguntas pendentes para o Bruno (ILHA-SPEC seção 7): (1) atalho e "ação/evento" como gatilho entram já na v1 ou depois? (2) cor de destaque: ciano ou outra? (3) qual atalho? voz do Jarvis masculina ou feminina? (4) mostrar a ilha com app em tela cheia aberto?
 **Fase 3 — Ferramentas do PC.** Abrir/fechar apps, focar janelas, digitar, atalhos, UI Automation. Pronto = 10 tarefas de teste passam 9/10.
 **Fase 4 — Visão.** Screenshot sob demanda e "o que tem na tela?"; cliques por visão só como fallback. Pronto = descreve a tela e acha 1 botão por pedido em 8/10 testes.
 **Fase 5 — Agente completo.** Máquina de estados, confirmações, tecla de emergência, logs, memória SQLite. Pronto = fluxo completo por voz sem travar por 30 min.
