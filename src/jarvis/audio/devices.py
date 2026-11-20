@@ -165,6 +165,9 @@ def resolve_device(spec: DeviceSpec, kind: Kind) -> AudioDevice:
     if spec is None:
         usable = [d for d in capable if d.api_rank < _EXCLUDED_RANK]
         defaults = [d for d in usable if d.is_default(kind)]
+        if not usable:
+            log.warning("só há dispositivos WDM-KS de %s (sem MME/WASAPI/DirectSound): o serviço de áudio do Windows "
+                        "pode estar reiniciando; usando %s mesmo assim", label, capable[0].label)
         chosen = _best(defaults or usable or capable)
         log.debug("dispositivo de %s padrão: %s", label, chosen.label)
         return chosen

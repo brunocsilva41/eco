@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..config import Config
 from .devices import DeviceError, resolve_input_device, resolve_output_device
+from .service import AUDIO_SERVICES, query_service
 from .stt import find_local_model
 from .vad import VadError, default_model_path, validate_model_file
 
@@ -94,10 +95,40 @@ def _check_vad(cfg: Config) -> CheckResult:
     return CheckResult(name, True, f"{path} ({_mb(size)})")
 
 
+def _check_audio_services() -> CheckResult:
+    """Estado REAL dos serviços de áudio do Windows (Service Control Manager)."""
+    states = [query_service(n) for n in AUDIO_SERVICES]
+    detail = ", ".join(f"{s.name}: {s.text}" for s in states)
+    return CheckResult("serviços de áudio do Windows", all(s.running for s in states), detail)
+
+
+def _check_host_apis() -> CheckResult:
+    """APIs de áudio que o PortAudio enxerga e quantos dispositivos cada uma tem. Só WDM-KS = algo errado com o áudio."""
+    from collections import Counter
+
+    from .devices import list_devices
+    inputs: Counter[str] = Counter()
+    outputs: Counter[str] = Counter()
+    for d in list_devices():
+        if d.max_input_channels > 0:
+            inputs[d.hostapi] += 1
+        if d.max_output_channels > 0:
+            outputs[d.hostapi] += 1
+    apis = sorted(set(inputs) | set(outputs))
+    detail = "; ".join(f"{a}: {inputs[a]} entrada(s), {outputs[a]} saída(s)" for a in apis) or "nenhuma"
+    if not [a for a in apis if "wdm" not in a.lower()]:
+        return CheckResult("APIs de áudio", False,
+                           f"só aparecem APIs WDM-KS ({detail}). O Jarvis prefere MME/WASAPI/DirectSound: reinicie o "
+                           "programa e confira o serviço 'Áudio do Windows' no item acima")
+    return CheckResult("APIs de áudio", True, detail)
+
+
 def check_audio(cfg: Config) -> list[CheckResult]:
     """Roda todas as verificações de áudio (sem abrir microfone nem tocar som)."""
     checks: list[tuple[str, Callable[[], CheckResult]]] = [
         ("pacotes de áudio", _check_packages),
+        ("serviços de áudio do Windows", _check_audio_services),
+        ("APIs de áudio", _check_host_apis),
         ("microfone", lambda: _check_device("microfone", lambda: resolve_input_device(cfg.audio))),
         ("alto-falante", lambda: _check_device("alto-falante", lambda: resolve_output_device(cfg.audio))),
         ("modelo Whisper", lambda: _check_whisper(cfg)),
