@@ -43,6 +43,7 @@ from .voice import Voice
 from .win import dpi
 from .win import input as win_input
 from .win.hotkeys import HotkeyError, HotkeyListener, KeyHold
+from .win.keys import parse_combo
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +91,8 @@ class JarvisApp:
         self._started = time.time()
         self._hotkeys_ok = True
         self._settings = SettingsStore()
+        self._boot_cfg = cfg                                             # configuração da partida (base do "requer reinício")
+        self._emergency_norm = parse_combo(cfg.safety.emergency_hotkey).norm
 
     # ================================================================ ciclo de vida
     def start(self) -> None:
@@ -98,10 +101,20 @@ class JarvisApp:
         dpi.ensure_per_monitor_v2()                                     # antes de qualquer captura/coordenada
         logsetup.setup(cfg.paths.logs, cfg.logs)
         log.info("iniciando o Jarvis (raiz %s)", cfg.paths.root)
+        self._boot_cfg = cfg                                            # base para saber o que ainda exige reinício
         try:
             self._build(cfg)
-        except BaseException:
+        except StartupError:
             self._p = None                                              # o ExitStack de _build já fechou tudo que abriu
+            self.shutdown()
+            raise
+        except Exception as exc:  # noqa: BLE001 - banco de versão nova, dispositivo ausente, etc.: mensagem clara, sem traceback
+            log.exception("falha na partida")
+            self._p = None
+            self.shutdown()
+            raise StartupError(f"não consegui iniciar: {exc}") from exc
+        except BaseException:
+            self._p = None
             self.shutdown()
             raise
         control.write_runtime(cfg.paths.data, control.Runtime(os.getpid(), self._started,
@@ -125,7 +138,9 @@ class JarvisApp:
             speaker = Speaker(cfg.audio, cfg.tts, self.bus)
             stack.callback(speaker.close)
             tts = Synthesizer(cfg.tts)
+            stack.callback(tts.close)
             stt = Transcriber(cfg.stt)
+            stack.callback(stt.close)
             mic = Microphone(cfg.audio, self.bus, models_dir=cfg.paths.models)
             stack.callback(mic.close)
             voice = Voice(tts, speaker, self.state)
@@ -143,8 +158,26 @@ class JarvisApp:
             errors = self._load_models(server, stt, tts, mic)
             if errors:
                 raise StartupError("não consegui iniciar:\n - " + "\n - ".join(errors))
+            self._check_prompt_budget(agent, llm)
             self._start_hotkeys()
             stack.pop_all()                                             # tudo certo: o shutdown() assume a limpeza
+
+    def _check_prompt_budget(self, agent: Agent, llm: LlmClient) -> None:
+        """Mede (com o tokenizador do modelo) quanto do contexto o prompt FIXO ocupa: sistema + esquemas das ferramentas."""
+        try:
+            fixed, n_ctx = agent.fixed_prompt_tokens()
+        except Exception:  # noqa: BLE001 - a medição é diagnóstico; não impede a partida
+            log.exception("não consegui medir o prompt fixo")
+            return
+        pct = 100 * fixed / max(1, n_ctx)
+        log.info("prompt fixo (sistema + ferramentas): %d tokens de %d de contexto (%.0f%%)", fixed, n_ctx, pct)
+        room = n_ctx - self.cfg.llm.max_tokens - fixed
+        if room < 600:
+            raise StartupError(f"o prompt fixo (sistema + ferramentas) ocupa {fixed} dos {n_ctx} tokens de contexto, sobrando "
+                               f"{max(room, 0)} para a conversa. Aumente llm.ctx (Configurações) ou desligue ferramentas que não usa.")
+        if pct > 50:
+            self.bus.publish("notice", kind="context_tight", text=f"As ferramentas ocupam {pct:.0f}% do contexto; "
+                             "considere aumentar llm.ctx ou desligar ferramentas.")
 
     def _load_models(self, server: LlamaServer, stt: Transcriber, tts: Synthesizer, mic: Microphone) -> list[str]:
         """Carrega LLM, STT, TTS e abre o microfone em paralelo; devolve as falhas. Com prazo total e cancelável."""
@@ -162,11 +195,8 @@ class JarvisApp:
                 with lock:
                     errors.append(f"{name}: {exc}")
 
-        jobs = [("STT", stt.preload), ("TTS", tts.preload), ("microfone", mic.open)]
-        if self.cfg.llm.autostart:
-            jobs.append(("llama-server", lambda: server.start(cancel)))
-        elif not server.is_running():
-            errors.append("llm.autostart = false e o Jarvis não usa servidores que não iniciou")
+        jobs = [("STT", stt.preload), ("TTS", tts.preload), ("microfone", mic.open),
+                ("llama-server", lambda: server.start(cancel))]
         threads = [threading.Thread(target=job, args=j, name=f"load-{j[0]}", daemon=True) for j in jobs]
         for t in threads:
             t.start()
@@ -253,21 +283,32 @@ class JarvisApp:
         talk = KeyHold(self.cfg.safety.talk_key)
         p.voice.say("Jarvis pronto.")
         next_supervise = next_control = time.monotonic()
+        failures: list[float] = []
         try:
             while not self._stop.is_set():
-                now = time.monotonic()
-                if now >= next_supervise:
-                    next_supervise = now + SUPERVISE_EVERY_S
-                    self._supervise()
-                if now >= next_control:
-                    next_control = now + CONTROL_EVERY_S
-                    self._poll_control()
-                if self._drain_text():
-                    continue
-                if not self._muted and talk():
-                    self._on_talk_key(talk)
-                    continue
-                self._stop.wait(0.02)
+                try:
+                    now = time.monotonic()
+                    if now >= next_supervise:
+                        next_supervise = now + SUPERVISE_EVERY_S
+                        self._supervise()
+                    if now >= next_control:
+                        next_control = now + CONTROL_EVERY_S
+                        self._poll_control()
+                    if self._drain_text():
+                        continue
+                    if not self._muted and talk():
+                        self._on_talk_key(talk)
+                        continue
+                    self._stop.wait(0.02)
+                except Exception as exc:  # noqa: BLE001 - uma falha numa tarefa periódica nunca derruba o Jarvis
+                    log.exception("erro no laço principal")
+                    self.bus.publish("error", where="loop", text=str(exc))
+                    now = time.monotonic()
+                    failures = [t for t in failures if now - t < 60.0] + [now]
+                    if len(failures) >= 20:                                   # em laço de falhas: melhor parar com aviso do que girar
+                        log.error("20 falhas em 60 s no laço principal; encerrando")
+                        self.request_stop(1)
+                    self._stop.wait(0.25)
         except KeyboardInterrupt:
             log.info("Ctrl+C: encerrando")
         return self._exit_code
@@ -371,6 +412,7 @@ class JarvisApp:
             log.exception("pedido falhou")
             self.bus.publish("error", where="agent", text=str(exc))
             self.state.go(State.ERROR)
+            p.voice.say("Tive um problema ao processar esse pedido. Pode tentar de novo?")   # nunca ficar mudo
         finally:
             cancel.release()
             self.state.reset()
@@ -405,7 +447,12 @@ class JarvisApp:
         p = self._p
         if p is None:
             return
-        if p.hotkeys.alive or p.hotkeys.ensure_alive():
+        # "saudável" = a tecla de emergência está REALMENTE registrada no Windows (thread viva não basta)
+        healthy = p.hotkeys.alive and self._emergency_norm in p.hotkeys.registered()
+        if not healthy:
+            p.hotkeys.ensure_alive()
+            healthy = p.hotkeys.alive and self._emergency_norm in p.hotkeys.registered()
+        if healthy:
             if not self._hotkeys_ok:
                 self._hotkeys_ok = True
                 p.registry.unblock_actions()
@@ -463,17 +510,33 @@ class JarvisApp:
         changes = self._settings.diff(self.cfg, new)
         if not changes.any:
             return
-        # o que vale na hora: cada componente recebe a configuração nova
-        self.cfg = new
-        p.agent.reconfigure(new)
-        p.llm.reconfigure(new)
-        p.registry.reconfigure(new)
-        p.confirmer.set_timeout(new.safety.confirm_timeout_s)
-        p.memory.reconfigure(new.memory)
-        logsetup.set_level(new.logs.level)
-        pending = tuple(sorted(set(self._pending_restart) | set(changes.restart)))
+        old = self.cfg
+        try:
+            # aplica componente a componente; se algo falhar, volta TUDO para a configuração anterior (sem estado misto)
+            self.cfg = new
+            p.agent.reconfigure(new)
+            p.llm.reconfigure(new)
+            p.registry.reconfigure(new)
+            p.confirmer.set_timeout(new.safety.confirm_timeout_s)
+            p.memory.reconfigure(new.memory)
+            logsetup.set_level(new.logs.level)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("falha ao aplicar a configuração; voltando à anterior")
+            self.cfg = old
+            for comp in (p.agent, p.llm, p.registry):
+                try:
+                    comp.reconfigure(old)
+                except Exception:  # noqa: BLE001
+                    log.exception("falha ao reverter %s", type(comp).__name__)
+            self.bus.publish("error", where="config", text=f"não consegui aplicar as configurações: {exc}")
+            return
+        # o que ainda exige reinício é calculado contra a configuração DO INÍCIO: desfazer a mudança limpa o aviso (N-25)
+        pending = self._settings.diff(self._boot_cfg, new).restart
         self._pending_restart = pending
-        control.write_runtime(new.paths.data, control.Runtime(os.getpid(), self._started,
-                                                              control.config_mtime(cfgmod.CONFIG_FILE), pending))
+        try:
+            control.write_runtime(new.paths.data, control.Runtime(os.getpid(), self._started,
+                                                                  control.config_mtime(cfgmod.CONFIG_FILE), pending))
+        except OSError:
+            log.exception("não consegui atualizar runtime.json")
         log.info("configuração aplicada: %d na hora; aguardam reinício: %s", len(changes.live), ", ".join(pending) or "nenhuma")
         self.bus.publish("config_applied", live=list(changes.live), restart=list(pending))

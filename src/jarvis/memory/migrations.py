@@ -279,7 +279,12 @@ def ensure_fts(db: Database) -> bool:
             with db.tx() as conn:
                 for stmt in statements:
                     conn.execute(stmt)
-                conn.execute(f"INSERT INTO {name}({name}) VALUES ('rebuild')")      # nome fixo, não vem de fora
+                if name == "messages_fts":
+                    # só falas (user/assistant) entram no índice, igual aos triggers; 'rebuild' indexaria também as de ferramenta
+                    conn.execute("INSERT INTO messages_fts(rowid, content) SELECT id, content FROM messages "
+                                 "WHERE role IN ('user', 'assistant')")
+                else:
+                    conn.execute(f"INSERT INTO {name}({name}) VALUES ('rebuild')")  # nome fixo, não vem de fora
             log.info("índice de busca %s criado e preenchido", name)
     except MemoryError_:
         log.exception("não consegui preparar o índice FTS5; a busca usará LIKE")

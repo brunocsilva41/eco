@@ -14,6 +14,7 @@ import ctypes.wintypes as wt
 import http.client
 import json
 import logging
+import os
 import secrets
 import subprocess
 import threading
@@ -118,9 +119,11 @@ class LlamaServer:
         self._proc: subprocess.Popen[bytes] | None = None
         self._job: int | None = None
         self._log_file = None
-        self._key = secrets.token_urlsafe(32)          # só em memória; muda a cada execução
+        self._key = secrets.token_urlsafe(32)          # só em memória/arquivo temporário privado; muda a cada execução
+        self._key_file = _private_dir() / f"llama-key-{os.getpid()}.txt"
         self._lock = threading.Lock()
         self._stopping = threading.Event()
+        self._life = CancelToken()                     # cancela partidas em andamento quando o app encerra (N-16)
         self._monitor: threading.Thread | None = None
         self._restarts: list[float] = []
 
@@ -138,8 +141,9 @@ class LlamaServer:
         if problems:
             raise ServerError("; ".join(problems))
         cmd = [str(exe), "-m", str(c.model), "-ngl", str(c.ngl), "-c", str(c.ctx),
-               "--host", c.host, "--port", str(c.port), "--jinja", "--api-key", self._key,
-               "-np", "1", "--no-webui", "-cram", "1024"]      # 1 slot; sem UI web; cache de prompt limitado (RAM é curta)
+               "--host", c.host, "--port", str(c.port), "--jinja", "--api-key-file", str(self._key_file),
+               "-np", "1", "--no-webui", "-cram", "1024"]      # chave por ARQUIVO (a linha de comando é visível a outros processos)
+        #                                                       1 slot; sem UI web; cache de prompt limitado (RAM é curta)
         if c.mmproj is not None:
             cmd += ["--mmproj", str(c.mmproj)]
         if c.reasoning_off:
@@ -160,6 +164,7 @@ class LlamaServer:
             raise ServerError(f"a porta {c.port} já tem outro servidor de modelo rodando que o Jarvis não iniciou. "
                               "Feche-o ou mude llm.port; o Jarvis não usa servidores desconhecidos.")
         self._stopping.clear()
+        self._life = CancelToken()                     # o stop() cancela este token e interrompe qualquer partida em curso
         self._spawn(cancel)
         if self._monitor is None or not self._monitor.is_alive():
             self._monitor = threading.Thread(target=self._watch, name="llama-watch", daemon=True)
@@ -174,6 +179,7 @@ class LlamaServer:
         job: int | None = None
         log_file = None
         try:
+            self._write_key_file()
             log_file = open(log_path, "ab")
             log.info("iniciando llama-server (porta %d, contexto %d)", self._cfg.llm.port, self._cfg.llm.ctx)
             proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
@@ -182,7 +188,10 @@ class LlamaServer:
             _assign_to_job(job, proc.pid)
             with self._lock:
                 self._proc, self._job, self._log_file = proc, job, log_file
+            if self._stopping.is_set():                # stop() chegou durante a partida: não deixa servidor para trás
+                raise Cancelled("encerrando")
             self._wait_ready(proc, cancel)
+            self._verify_identity()
         except BaseException:
             # qualquer falha na partida limpa TUDO (nada de servidor órfão ocupando VRAM)
             if proc is not None and proc.poll() is None:
@@ -201,13 +210,47 @@ class LlamaServer:
             with self._lock:
                 self._proc, self._job, self._log_file = None, None, None
             raise
+        finally:
+            self._remove_key_file()                    # o servidor já leu a chave; o arquivo não precisa ficar
+
+    def _write_key_file(self) -> None:
+        """Chave em arquivo temporário no perfil do usuário (privado por padrão no Windows), apagado depois da partida."""
+        try:
+            self._key_file.parent.mkdir(parents=True, exist_ok=True)
+            self._key_file.write_text(self._key, encoding="ascii")
+        except OSError as exc:
+            raise ServerError(f"não consegui gravar o arquivo temporário da chave do servidor: {exc}") from exc
+
+    def _remove_key_file(self) -> None:
+        try:
+            self._key_file.unlink(missing_ok=True)
+        except OSError:
+            log.warning("não consegui apagar o arquivo temporário da chave")
+
+    def _verify_identity(self) -> None:
+        """Garante que quem respondeu é O NOSSO servidor: uma chamada com chave errada TEM de ser recusada (401/403).
+        Um impostor que tomou a porta (e não confere a chave) aceitaria e receberia a chave no primeiro pedido."""
+        c = self._cfg.llm
+        conn = http.client.HTTPConnection(c.host, c.port, timeout=5.0)
+        try:
+            body = json.dumps({"messages": [{"role": "user", "content": "."}], "max_tokens": 1})
+            conn.request("POST", "/v1/chat/completions", body,
+                         {"Content-Type": "application/json", "Authorization": "Bearer chave-errada-de-verificacao"})
+            status = conn.getresponse().status
+        except (OSError, http.client.HTTPException) as exc:
+            raise ServerError(f"não consegui verificar a identidade do servidor: {exc}") from exc
+        finally:
+            conn.close()
+        if status not in (401, 403):
+            raise ServerError(f"o servidor na porta {c.port} aceitou uma chave inválida (resposta {status}); "
+                              "não é o llama-server do Jarvis. Recuso usar.")
 
     def _wait_ready(self, proc: subprocess.Popen[bytes], cancel: CancelToken) -> None:
         c = self._cfg.llm
         deadline = time.monotonic() + c.startup_timeout_s
         while True:
-            if cancel.cancelled:
-                raise Cancelled(cancel.reason)
+            if cancel.cancelled or self._life.cancelled:
+                raise Cancelled(cancel.reason or self._life.reason)
             code = proc.poll()
             if code is not None:
                 raise ServerError(f"o llama-server encerrou na partida (código {code}). Últimas linhas:\n{self._tail_log()}")
@@ -219,27 +262,33 @@ class LlamaServer:
             cancel.wait(0.5)
 
     def _watch(self) -> None:
-        """Supervisão: se o processo morrer sem pedido de parada, reinicia (com limite) e avisa."""
+        """Supervisão: o servidor DEVE estar de pé até o stop(). Se cair, reinicia com recuo (2, 4, 8 s) e limite de
+        tentativas por janela de tempo; reinício que falha também conta e é tentado de novo. Só desiste (e avisa) no teto."""
         while not self._stopping.wait(2.0):
             proc = self._proc
-            if proc is None or proc.poll() is None:
-                continue
-            code = proc.returncode
+            if proc is not None and proc.poll() is None:
+                continue                                           # saudável
+            code = proc.returncode if proc is not None else None
             now = time.monotonic()
             self._restarts = [t for t in self._restarts if now - t < RESTART_WINDOW_S]
             if len(self._restarts) >= RESTART_LIMIT:
-                log.error("llama-server caiu (código %s) e já foi reiniciado %d vezes; desisto", code, RESTART_LIMIT)
-                self._on_event("llm_dead", "O modelo de linguagem caiu repetidas vezes. Reinicie o Jarvis.")
+                log.error("llama-server fora do ar (código %s) e já houve %d tentativas; desisto", code, RESTART_LIMIT)
+                self._on_event("llm_dead", "O modelo de linguagem caiu e não voltou. Reinicie o Jarvis.")
                 return
             self._restarts.append(now)
-            log.error("llama-server caiu (código %s); reiniciando (%d/%d)", code, len(self._restarts), RESTART_LIMIT)
+            attempt = len(self._restarts)
+            log.error("llama-server fora do ar (código %s); tentativa %d/%d", code, attempt, RESTART_LIMIT)
             self._on_event("llm_restarting", "O modelo de linguagem caiu; estou reiniciando.")
+            if self._stopping.wait(2.0 * 2 ** (attempt - 1)):      # recuo exponencial, cancelável pelo stop()
+                return
             try:
                 self._release_dead()
                 self._spawn(CancelToken())
                 self._on_event("llm_restarted", "Modelo de linguagem de volta.")
-            except Exception as exc:  # noqa: BLE001
-                log.error("não consegui reiniciar o llama-server: %s", exc)
+            except Cancelled:
+                return
+            except Exception as exc:  # noqa: BLE001 - a falha conta como tentativa e o laço tenta de novo
+                log.error("não consegui reiniciar o llama-server (tentativa %d): %s", attempt, exc)
 
     def _release_dead(self) -> None:
         with self._lock:
@@ -255,6 +304,7 @@ class LlamaServer:
 
     def stop(self) -> None:
         self._stopping.set()
+        self._life.cancel("encerrando")                # interrompe partida/reinício em andamento
         mon = self._monitor
         if mon is not None and mon.is_alive() and mon is not threading.current_thread():
             mon.join(3.0)
@@ -280,6 +330,12 @@ class LlamaServer:
             return "\n".join(lines[-n:])
         except OSError:
             return "(sem log)"
+
+
+def _private_dir() -> Path:
+    """Pasta temporária no perfil do usuário (o Windows a protege por padrão), nunca dentro de F:\\Jarvis\\logs."""
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+    return Path(base) / "Jarvis" / "run"
 
 
 def _rotate(path: Path) -> None:

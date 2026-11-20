@@ -49,16 +49,25 @@ def clear_runtime(data_dir: Path) -> None:
         log.warning("não consegui apagar runtime.json")
 
 
-def _pid_alive(pid: int) -> bool:
+def _pid_alive(pid: int, started: float) -> bool:
+    """O processo existe E é o mesmo que gravou o runtime (hora de criação perto de `started`): PID reaproveitado não engana."""
     import ctypes
+    import ctypes.wintypes as wt
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenProcess.restype = wt.HANDLE
     h = k32.OpenProcess(0x1000, False, pid)           # PROCESS_QUERY_LIMITED_INFORMATION
     if not h:
         return False
     try:
         code = ctypes.c_ulong()
-        ok = k32.GetExitCodeProcess(h, ctypes.byref(code))
-        return bool(ok) and code.value == 259         # STILL_ACTIVE
+        if not k32.GetExitCodeProcess(h, ctypes.byref(code)) or code.value != 259:      # 259 = STILL_ACTIVE
+            return False
+        created, exited, kernel, user = wt.FILETIME(), wt.FILETIME(), wt.FILETIME(), wt.FILETIME()
+        if not k32.GetProcessTimes(h, ctypes.byref(created), ctypes.byref(exited), ctypes.byref(kernel), ctypes.byref(user)):
+            return True                               # não deu para conferir a hora: confia no PID vivo
+        ticks = (created.dwHighDateTime << 32) | created.dwLowDateTime
+        created_epoch = (ticks - 116444736000000000) / 1e7
+        return abs(created_epoch - started) < 600.0
     finally:
         k32.CloseHandle(h)
 
@@ -72,7 +81,7 @@ def read_runtime(data_dir: Path) -> Runtime | None:
                      tuple(str(x) for x in raw.get("pending_restart", [])))
     except (OSError, ValueError, KeyError, TypeError):
         return None
-    return rt if _pid_alive(rt.pid) else None
+    return rt if _pid_alive(rt.pid, rt.started) else None
 
 
 def request(data_dir: Path, kind: str) -> None:
@@ -88,15 +97,22 @@ def consume(data_dir: Path) -> set[str]:
     d = control_dir(data_dir)
     for kind in ("reload", "restart"):
         p = d / f"{kind}.req"
+        taken = d / f"{kind}.taken"
         try:
-            stamp = float(p.read_text(encoding="utf-8").strip())
+            os.replace(p, taken)                       # atômico: um pedido novo cai num arquivo novo, nunca se perde
+        except FileNotFoundError:
+            continue
+        except OSError:
+            log.warning("não consegui pegar o pedido %s", p)
+            continue
+        try:
+            stamp = float(taken.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             stamp = 0.0
         try:
-            p.unlink(missing_ok=True)
+            taken.unlink(missing_ok=True)
         except OSError:
-            log.warning("não consegui apagar %s", p)
-            continue
+            log.warning("não consegui apagar %s", taken)
         if stamp and time.time() - stamp <= REQUEST_TTL_S:
             found.add(kind)
     return found

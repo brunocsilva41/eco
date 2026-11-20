@@ -7,13 +7,13 @@ Digitar/atalhar na janela errada equivale a executar comandos (terminal, Executa
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Final
 
 from ..config import HARD_DENIED_TYPING, Config
+from ..core.auditkey import digest
 from ..win import input as win_input
 from ..win import windows as win
 from ..win.keys import Combo, KeyError_, parse_combo
@@ -22,8 +22,14 @@ from .registry import Prepared, Risk, ToolContext, ToolRegistry, ToolResult, Too
 
 log = logging.getLogger(__name__)
 
-_PREVIEW_CHARS: Final = 24
+_PREVIEW_FULL: Final = 80           # até aqui o texto é mostrado inteiro na confirmação
+_PREVIEW_HEAD: Final = 40
+_PREVIEW_TAIL: Final = 20
 _TITLE_CLIP: Final = 50
+_UNSAFE_TEXT_MESSAGE: Final = {
+    "linha": "Só digito uma linha de texto; Enter e quebras de linha são outra ferramenta.",
+    "invisivel": "O texto tem caracteres invisíveis ou de direção (como U+202E); não digito para você não ser enganado.",
+}
 # Em programa bloqueado (terminal, Explorer, Executar...) só estes atalhos, e só se estiverem em apps.hotkeys.
 _SAFE_IN_DENIED: Final = frozenset({"alt+tab", "win+d", "win+e", "esc", "f5"})
 # Texto que lembra comando de shell/script: pede confirmação mesmo no modo "untrusted_or_multiline".
@@ -39,6 +45,7 @@ class _Target:
     pid: int
     process: str
     title: str
+    dialog: bool = False         # a janela parece um diálogo (Salvar como, Abrir, Imprimir...)
 
 
 def _lower_set(values: tuple[str, ...]) -> frozenset[str]:
@@ -63,7 +70,7 @@ def _focused_target() -> _Target | ToolResult:
         return ToolResult(False, "Nenhuma janela identificável está em foco.")
     if not info.process:
         return ToolResult(False, "Não consegui identificar o programa da janela em foco; por segurança não faço nada.")
-    return _Target(info.hwnd, info.pid, info.process.lower(), info.title)
+    return _Target(info.hwnd, info.pid, info.process.lower(), info.title, win.is_dialog_window(info))
 
 
 def _still_focused(target: _Target) -> bool:
@@ -77,7 +84,16 @@ def _looks_risky_text(text: str) -> bool:
 
 
 def _text_fingerprint(text: str) -> dict[str, Any]:
-    return {"chars": len(text), "sha256": hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()[:16]}
+    """Só tamanho + HMAC com chave local (nunca o texto, nem hash puro que se quebra por força bruta)."""
+    return {"chars": len(text), "digest": digest(text, 16)}
+
+
+def _typed_preview(text: str) -> str:
+    """Texto inteiro até 80 caracteres; acima disso início (40) + '[N caracteres ocultos]' + fim (20)."""
+    if len(text) <= _PREVIEW_FULL:
+        return text
+    hidden = len(text) - _PREVIEW_HEAD - _PREVIEW_TAIL
+    return f"{text[:_PREVIEW_HEAD]}…[{hidden} caracteres ocultos]…{text[-_PREVIEW_TAIL:]}"
 
 
 def register(registry: ToolRegistry, cfg: Config) -> None:
@@ -97,8 +113,9 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return ToolResult(False, "Não há texto para digitar.")
         if len(text) > max_chars:
             return ToolResult(False, f"O texto passa do limite de {max_chars} caracteres.")
-        if win_input.has_control_chars(text):
-            return ToolResult(False, "Só digito uma linha de texto; Enter e quebras de linha são outra ferramenta.")
+        bad = win_input.unsafe_char_kind(text)
+        if bad is not None:
+            return ToolResult(False, _UNSAFE_TEXT_MESSAGE[bad])
         target = _focused_target()
         if isinstance(target, ToolResult):
             return target
@@ -109,10 +126,13 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if target.process not in allowed_procs:
             log.info("digitar_texto recusado: %s fora da lista permitida", target.process)
             return ToolResult(False, f"A janela em foco é {target.process}, e só digito em: {allowed_txt}.")
-        preview = text[:_PREVIEW_CHARS] + ("…" if len(text) > _PREVIEW_CHARS else "")
+        if target.dialog:
+            log.warning("digitar_texto recusado: %s está num diálogo (%r)", target.process, target.title[:40])
+            return ToolResult(False, "A janela em foco é um diálogo (Salvar como, Abrir, Imprimir...); "
+                                     "não digito ali por segurança. Faça isso você mesmo.")
         return Prepared(
             text=(f"Digitar {len(text)} caracteres em {target.process} ({clip(target.title, _TITLE_CLIP)}): "
-                  f"«{preview}»"),
+                  f"«{_typed_preview(text)}»"),
             state=target)
 
     def confirm_digitar(args: dict[str, Any], tainted: bool) -> bool:
@@ -127,6 +147,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return ToolResult(False, "Não consegui confirmar a janela de destino; não digitei nada.")
         if not text.strip() or len(text) > max_chars or win_input.has_control_chars(text):
             return ToolResult(False, "O texto não é válido para digitar.")
+        if target.dialog or win.is_dialog_window(target.hwnd):
+            return ToolResult(False, "A janela em foco virou um diálogo; não digitei nada.")
         if ctx.cancel.cancelled:
             return ToolResult(False, "Cancelado.")
         if not _still_focused(target):
@@ -164,14 +186,24 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if target.process in denied_procs and combo.norm not in _SAFE_IN_DENIED:
             return ToolResult(False, f"A janela em foco é {target.process}; ali só aperto: "
                                      f"{', '.join(sorted(_SAFE_IN_DENIED))}.")
-        return Prepared(text=f"Apertar {combo.norm} em {target.process} ({clip(target.title, _TITLE_CLIP)})",
-                        state=(target, combo))
+        where = f"{target.process} ({clip(target.title, _TITLE_CLIP)})"
+        if combo.norm == "enter" and target.dialog:
+            return Prepared(text=(f"ATENÇÃO: apertar enter num DIÁLOGO de {where}. Isso pode salvar, abrir, "
+                                  "imprimir ou aprovar algo. Confirma?"),
+                            state=(target, combo))
+        return Prepared(text=f"Apertar {combo.norm} em {where}", state=(target, combo))
 
     def confirm_atalho(args: dict[str, Any], tainted: bool) -> bool:
         try:
-            return parse_combo(str(args.get("atalho", ""))).norm in confirm_combos
+            norm = parse_combo(str(args.get("atalho", ""))).norm
         except KeyError_:
             return False
+        if norm in confirm_combos:
+            return True
+        if norm == "enter":                                 # enter em diálogo: confirmação forte
+            info = win.foreground_window()
+            return info is None or win.is_dialog_window(info)
+        return False
 
     def apertar_atalho(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         state = ctx.prepared

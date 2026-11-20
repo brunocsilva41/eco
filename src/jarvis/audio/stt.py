@@ -206,7 +206,7 @@ class Transcriber:
                 # o Jarvis roda 100% local: nunca baixa modelo sozinho
                 raise TranscribeError(
                     f"modelo Whisper não encontrado em {cfg.model_dir}. Baixe o modelo faster-whisper "
-                    f"'{cfg.model_name}' para essa pasta (ou ajuste [stt] model_dir no config.toml).")
+                    f"para essa pasta (ou escolha outra em Configurações > Reconhecimento).")
             source = str(local)
             t0 = time.perf_counter()
             try:

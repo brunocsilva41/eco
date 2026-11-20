@@ -8,11 +8,25 @@ import logging
 from typing import Any
 
 from ..config import Config
+from ..core.auditkey import digest
 from ..win import windows as win
 from .registry import Prepared, Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
 from ._matching import best_matches, clip
 
 log = logging.getLogger(__name__)
+
+_AUDIT_HEAD = 12          # caracteres de um título/nome que podem ir para a auditoria
+
+
+def audit_label(args: dict[str, Any], field: str) -> dict[str, Any]:
+    """Para a auditoria: primeiros 12 caracteres + tamanho + HMAC do texto (título de janela, nome de controle).
+
+    Tolerante a argumento ausente ou de tipo errado (roda ANTES da validação). Nunca devolve o texto inteiro.
+    """
+    value = args.get(field)
+    if not isinstance(value, str):
+        return {field: None}
+    return {field: " ".join(value.split())[:_AUDIT_HEAD], "tamanho": len(value), "digest": digest(value, 12)}
 
 _MAX_LISTED = 25          # janelas devolvidas por listar_janelas
 _MAX_OPTIONS = 6          # opções mostradas quando o título é ambíguo
@@ -71,6 +85,9 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if problem is not None:
             return problem
         assert target is not None
+        if win.is_own_process_window(target, ctx.cfg):
+            log.warning("focar_janela recusado: janela do próprio Jarvis")
+            return ToolResult(False, win.OWN_WINDOW_MESSAGE)
         if ctx.cancel.cancelled:
             return ToolResult(False, "Cancelado.")
         if win.focus_window(target.hwnd):
@@ -83,6 +100,9 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if problem is not None:
             return problem
         assert target is not None
+        if win.is_own_process_window(target, ctx.cfg):
+            log.warning("fechar_janela recusado: janela do próprio Jarvis")
+            return ToolResult(False, win.OWN_WINDOW_MESSAGE)
         proc = target.process or "programa desconhecido"
         return Prepared(
             text=(f"Fechar a janela «{clip(target.title, _TITLE_CLIP)}» do {proc}? "
@@ -101,6 +121,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if now.title != target.title or now.pid != target.pid:
             log.warning("fechar_janela: a janela 0x%X mudou entre a confirmação e a execução", target.hwnd)
             return ToolResult(False, "A janela mudou depois da confirmação; não fechei nada.", untrusted=True)
+        if win.is_own_process_window(now, ctx.cfg):
+            return ToolResult(False, win.OWN_WINDOW_MESSAGE)
         if not win.close_window(target.hwnd):
             return ToolResult(False, "Não consegui pedir o fechamento dessa janela.", untrusted=True)
         # Espera a janela sumir; se ela pergunta "salvar?", continua aberta e avisamos.
@@ -136,6 +158,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         risk=Risk.CONTROL,
         handler=focar_janela,
         confirm_text=lambda a: f"Trazer para frente a janela '{str(a.get('titulo', ''))[:60]}'",
+        audit_args=lambda a: audit_label(a, "titulo"),
     ))
     registry.register(ToolSpec(
         name="fechar_janela",

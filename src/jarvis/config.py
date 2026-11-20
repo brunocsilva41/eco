@@ -59,7 +59,6 @@ class AudioCfg:
 @dataclass(frozen=True)
 class SttCfg:
     model_dir: Path = ROOT / "models" / "whisper" / "hf_base"
-    model_name: str = "base"                         # medido em CPU: small ~3 s/frase, base ~1,3 s, tiny ~0,5 s
     compute_type: str = "int8"
     cpu_threads: int = 12
     beam_size: int = 5
@@ -80,9 +79,8 @@ class LlmCfg:
     mmproj: Path | None = ROOT / "models" / "qwen3vl-4b" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"   # "" = sem visão
     host: str = "127.0.0.1"                          # SEMPRE loopback (validado em load, LlamaServer e LlmClient)
     port: int = 8089
-    ctx: int = 4096
+    ctx: int = 8192
     ngl: int = 99
-    autostart: bool = True
     startup_timeout_s: float = 120.0
     request_timeout_s: float = 90.0
     max_tokens: int = 220

@@ -209,7 +209,11 @@ class LlmClient:
                 if text:
                     reply.content += text
                     if on_text:
-                        on_text(text)                    # exceções do callback propagam como são (não viram erro de rede)
+                        try:
+                            on_text(text)
+                        except Exception:  # noqa: BLE001 - falha da voz/UI não é falha da rede: segue sem o callback
+                            log.exception("o callback de texto falhou; continuo recebendo a resposta sem ele")
+                            on_text = None
                 for tc in delta.get("tool_calls") or []:
                     try:
                         idx = int(tc.get("index", 0))

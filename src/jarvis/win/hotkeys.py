@@ -63,6 +63,10 @@ class HotkeyListener:
         t = self._thread
         return t is not None and t.is_alive()
 
+    def registered(self) -> frozenset[str]:
+        """Atalhos (forma normalizada) REALMENTE registrados no Windows agora. Thread viva não basta: o que vale é o registro."""
+        return frozenset(combo.norm for combo, _ in list(self._callbacks.values()))
+
     def add(self, combo_text: str, callback: Callable[[], None], timeout: float = 3.0) -> Combo:
         """Registra o atalho. Levanta HotkeyError se o Windows recusar (ex.: já em uso/reservado)."""
         combo = self._register(combo_text, callback, timeout)
@@ -110,13 +114,28 @@ class HotkeyListener:
             self.start()
             with self._lock:
                 todo = list(self._registered)
+            failed: list[str] = []
             for text, cb in todo:
-                self._register(text, cb, 3.0)
+                try:
+                    self._register(text, cb, 3.0)
+                except HotkeyError as exc:
+                    failed.append(f"{text} ({exc})")
+            if failed:
+                raise HotkeyError("não consegui registrar de novo: " + "; ".join(failed))
         except HotkeyError:
             log.exception("não consegui restaurar os atalhos")
+            self._halt_loop()                      # meia-restauração é pior que nenhuma: o app vê alive=False e bloqueia ações
             return False
         log.info("atalhos restaurados")
         return self.alive
+
+    def _halt_loop(self) -> None:
+        """Encerra o laço sem marcar parada definitiva (permite nova tentativa depois)."""
+        t = self._thread
+        if t is not None and t.is_alive() and self._tid:
+            _user32.PostThreadMessageW(self._tid, WM_QUIT, 0, 0)
+            t.join(3.0)
+        self._thread = None
 
     def stop(self) -> None:
         self._stopping = True

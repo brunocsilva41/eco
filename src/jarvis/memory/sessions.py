@@ -274,7 +274,7 @@ class SessionStore:
         text = content
         if len(text) > MAX_CONTENT_CHARS:
             text = text[:MAX_CONTENT_CHARS - 1] + "…"
-        if role in ("user", "assistant"):
+        if role in ("user", "assistant", "tool"):                # resultados de ferramentas também podem trazer segredos de tela/arquivos
             reason = looks_secret(text)
             if reason:
                 log.warning("mensagem %s da conversa %s tinha cara de credencial (%s); conteúdo omitido", role, session_id, reason)
@@ -419,6 +419,19 @@ class SessionStore:
             n = cur.rowcount
         if n:
             log.info("%d conversa(s) passaram de %s dias e foram para a lixeira", n, ttl_days)
+        return n
+
+    def purge_old_tool_results(self, older_than_days: float) -> int:
+        """Apaga o CORPO de resultados de ferramentas antigos (podem trazer texto de tela/arquivos). Fica só um marcador:
+        as falas e o resumo da conversa continuam. Devolve quantos foram limpos."""
+        cutoff = time.time() - float(older_than_days) * 86400
+        marker = "[resultado antigo removido]"
+        with self._db.tx() as c:
+            cur = c.execute("UPDATE messages SET content=?, tokens=? WHERE role='tool' AND ts < ? AND content != ?",
+                            (marker, estimate_tokens(marker), cutoff, marker))
+            n = cur.rowcount
+        if n:
+            log.info("%d resultado(s) de ferramenta com mais de %s dias tiveram o conteúdo removido", n, older_than_days)
         return n
 
     # ------------------------------------------------------------------ exportação

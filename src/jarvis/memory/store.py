@@ -31,6 +31,8 @@ log = logging.getLogger(__name__)
 
 __all__ = ["Memory"]
 
+TOOL_RESULT_RETENTION_DAYS = 7        # resultados de ferramentas (texto de tela/arquivos) não ficam um ano no banco
+
 
 class Memory:
     def __init__(self, db_path: Path, cfg: MemoryCfg) -> None:
@@ -64,6 +66,7 @@ class Memory:
         """Conversas expiradas -> lixeira; lixeiras e memórias expiradas vencidas -> apagadas. Falha aqui não impede abrir."""
         steps = (
             ("expirar conversas", lambda: self.sessions.expire_old(self.cfg.conversation_ttl_days)),
+            ("limpar resultados antigos de ferramentas", lambda: self.sessions.purge_old_tool_results(TOOL_RESULT_RETENTION_DAYS)),
             ("esvaziar lixeira de conversas", lambda: self.sessions.empty_trash(self.cfg.trash_days)),
             ("esvaziar lixeira de memórias", lambda: self.longterm.empty_trash(self.cfg.trash_days)),
             ("limpar memórias expiradas", lambda: self.longterm.purge_expired(self.cfg.trash_days)),

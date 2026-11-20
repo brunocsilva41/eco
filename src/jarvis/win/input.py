@@ -178,9 +178,28 @@ def _release(vk: int) -> None:
 
 
 # ----------------------------------------------------------------- API pública
+_LINE_CATEGORIES: Final = frozenset({"Cc", "Zl", "Zp", "Cs"})     # quebra de linha, tab, controle, surrogate solto
+_INVISIBLE_CATEGORIES: Final = frozenset({"Cf", "Co"})            # formatação (bidi U+202E, largura zero...) e uso privado
+
+
+def unsafe_char_kind(text: str) -> str | None:
+    """Primeira espécie de caractere proibido em `text`: 'linha' (Cc, Zl, Zp, Cs), 'invisivel' (Cf, Co) ou None.
+
+    Caracteres invisíveis ou de direção podem fazer o texto digitado diferir do que a confirmação mostra.
+    """
+    for ch in text:
+        cat = unicodedata.category(ch)
+        if cat in _LINE_CATEGORIES:
+            return "linha"
+        if cat in _INVISIBLE_CATEGORIES:
+            return "invisivel"
+    return None
+
+
 def has_control_chars(text: str) -> bool:
-    """True se o texto tem quebra de linha, tab, outro caractere de controle ou surrogate solto (Cc, Zl, Zp, Cs)."""
-    return any(unicodedata.category(ch) in ("Cc", "Zl", "Zp", "Cs") for ch in text)
+    """True se o texto tem quebra de linha, tab, controle, surrogate solto (Cc, Zl, Zp, Cs) ou caractere
+    invisível/de direção (Cf, Co)."""
+    return unsafe_char_kind(text) is not None
 
 
 def send_text(text: str, cancel: CancelToken, guard: Callable[[], bool] | None = None) -> int:
@@ -192,7 +211,7 @@ def send_text(text: str, cancel: CancelToken, guard: Callable[[], bool] | None =
     entre os pedaços. Devolve quantos caracteres foram digitados. Levanta `InputBlockedError` se o Windows recusar.
     """
     if has_control_chars(text):
-        raise ValueError("o texto tem quebra de linha ou caractere de controle")
+        raise ValueError("o texto tem quebra de linha, caractere de controle ou caractere invisível")
     typed = 0
     for start in range(0, len(text), _CHUNK_CHARS):
         if cancel.cancelled:

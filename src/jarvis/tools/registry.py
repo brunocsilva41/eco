@@ -261,7 +261,11 @@ class ToolRegistry:
     def _execute_inner(self, spec: ToolSpec, cfg: Config, args: dict[str, Any], shown: dict[str, Any],
                        ctx: ToolContext, parent: CancelToken, origin: str, started: float) -> ToolResult:
         name = spec.name
-        step = spec.confirm_text(args) if spec.confirm_text else spec.description
+        try:
+            step = spec.confirm_text(args) if spec.confirm_text else spec.description
+        except Exception:  # noqa: BLE001 - a promessa de `execute` é nunca levantar
+            log.exception("confirm_text de %s falhou", name)
+            step = spec.description
         if spec.prepare is not None:                                    # 3. resolver o alvo REAL antes de perguntar
             outcome = self._call(spec.prepare, ctx, args, PREPARE_TIMEOUT_S, parent, name + ".prepare")
             if isinstance(outcome, ToolResult):
@@ -270,12 +274,17 @@ class ToolRegistry:
             ctx.prepared = outcome.state
             step = outcome.text
 
-        need_confirm = (spec.risk >= Risk.RISKY or name in cfg.tools.confirm
-                        or (ctx.tainted and spec.risk >= Risk.CONTROL)
-                        or bool(spec.confirm_if and spec.confirm_if(args, ctx.tainted)))
+        try:
+            tool_wants = bool(spec.confirm_if and spec.confirm_if(args, ctx.tainted))
+        except Exception:  # noqa: BLE001 - erro na regra = pergunta por segurança
+            log.exception("confirm_if de %s falhou; vou pedir confirmação", name)
+            tool_wants = True
+        # confirmação FORTE por voz ("confirmo"/"autorizo"): ação arriscada, rodada contaminada ou regra da própria ferramenta
+        strong = spec.risk >= Risk.RISKY or (ctx.tainted and spec.risk >= Risk.CONTROL) or tool_wants
+        need_confirm = strong or name in cfg.tools.confirm
         self._bus.publish("action_step", tool=name, text=step, status="start", risk=int(spec.risk))
         if need_confirm:
-            decision = self._confirm(step, max(spec.risk, Risk.CONTROL), parent)
+            decision = self._confirm(step, Risk.RISKY if strong else Risk.CONTROL, parent)
             audit.info(json.dumps({"origin": origin, "tool": name, "args": shown,
                                    "asked": step[:120] if spec.audit_args is None else None,   # com audit_args o texto pode ter dado sensível
                                    "confirmation": {"allowed": decision.allowed, "via": decision.via,
@@ -290,7 +299,10 @@ class ToolRegistry:
             result = ToolResult(False, f"{name} devolveu um resultado inválido.")
         elapsed = time.monotonic() - started
         outcome_txt = "ok" if result.ok else ("erro/efeito desconhecido" if result.effect_unknown else "erro")
-        msg = f"[conteúdo não confiável omitido: {len(result.message)} caracteres]" if result.untrusted else result.message[:200]
+        if result.untrusted:
+            msg = f"[conteúdo não confiável omitido: {len(result.message)} caracteres]"
+        else:                                                           # com audit_args a mensagem pode citar títulos/nomes: curta
+            msg = result.message[:60 if spec.audit_args is not None else 200]
         audit.info(_line(origin, name, shown, f"{outcome_txt} {elapsed:.2f}s: {msg}"))
         self._bus.publish("action_step", tool=name, text=step, status="ok" if result.ok else "error",
                           risk=int(spec.risk), result=("" if result.untrusted else result.message[:200]))

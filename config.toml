@@ -10,12 +10,11 @@
 # end_silence_ms = 700          # silêncio que encerra a frase
 
 [stt]
-# model_name = "base"           # tiny (~0,5 s) | base (~1,3 s) | small (~3 s, mais preciso). Medido em CPU.
+# (o modelo é escolhido pela pasta em model_dir)
 # model_dir = 'F:\Jarvis\models\whisper\hf_small'   # use a pasta do modelo escolhido
 # beam_size = 5
 
 [llm]
-# autostart = true              # o Jarvis sobe o llama-server sozinho (só em 127.0.0.1)
 # ctx = 4096
 # reasoning_off = false         # true para Qwen3.5 / Gemma 4 (modelos que "pensam")
 

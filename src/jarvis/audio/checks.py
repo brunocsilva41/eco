@@ -59,10 +59,10 @@ def _check_whisper(cfg: Config) -> CheckResult:
     name = "modelo Whisper"
     local = find_local_model(cfg.stt.model_dir)
     if local is None:
-        return CheckResult(name, False, f"sem model.bin em {cfg.stt.model_dir} (o modelo {cfg.stt.model_name!r} "
+        return CheckResult(name, False, f"sem model.bin em {cfg.stt.model_dir} ("
                                         "teria de ser baixado para essa pasta)")
     try:
-        return CheckResult(name, True, f"{cfg.stt.model_name}: {_mb(_dir_size(local))} em {local}, "
+        return CheckResult(name, True, f"{cfg.stt.model_dir.name}: {_mb(_dir_size(local))} em {local}, "
                                        f"{cfg.stt.compute_type}, {cfg.stt.cpu_threads} threads")
     except OSError as exc:
         return CheckResult(name, False, f"não consegui ler {local}: {exc}")

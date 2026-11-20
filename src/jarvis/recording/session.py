@@ -263,7 +263,7 @@ def wakeword_set(cfg: Config, word: str = "jarvis", count: int = WAKEWORD_DEFAUL
         phrases=tuple(f"Diga: {shown}" for _ in range(count)),
         duration_s=duration_s,
         out_dir=cfg.paths.data / "wakeword" / slug,
-        name_pattern="{n:03d}.wav" if count > 99 else "{n:02d}.wav",
+        name_pattern="{n:03d}.wav",                 # largura fixa: mudar o `count` nunca orfana arquivos (N-27)
         instruction=f"Diga \"{shown}\" uma vez, claramente, e fique em silêncio até o fim da contagem. "
                     "Varie a distância e o tom entre as amostras.",
         item_label="Amostra {n:02d}",

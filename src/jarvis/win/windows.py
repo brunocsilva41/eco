@@ -7,13 +7,19 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import os
+import re
 import time
 from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import PureWindowsPath
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
+from ..core.textutil import fold
 from .input import VK_MENU, tap_key
+
+if TYPE_CHECKING:
+    from ..config import Config
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +30,16 @@ SW_RESTORE: Final = 9
 WM_CLOSE: Final = 0x0010
 DWMWA_CLOAKED: Final = 14
 PROCESS_QUERY_LIMITED_INFORMATION: Final = 0x1000
+GW_OWNER: Final = 4
+
+OWN_WINDOW_MESSAGE: Final = "Essa é uma janela do próprio Jarvis; mexa nela você mesmo."
+DIALOG_CLASS: Final = "#32770"       # classe padrão dos diálogos do Windows (Salvar como, Abrir, Imprimir, avisos)
+# Títulos típicos de diálogos de arquivo/impressão, sem acento e em minúsculas (comparação com `fold`).
+_DIALOG_TITLES: Final = frozenset({
+    "salvar como", "salvar", "salvar arquivo", "salvar arquivo como", "abrir", "abrir arquivo", "imprimir",
+    "save as", "save", "save file", "open", "open file", "print", "print setup", "configurar impressao",
+})
+_PYTHON_EXE: Final = re.compile(r"^pythonw?\d*(\.\d+)*\.exe$")
 
 _IGNORED_CLASSES: Final = frozenset({"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"})
 _FOCUS_WAIT_S: Final = 0.5
@@ -64,6 +80,10 @@ _user32.AttachThreadInput.argtypes = (wintypes.DWORD, wintypes.DWORD, wintypes.B
 _user32.AttachThreadInput.restype = wintypes.BOOL
 _user32.PostMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 _user32.PostMessageW.restype = wintypes.BOOL
+_user32.GetWindow.argtypes = (wintypes.HWND, wintypes.UINT)
+_user32.GetWindow.restype = wintypes.HWND
+_user32.GetWindowRect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
+_user32.GetWindowRect.restype = wintypes.BOOL
 _kernel32.GetCurrentThreadId.argtypes = ()
 _kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 _kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
@@ -119,7 +139,8 @@ def process_name(hwnd: int) -> str | None:
     return _process_name_of_pid(_pid_of(hwnd))
 
 
-def _process_name_of_pid(pid: int) -> str | None:
+def _process_path_of_pid(pid: int) -> str | None:
+    """Caminho completo do executável do processo, ou None se sem permissão/inexistente."""
     if pid <= 0:
         return None
     handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
@@ -130,9 +151,14 @@ def _process_name_of_pid(pid: int) -> str | None:
         buf = ctypes.create_unicode_buffer(size.value)
         if not _kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
             return None
-        return PureWindowsPath(buf.value).name or None
+        return buf.value or None
     finally:
         _kernel32.CloseHandle(handle)
+
+
+def _process_name_of_pid(pid: int) -> str | None:
+    path = _process_path_of_pid(pid)
+    return (PureWindowsPath(path).name or None) if path else None
 
 
 def _is_real_window(hwnd: int) -> bool:
@@ -198,6 +224,63 @@ def describe_window(hwnd: int) -> WindowInfo | None:
 
 def is_window(hwnd: int) -> bool:
     return bool(_user32.IsWindow(hwnd))
+
+
+def class_name(hwnd: int) -> str:
+    """Nome da classe da janela ('' se não existe)."""
+    return _class_name(hwnd) if hwnd else ""
+
+
+def owner_hwnd(hwnd: int) -> int:
+    """Handle da janela DONA (GW_OWNER); 0 se não tem dono. Diálogos modais têm dono."""
+    return int(_user32.GetWindow(hwnd, GW_OWNER) or 0) if hwnd else 0
+
+
+def window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+    """Retângulo (esquerda, topo, direita, base) da janela em pixels físicos, ou None se não deu para ler."""
+    rect = wintypes.RECT()
+    if not hwnd or not _user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return None
+    return int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
+
+
+def is_dialog_window(hwnd_or_info: "int | WindowInfo") -> bool:
+    """True se a janela parece um diálogo (Salvar como, Abrir, Imprimir...): classe #32770, janela DONA ou título típico.
+
+    Qualquer dos três basta (defesa em profundidade). Se não dá para ler a janela, devolve True (falha fechada).
+    """
+    info = hwnd_or_info if isinstance(hwnd_or_info, WindowInfo) else describe_window(int(hwnd_or_info))
+    if info is None:
+        return True
+    if _class_name(info.hwnd) == DIALOG_CLASS or owner_hwnd(info.hwnd) != 0:
+        return True
+    title = fold(info.title)
+    return title in _DIALOG_TITLES or title.split(" - ", 1)[0] in _DIALOG_TITLES
+
+
+def is_own_process_window(hwnd_or_info: "int | WindowInfo", cfg: "Config") -> bool:
+    """True se a janela é do próprio Jarvis (Configurações, Gravador, Painel de memória...).
+
+    Vale se (a) o PID é o deste processo, OU (b) o executável está dentro de `<raiz do projeto>\\venv`, OU
+    (c) o título começa com "Jarvis" e o processo é python/pythonw (cobre o relançador do venv). Se a janela
+    não pode ser lida, devolve False (não há como afirmar); quem age deve ter outras guardas.
+    """
+    info = hwnd_or_info if isinstance(hwnd_or_info, WindowInfo) else describe_window(int(hwnd_or_info))
+    if info is None:
+        return False
+    if info.pid == os.getpid():
+        return True
+    exe = _process_path_of_pid(info.pid)
+    if exe:
+        try:
+            venv = tuple(p.casefold() for p in PureWindowsPath(os.path.abspath(cfg.paths.root / "venv")).parts)
+            parts = tuple(p.casefold() for p in PureWindowsPath(os.path.abspath(exe)).parts)
+            if len(parts) > len(venv) and parts[:len(venv)] == venv:
+                return True
+        except (OSError, ValueError):
+            log.debug("não consegui comparar o executável da janela 0x%X com o venv", info.hwnd, exc_info=True)
+    name = (info.process or "").casefold()
+    return fold(info.title).startswith("jarvis") and bool(_PYTHON_EXE.match(name))
 
 
 def _is_foreground(hwnd: int) -> bool:

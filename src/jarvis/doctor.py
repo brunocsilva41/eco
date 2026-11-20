@@ -60,7 +60,9 @@ def _check_gpu(cfg: Config) -> CheckResult:
 def _check_port(cfg: Config) -> CheckResult:
     host, port = cfg.llm.host, cfg.llm.port
     if health_ok(host, port):
-        return CheckResult("porta do LLM", True, f"{host}:{port} já tem um llama-server saudável (será reutilizado)")
+        return CheckResult("porta do LLM", False,
+                           f"{host}:{port} já tem um servidor de modelo rodando que o Jarvis não iniciou; ele NÃO o usa. "
+                           "Feche-o ou mude llm.port")
     with socket.socket() as s:
         s.settimeout(0.5)
         busy = s.connect_ex((host, port)) == 0

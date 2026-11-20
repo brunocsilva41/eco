@@ -14,6 +14,7 @@ import dataclasses
 import logging
 import re
 import shutil
+import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,7 @@ from . import schema, tomlio
 
 log = logging.getLogger(__name__)
 
+BACKUPS_KEPT = 5
 HEADER = ("Configuração do Jarvis (gerada pela tela de Configurações; pode editar à mão).\n"
           "Só aparece o que difere do padrão. NUNCA coloque senhas, PINs ou tokens aqui.")
 
@@ -186,21 +188,41 @@ class SettingsStore:
         return SaveResult(new, self.diff(old, new))
 
     def _write(self, cfg: Config) -> None:
+        """Mescla as edições da tela no TOML ATUAL: chaves que a tela não cobre (paths.*, audio.sample_rate, o que o dono
+        editou à mão) são PRESERVADAS; campos da tela iguais ao padrão saem do arquivo (mudanças futuras de padrão valem)."""
         defaults = self.defaults()
-        data: dict[str, Any] = {}
+        data = self._read_current()
         for f in schema.FIELDS:
             val, dflt = schema.get_value(cfg, f.key), schema.get_value(defaults, f.key)
+            section = data.get(f.section)
+            if not isinstance(section, dict):
+                section = {}
             if val == dflt:
-                continue
-            if val is None:
+                section.pop(f.name, None)
+            elif val is None:
                 if f.key == "llm.mmproj":
-                    data.setdefault(f.section, {})[f.name] = ""
-                continue
-            data.setdefault(f.section, {})[f.name] = self._toml_value(val)
+                    section[f.name] = ""
+                else:
+                    section.pop(f.name, None)
+            else:
+                section[f.name] = self._toml_value(val)
+            if section:
+                data[f.section] = section
+            else:
+                data.pop(f.section, None)
         text = tomlio.dumps(data, HEADER)
         tomllib.loads(text)                                          # a saída DEVE ser TOML válido
         self._backup()
         tomlio.atomic_write_text(self.path, text)
+
+    def _read_current(self) -> dict[str, Any]:
+        if not self.path.exists():
+            return {}
+        try:
+            return tomllib.loads(self.path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            log.warning("config.toml atual ilegível; ele será substituído (o backup datado guarda o original)")
+            return {}
 
     @staticmethod
     def _toml_value(val: Any) -> Any:
@@ -213,11 +235,19 @@ class SettingsStore:
         return val
 
     def _backup(self) -> None:
-        if self.path.exists():
-            try:
-                shutil.copy2(self.path, self.path.with_suffix(self.path.suffix + ".bak"))
-            except OSError:
-                log.warning("não consegui fazer a cópia de segurança de %s", self.path)
+        """Cópia datada (config.toml.bak-AAAAMMDD-HHMMSS); guarda as 5 mais recentes, então duas gravações seguidas
+        nunca perdem o arquivo original editado à mão."""
+        if not self.path.exists():
+            return
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        dest = self.path.with_name(f"{self.path.name}.bak-{stamp}")
+        try:
+            shutil.copy2(self.path, dest)
+            old = sorted(self.path.parent.glob(f"{self.path.name}.bak-*"), reverse=True)
+            for extra in old[BACKUPS_KEPT:]:
+                extra.unlink(missing_ok=True)
+        except OSError:
+            log.warning("não consegui fazer a cópia de segurança de %s", self.path)
 
 
 def clone_values(values: dict[str, Any]) -> dict[str, Any]:
