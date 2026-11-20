@@ -15,6 +15,7 @@ import secrets
 import stat
 import threading
 import time
+import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,24 @@ class UndoResult:
     op: str | None = None
     manual: bool = False                 # True = precisa ser desfeito à mão (ex.: restaurar da Lixeira)
     entry_id: str | None = None
+
+
+@dataclass(frozen=True)
+class UndoPreview:
+    """O que `undo_last()` faria agora (somente leitura): serve para perguntar ao Bruno ANTES de desfazer."""
+    entry_id: str
+    op: str                              # criar | editar | copiar | mover | apagar
+    src: str | None
+    dst: str | None
+    when: str                            # data/hora da operação
+    reversible: bool                     # False = só dá para restaurar pela Lixeira (apagar)
+    skipped_manual: tuple[tuple[str, str], ...] = ()   # (operação, nome) das mais novas já marcadas como "manual"
+
+
+def _safe_name(text: Any, limit: int = 80) -> str:
+    """Nome vindo do disco para mensagens: sem controle/formatação (anti-spoof), tamanho limitado."""
+    out = "".join(c for c in str(text) if unicodedata.category(c) not in ("Cc", "Cf", "Cs", "Co", "Zl", "Zp"))
+    return out if len(out) <= limit else out[:limit - 1] + "…"
 
 
 def _check(cancel: CancelToken | None) -> None:
@@ -286,6 +305,27 @@ class UndoJournal:
             active = [e for _, e in self._entries() if e.get("status") == "ativa"]
             return active[-1] if active else None
 
+    def peek_last(self) -> UndoPreview | None:
+        """O que `undo_last()` desfaria agora, sem nenhum efeito colateral (nada é gravado, movido ou apagado).
+
+        Também informa as entradas mais novas já marcadas como "manual" (ex.: um `apagar` que o Jarvis já avisou
+        que só a Lixeira restaura): `undo_last` as pula, e quem pergunta ao Bruno precisa dizer isso.
+        """
+        with self._lock:
+            entries = self._entries()
+            idx = next((i for i in range(len(entries) - 1, -1, -1) if entries[i][1].get("status") == "ativa"), None)
+            if idx is None:
+                return None
+            entry = entries[idx][1]
+            skipped = tuple((str(e.get("op")), _safe_name(Path(str(e.get("src") or e.get("dst") or "?")).name))
+                            for _, e in entries[idx + 1:] if e.get("status") == "manual")
+            src, dst = entry.get("src"), entry.get("dst")
+            return UndoPreview(
+                entry_id=str(entry["id"]), op=str(entry["op"]),
+                src=src if isinstance(src, str) else None, dst=dst if isinstance(dst, str) else None,
+                when=str(entry.get("ts", "")), reversible=bool(entry.get("reversible", True)) and entry["op"] != "apagar",
+                skipped_manual=skipped)
+
     # ------------------------------------------------------------ desfazer
     def undo_last(self, cancel: CancelToken | None = None) -> UndoResult:
         with self._lock:
@@ -324,7 +364,7 @@ class UndoJournal:
         before, after = FileState.from_dict(e.get("before")), FileState.from_dict(e.get("after"))
         if op == "apagar" or not e.get("reversible", True):
             where = e.get("src") or e.get("dst") or "?"
-            return UndoResult(False, f"O último passo foi apagar {Path(str(where)).name}. Não consigo restaurar sozinho: "
+            return UndoResult(False, f"O último passo foi apagar {_safe_name(Path(str(where)).name)}. Não consigo restaurar sozinho: "
                               "abra a Lixeira do Windows e restaure por lá.", op, manual=True)
         changed = "O arquivo foi alterado depois dessa operação; não desfaço para não perder suas mudanças."
 
@@ -333,7 +373,7 @@ class UndoJournal:
             if not same_state(snapshot(dst, cancel), after):
                 return UndoResult(False, changed, op)
             send_to_recycle_bin(dst, size_hint=after.size)
-            return UndoResult(True, f"Desfeito: {dst.name} foi para a Lixeira.", op)
+            return UndoResult(True, f"Desfeito: {_safe_name(dst.name)} foi para a Lixeira.", op)
 
         if op == "editar":
             dst = self._p(e.get("dst"))
@@ -364,7 +404,7 @@ class UndoJournal:
                 bk.unlink(missing_ok=True)
             except OSError:
                 pass
-            return UndoResult(True, f"Desfeito: {dst.name} voltou à versão anterior.", op)
+            return UndoResult(True, f"Desfeito: {_safe_name(dst.name)} voltou à versão anterior.", op)
 
         if op == "mover":
             src, dst = self._p(e.get("src")), self._p(e.get("dst"))
@@ -375,5 +415,5 @@ class UndoJournal:
             if not src.parent.is_dir():
                 return UndoResult(False, "A pasta original não existe mais; não consigo devolver.", op)
             os.rename(dst, src)
-            return UndoResult(True, f"Desfeito: {src.name} voltou ao lugar original.", op)
+            return UndoResult(True, f"Desfeito: {_safe_name(src.name)} voltou ao lugar original.", op)
         return UndoResult(False, "Tipo de operação desconhecido.", op)

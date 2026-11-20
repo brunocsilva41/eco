@@ -12,6 +12,7 @@ sucesso parcial. Enquanto uma thread auxiliar estiver pendente, novas chamadas s
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -23,8 +24,10 @@ from ..config import Config
 from ..core.cancel import CancelToken
 from ..core.textutil import fold
 from ..win import input as win_input
+from ..win import windows as win
 from ._matching import best_matches, clip
-from .registry import Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
+from .registry import Prepared, Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
+from .windows_tools import audit_label
 
 log = logging.getLogger(__name__)
 
@@ -70,17 +73,51 @@ def _is_destructive(text: str) -> bool:
     return any(w.startswith(DESTRUCTIVE_STEMS) for w in words)
 
 
+# Botões que costumam APROVAR algo (diálogos de aviso, "salvar", "permitir"...): não são recusados, mas exigem
+# confirmação FORTE ("confirmo") mostrando o nome do controle e a janela. Palavras curtas só valem inteiras
+# (para "sim" não pegar "simples"); radicais longos valem como início de palavra.
+CONFIRM_WORDS: Final[frozenset[str]] = frozenset({
+    "sim", "ok", "yes", "run", "allow", "save", "apply", "close", "accept", "agree"})
+CONFIRM_STEMS: Final[tuple[str, ...]] = (
+    "executar", "execute", "permitir", "permita", "continuar", "continue", "salvar", "salve",
+    "aplicar", "aplique", "fechar", "feche", "aceitar", "aceite", "concord")
+
+
+def needs_strong_confirm(text: str) -> bool:
+    """True se o nome do controle é de um botão que aprova/confirma algo (Sim, OK, Executar, Salvar, Fechar...)."""
+    words = re.findall(r"[a-z0-9]+", fold(text))
+    return any(w in CONFIRM_WORDS or w.startswith(CONFIRM_STEMS) for w in words)
+
+
+class _Aborted(Exception):
+    """A janela mudou ou o ponto de clique saiu dela: não clica. A mensagem pode ser falada."""
+
+
+@dataclass(frozen=True)
+class _ClickTarget:
+    """Janela em foco no momento do `prepare` de clicar_controle."""
+    hwnd: int
+    pid: int
+
+
 @dataclass
 class _Entry:
     name: str
     kind: str                 # rótulo em português
     control: Any              # auto.Control (só vale na thread que o criou)
+    hwnd: int = 0             # janela em foco quando a varredura começou
 
 
-def _collect(cancel: CancelToken, limit: int) -> tuple[list[_Entry], str | None]:
-    """Percorre a janela ativa e devolve controles clicáveis, visíveis, habilitados e com nome."""
+def _collect(cancel: CancelToken, limit: int, expect_hwnd: int | None = None) -> tuple[list[_Entry], str | None]:
+    """Percorre a janela ativa e devolve controles clicáveis, visíveis, habilitados e com nome.
+
+    Com `expect_hwnd`, só varre se a janela em foco for exatamente essa, e descarta tudo se o foco mudar durante a varredura.
+    """
+    scan_hwnd = win.foreground_hwnd()
+    if expect_hwnd is not None and scan_hwnd != expect_hwnd:
+        return [], "A janela em foco mudou; não cliquei."
     root = auto.GetForegroundControl()
-    if root is None:
+    if root is None or not scan_hwnd:
         return [], "Nenhuma janela está em foco."
     entries: list[_Entry] = []
     deadline = time.monotonic() + _WALK_BUDGET_S
@@ -98,17 +135,23 @@ def _collect(cancel: CancelToken, limit: int) -> tuple[list[_Entry], str | None]
                 continue
         except Exception:  # noqa: BLE001 - elemento sumiu no meio da leitura (COMError)
             continue
-        entries.append(_Entry(name, kind, control))
+        entries.append(_Entry(name, kind, control, scan_hwnd))
         if len(entries) >= limit:
             break
+    if expect_hwnd is not None and win.foreground_hwnd() != scan_hwnd:
+        return [], "A janela em foco mudou durante a busca; não cliquei."
     return entries, None
 
 
-def _invoke(control: Any) -> str:
+def _invoke(control: Any, scan_hwnd: int) -> str:
     """Aciona o controle pelo padrão mais adequado; cai para o clique físico só se necessário.
 
-    Roda SEMPRE na thread auxiliar da UIA (pode bloquear até um diálogo modal fechar).
+    Roda SEMPRE na thread auxiliar da UIA (pode bloquear até um diálogo modal fechar). O clique por coordenadas
+    só acontece se a janela em foco ainda é a da varredura (`scan_hwnd`) E o ponto está dentro dela; senão
+    levanta `_Aborted` sem clicar.
     """
+    if not scan_hwnd or win.foreground_hwnd() != scan_hwnd:
+        raise _Aborted("A janela em foco mudou antes do clique; não cliquei.")
     for pattern_id, method in ((auto.PatternId.InvokePattern, "Invoke"),
                                (auto.PatternId.SelectionItemPattern, "Select"),
                                (auto.PatternId.TogglePattern, "Toggle")):
@@ -119,7 +162,13 @@ def _invoke(control: Any) -> str:
     rect = control.BoundingRectangle                 # pixels físicos (o processo é DPI-aware por monitor)
     if rect.width() <= 0 or rect.height() <= 0:
         raise RuntimeError("controle sem área clicável")
-    win_input.click(rect.xcenter(), rect.ycenter())  # SendInput absoluto sobre a tela virtual (multi-monitor)
+    x, y = rect.xcenter(), rect.ycenter()
+    if not scan_hwnd or win.foreground_hwnd() != scan_hwnd:
+        raise _Aborted("A janela em foco mudou antes do clique; não cliquei.")
+    bounds = win.window_rect(scan_hwnd)
+    if bounds is None or not (bounds[0] <= x < bounds[2] and bounds[1] <= y < bounds[3]):
+        raise _Aborted("O controle ficou fora da janela; não cliquei.")
+    win_input.click(x, y)                            # SendInput absoluto sobre a tela virtual (multi-monitor)
     return "Click"
 
 
@@ -136,15 +185,16 @@ class _Job:
         self.done = threading.Event()                # a ação terminou (ou a thread acabou)
         self.abandoned = threading.Event()           # o handler desistiu antes de agir: não aja
         self.failure: ToolResult | None = None       # motivo para não agir (nada, ambíguo, destrutivo...)
+        self.scan_hwnd = 0                           # janela da varredura (guarda do clique por coordenadas)
         self.name = ""
         self.kind = ""
         self.how: str | None = None
         self.error: str | None = None
 
 
-def _resolve_target(job: _Job, query: str, cancel: CancelToken) -> Any | None:
+def _resolve_target(job: _Job, query: str, cancel: CancelToken, expect_hwnd: int) -> Any | None:
     """Acha o controle (na thread auxiliar). Devolve o controle ou None com `job.failure` preenchido."""
-    entries, problem = _collect(cancel, _MAX_COLLECTED)
+    entries, problem = _collect(cancel, _MAX_COLLECTED, expect_hwnd)
     if problem:
         job.failure = ToolResult(False, problem)
         return None
@@ -164,15 +214,21 @@ def _resolve_target(job: _Job, query: str, cancel: CancelToken) -> Any | None:
                                         "enviar, pagar ou instalar. Prefiro que você faça manualmente.",
                                  untrusted=True)
         return None
-    job.name, job.kind = target.name, target.kind
+    if needs_strong_confirm(target.name) and not needs_strong_confirm(query):
+        # o que o Bruno confirmou foi o nome pedido; o controle achado é outro e aprova algo: peça pelo nome inteiro
+        job.failure = ToolResult(False, f"O controle achado é '{clip(target.name, _NAME_CLIP)}', que pode aprovar "
+                                        "uma ação. Peça pelo nome completo para eu confirmar com você.",
+                                 untrusted=True)
+        return None
+    job.name, job.kind, job.scan_hwnd = target.name, target.kind, target.hwnd
     return target.control
 
 
-def _uia_worker(job: _Job, query: str, cancel: CancelToken) -> None:
+def _uia_worker(job: _Job, query: str, cancel: CancelToken, expect_hwnd: int) -> None:
     global _pending
     try:
         with auto.UIAutomationInitializerInThread():     # COM próprio desta thread, liberado ao sair do bloco
-            control = _resolve_target(job, query, cancel)
+            control = _resolve_target(job, query, cancel, expect_hwnd)
             job.resolved.set()
             if control is None:
                 return
@@ -180,7 +236,10 @@ def _uia_worker(job: _Job, query: str, cancel: CancelToken) -> None:
                 job.failure = ToolResult(False, "Cancelado.")
                 return
             try:
-                job.how = _invoke(control)
+                job.how = _invoke(control, job.scan_hwnd)
+            except _Aborted as exc:
+                log.warning("clique abortado: %s", exc)
+                job.failure = ToolResult(False, str(exc))
             except Exception as exc:  # noqa: BLE001 - COMError, elemento sumiu, sem padrão
                 log.warning("falha ao acionar controle %r: %s", job.name, exc)
                 job.error = type(exc).__name__
@@ -194,7 +253,7 @@ def _uia_worker(job: _Job, query: str, cancel: CancelToken) -> None:
         job.done.set()
 
 
-def _click_by_name(ctx: ToolContext, query: str) -> ToolResult:
+def _click_by_name(ctx: ToolContext, query: str, expect_hwnd: int) -> ToolResult:
     """Orquestra a thread auxiliar: busca, aciona e espera pouco. Nunca bloqueia no COM."""
     global _pending
     with _pending_lock:
@@ -204,7 +263,7 @@ def _click_by_name(ctx: ToolContext, query: str) -> ToolResult:
         _pending += 1
     job = _Job()
     try:
-        threading.Thread(target=_uia_worker, args=(job, query, ctx.cancel), name="uia-action", daemon=True).start()
+        threading.Thread(target=_uia_worker, args=(job, query, ctx.cancel, expect_hwnd), name="uia-action", daemon=True).start()
     except RuntimeError:
         with _pending_lock:
             _pending -= 1
@@ -248,14 +307,39 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         text = "; ".join(f"{i['nome']} ({i['tipo']})" for i in items)
         return ToolResult(True, f"{len(items)} controles: {text}.", data={"controles": items}, untrusted=True)
 
+    def prepare_clicar(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:
+        """Fixa a janela em foco AGORA (recusa a do próprio Jarvis) e monta a pergunta com controle e janela."""
+        query = str(args["nome"]).strip()
+        if _is_destructive(query):
+            return ToolResult(False, "Isso parece uma ação de excluir, enviar, pagar ou instalar. "
+                                     "Prefiro que você faça manualmente.")
+        info = win.foreground_window()
+        if info is None:
+            return ToolResult(False, "Nenhuma janela identificável está em foco.")
+        if win.is_own_process_window(info, ctx.cfg):
+            log.warning("clicar_controle recusado: janela do próprio Jarvis")
+            return ToolResult(False, win.OWN_WINDOW_MESSAGE)
+        warn = "ATENÇÃO, este botão pode aprovar uma ação. " if needs_strong_confirm(query) else ""
+        where = f"«{clip(info.title, 50)}» ({info.process or 'programa desconhecido'})"
+        return Prepared(text=f"{warn}Clicar em '{clip(query, _NAME_CLIP)}' na janela {where}",
+                        state=_ClickTarget(info.hwnd, info.pid))
+
+    def confirm_clicar(args: dict[str, Any], tainted: bool) -> bool:
+        return needs_strong_confirm(str(args.get("nome", "")))
+
     def clicar_controle(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         query = str(args["nome"]).strip()
+        target = ctx.prepared
+        if not isinstance(target, _ClickTarget):
+            return ToolResult(False, "Não consegui confirmar a janela de destino; não cliquei.")
         if _is_destructive(query):
             return ToolResult(False, "Isso parece uma ação de excluir, enviar, pagar ou instalar. "
                                      "Prefiro que você faça manualmente.")
         if ctx.cancel.cancelled:
             return ToolResult(False, "Cancelado.")
-        return _click_by_name(ctx, query)
+        if win.foreground_hwnd() != target.hwnd or win.pid_of(target.hwnd) != target.pid:
+            return ToolResult(False, "A janela em foco mudou; não cliquei.")
+        return _click_by_name(ctx, query, target.hwnd)
 
     registry.register(ToolSpec(
         name="listar_controles",
@@ -269,7 +353,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
     registry.register(ToolSpec(
         name="clicar_controle",
         description=("Clica num botão, aba, link ou item pelo nome visível, na janela ativa. "
-                     "Recusa ações de excluir, enviar, pagar ou instalar."),
+                     "Recusa ações de excluir, enviar, pagar ou instalar; botões como Sim, OK, Salvar ou "
+                     "Permitir pedem confirmação forte."),
         parameters={
             "type": "object",
             "properties": {"nome": {"type": "string", "minLength": 1, "maxLength": 80,
@@ -280,5 +365,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         risk=Risk.CONTROL,
         handler=clicar_controle,
         timeout_s=12.0,
-        confirm_text=lambda a: f"Clicar em '{str(a.get('nome', ''))[:60]}' na janela ativa",
+        prepare=prepare_clicar,
+        confirm_if=confirm_clicar,
+        audit_args=lambda a: audit_label(a, "nome"),
     ))

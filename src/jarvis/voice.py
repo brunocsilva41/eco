@@ -289,6 +289,9 @@ class Voice:
                 item.started = True
                 handed.append(item)
                 self._set_speaking(True)
+                if token.cancelled or self._stale(item):          # interrupt() correu entre a checagem e o True (N-21)
+                    self._set_speaking(False)
+                    return
             chunk = piece.chunk
             piece = None
             if chunk is not None:

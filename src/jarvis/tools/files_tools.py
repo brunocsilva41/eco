@@ -2,7 +2,8 @@
 
 Tudo passa pelo `Sandbox` (raízes permitidas, sem links, sem nomes reservados) no `prepare` E de novo no handler
 (TOCTOU). Escritas são atômicas (temp na mesma pasta + rename/replace) e registradas no `UndoJournal`.
-A auditoria nunca recebe conteúdo: só caminho, tamanho e sha256 curto.
+A auditoria nunca recebe conteúdo: só caminho, tamanho e resumo HMAC (core.auditkey).
+Resultados que citam NOMES vindos do disco são `untrusted=True` (um nome pode carregar uma frase de injeção).
 """
 from __future__ import annotations
 
@@ -20,10 +21,11 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from ..config import Config
+from ..core.auditkey import digest
 from ..core.cancel import Cancelled
 from ..files.journal import Backup, FileState, JournalError, UndoJournal, snapshot
 from ..files.recycle import RecycleError, measure_tree, send_to_recycle_bin
-from ..files.sandbox import Sandbox, SandboxError, is_reparse
+from ..files.sandbox import Sandbox, SandboxError, is_reparse, strong_confirm_extension
 from .registry import Prepared, Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
 
 log = logging.getLogger(__name__)
@@ -33,6 +35,10 @@ MAX_LIST_SCANNED = 2000
 MAX_COPY_BYTES = 200 * 1024 * 1024
 _CHUNK = 1024 * 1024
 _CONTENT_END = "[FIM DO CONTEÚDO DO ARQUIVO]"
+_CREATE_PREVIEW_CHARS = 80
+_EDIT_MAX_DIFF_LINES = 40          # linhas de diff mostradas na confirmação de edição
+_EDIT_LINE_CHARS = 120
+_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co", "Zl", "Zp"})
 T = TypeVar("T")
 
 
@@ -55,12 +61,28 @@ def _fmt_size(n: int) -> str:
     return f"{n / (1024 * 1024):.1f} MB".replace(".", ",")
 
 
-def _short_sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:12]
+def _visible(text: str, limit: int, *, collapse: bool = False) -> tuple[str, bool, int]:
+    """Texto para mostrar numa confirmação: sem controle/invisíveis (anti-spoof), em uma linha, limitado a `limit`.
+
+    Devolve (texto, foi_cortado, quantos_caracteres_invisíveis_foram_removidos). Quem mostra DEVE avisar quando
+    `foi_cortado` ou há invisíveis: nunca se aprova uma prévia que esconde conteúdo sem dizer.
+    """
+    hidden = sum(1 for c in text if unicodedata.category(c) in ("Cf", "Co", "Cs"))
+    flat = "".join(" " if c in "\r\n\t" else c for c in text)
+    out = "".join(c for c in flat if unicodedata.category(c) not in _HIDDEN_CATEGORIES)
+    if collapse:
+        out = " ".join(out.split())
+    clipped = len(out) > limit
+    return (out[:limit - 1] + "…" if clipped else out), clipped, hidden
+
+
+def _leaf(path_text: Any) -> str:
+    """Último componente de um caminho informado pelo modelo (só para olhar a extensão)."""
+    return str(path_text).replace("/", "\\").rstrip("\\").rsplit("\\", 1)[-1]
 
 
 def _audit(args: dict[str, Any]) -> dict[str, Any]:
-    """Só metadados: nunca o conteúdo nem os trechos."""
+    """Só metadados: caminhos, tamanho e HMAC; nunca o conteúdo nem os trechos."""
     out: dict[str, Any] = {}
     for key in ("caminho", "pasta", "origem", "destino"):
         if key in args:
@@ -69,7 +91,7 @@ def _audit(args: dict[str, Any]) -> dict[str, Any]:
         if key in args:
             txt = str(args[key])
             out["tamanho" + tag] = len(txt)
-            out["sha256" + tag] = _short_sha(txt)
+            out["digest" + tag] = digest(txt, 16)
     return out
 
 
@@ -279,7 +301,18 @@ class _FilesTools:
 
     def criar_prepare(self, ctx: ToolContext, args: dict[str, Any]) -> Prepared:
         path, data = self._plan_create(self.env(ctx), args)
-        return Prepared(f"Criar o arquivo {path} ({_fmt_size(len(data))})?", state=path)
+        ext = path.suffix.lower() or "sem extensão"
+        preview, clipped, hidden = _visible(str(args["conteudo"]), _CREATE_PREVIEW_CHARS, collapse=True)
+        notes = []
+        if clipped:
+            notes.append("há mais conteúdo além do que mostrei")
+        if hidden:
+            notes.append(f"o texto tem {hidden} caracteres invisíveis")
+        if strong_confirm_extension(path.name):
+            notes.append(f"arquivo {ext} pode rodar script ao abrir no navegador")
+        tail = f" ATENÇÃO: {'; '.join(notes)}." if notes else ""
+        return Prepared(f"Criar o arquivo {path} (extensão {ext}, {_fmt_size(len(data))}), começando com "
+                        f"«{preview or '(vazio)'}»?{tail}", state=path)
 
     def criar(self, ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         env = self.env(ctx)
@@ -293,7 +326,8 @@ class _FilesTools:
             _atomic_write(path, data, overwrite=False)
             after = FileState("file", len(data), hashlib.sha256(data).hexdigest())
             self._record(env, "criar", dst=path, before=FileState("absent"), after=after)
-        return ToolResult(True, f"Criei {_clean(path.name)} ({_fmt_size(len(data))}).", data={"caminho": str(path)})
+        return ToolResult(True, f"Criei {_clean(path.name)} ({_fmt_size(len(data))}).", data={"caminho": str(path)},
+                          untrusted=True)
 
     # ------------------------------------------------------------ editar_arquivo
     @dataclass(frozen=True)
@@ -345,8 +379,24 @@ class _FilesTools:
         line = norm.count("\n", 0, idx) + 1
         diff = [ln for ln in difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=0)
                 if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
-        shown = [_clean(ln, 90) for ln in diff[:10]] + ([f"… (+{len(diff) - 10} linhas)"] if len(diff) > 10 else [])
-        text = f"Editar {path}, perto da linha {line}? Mudança: " + " | ".join(shown)
+        shown: list[str] = []
+        clipped_any, hidden_total = False, 0
+        for ln in diff[:_EDIT_MAX_DIFF_LINES]:
+            vis, clipped, hidden = _visible(ln, _EDIT_LINE_CHARS)
+            shown.append(vis)
+            clipped_any |= clipped
+            hidden_total += hidden
+        notes = []
+        if len(diff) > _EDIT_MAX_DIFF_LINES:
+            notes.append(f"há mais mudanças do que mostrei: são {len(diff)} linhas alteradas e mostrei "
+                         f"{_EDIT_MAX_DIFF_LINES}")
+        if clipped_any:
+            notes.append("linhas longas foram encurtadas")
+        if hidden_total:
+            notes.append(f"há {hidden_total} caracteres invisíveis na mudança")
+        body = " | ".join(shown) if shown else "só espaços ou quebras de linha mudam"
+        tail = f" ATENÇÃO: {'; '.join(notes)}." if notes else ""
+        text = f"Editar {path}, perto da linha {line}? {len(diff)} linhas alteradas. Mudança: {body}{tail}"
         return self._EditPlan(path, hashlib.sha256(data).hexdigest(), len(data), new_data, line, text)
 
     def editar_prepare(self, ctx: ToolContext, args: dict[str, Any]) -> Prepared:
@@ -375,7 +425,7 @@ class _FilesTools:
             self._record(env, "editar", dst=plan.path, before=FileState("file", plan.old_size, plan.old_sha),
                          after=after, backup=backup)
         return ToolResult(True, f"Editei {_clean(plan.path.name)} (linha {plan.line}). Dá para desfazer.",
-                          data={"caminho": str(plan.path)})
+                          data={"caminho": str(plan.path)}, untrusted=True)
 
     # ------------------------------------------------------------ copiar_arquivo
     def _plan_copy(self, env: _Env, args: dict[str, Any]) -> tuple[Path, Path, int]:
@@ -393,7 +443,10 @@ class _FilesTools:
 
     def copiar_prepare(self, ctx: ToolContext, args: dict[str, Any]) -> Prepared:
         src, dst, size = self._plan_copy(self.env(ctx), args)
-        return Prepared(f"Copiar {src} para {dst} ({_fmt_size(size)})?", state=(src, dst))
+        ext = dst.suffix.lower() or "sem extensão"
+        tail = (f" ATENÇÃO: arquivo {ext} pode rodar script ao abrir no navegador."
+                if strong_confirm_extension(dst.name) else "")
+        return Prepared(f"Copiar {src} para {dst} (extensão {ext}, {_fmt_size(size)})?{tail}", state=(src, dst))
 
     def copiar(self, ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         env = self.env(ctx)
@@ -434,7 +487,8 @@ class _FilesTools:
                 raise
             self._record(env, "copiar", src=src, dst=dst, before=FileState("absent"),
                          after=FileState("file", size, h.hexdigest() if size <= 64 * 1024 * 1024 else None))
-        return ToolResult(True, f"Copiei {_clean(src.name)} para {_clean(str(dst.parent), 120)}.", data={"destino": str(dst)})
+        return ToolResult(True, f"Copiei {_clean(src.name)} para {_clean(str(dst.parent), 120)}.", data={"destino": str(dst)},
+                          untrusted=True)
 
     # ------------------------------------------------------------ mover_arquivo
     def _plan_move(self, env: _Env, args: dict[str, Any]) -> tuple[Path, Path]:
@@ -475,7 +529,8 @@ class _FilesTools:
                 raise
             after = snapshot(dst)
             self._record(env, "mover", src=src, dst=dst, before=before, after=after)
-        return ToolResult(True, f"Movi {_clean(src.name)} para {_clean(str(dst), 120)}.", data={"destino": str(dst)})
+        return ToolResult(True, f"Movi {_clean(src.name)} para {_clean(str(dst), 120)}.", data={"destino": str(dst)},
+                          untrusted=True)
 
     # ------------------------------------------------------------ apagar_arquivo
     @dataclass(frozen=True)
@@ -514,13 +569,44 @@ class _FilesTools:
             send_to_recycle_bin(plan.path, size_hint=plan.size)
             self._record(env, "apagar", src=plan.path, before=before, after=FileState("absent"), reversible=False)
         return ToolResult(True, f"Mandei {_clean(plan.path.name)} para a Lixeira. Para restaurar, use a Lixeira do Windows.",
-                          data={"caminho": str(plan.path)})
+                          data={"caminho": str(plan.path)}, untrusted=True)
 
     # ------------------------------------------------------------ desfazer
+    def desfazer_prepare(self, ctx: ToolContext, args: dict[str, Any]) -> Prepared:
+        """Mostra QUAL operação será revertida (e avisa das entradas "manuais" mais novas que são puladas)."""
+        prev = self.env(ctx).journal.peek_last()
+        if prev is None:
+            raise _Refuse("Não há nenhuma operação de arquivo para desfazer.")
+        where = _clean(prev.dst or prev.src or "?", 200)
+        when = f" (feita em {_clean(prev.when, 20)})" if prev.when else ""
+        if prev.op == "criar":
+            what = f"Desfazer a CRIAÇÃO de {where}{when}: o arquivo vai para a Lixeira"
+        elif prev.op == "copiar":
+            what = f"Desfazer a CÓPIA {where}{when}: a cópia vai para a Lixeira"
+        elif prev.op == "editar":
+            what = f"Desfazer a EDIÇÃO de {where}{when}: o arquivo volta à versão anterior"
+        elif prev.op == "mover":
+            what = f"Desfazer a MOVIMENTAÇÃO{when}: {where} volta para {_clean(prev.src or '?', 200)}"
+        else:
+            what = (f"O último passo foi APAGAR {where}{when}. Não restauro sozinho (use a Lixeira do Windows); "
+                    "se confirmar, só marco como visto e nada é restaurado")
+        lead = ""
+        if prev.skipped_manual:
+            items = "; ".join(f"{op} {_clean(name, 60)}" for op, name in prev.skipped_manual[:3])
+            lead = (f"ATENÇÃO: a operação mais recente ({items}) já foi marcada como manual e NÃO será desfeita; "
+                    "a pergunta abaixo é sobre a anterior. ")
+        return Prepared(f"{lead}{what}?", state=prev.entry_id)
+
     def desfazer(self, ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        env = self.env(ctx)
         with self._mutex:
-            res = self.env(ctx).journal.undo_last(ctx.cancel)
-        return ToolResult(res.ok, res.message, data={"operacao": res.op, "manual": res.manual})
+            expected = self._prepared(ctx, str)
+            if expected is not None:
+                now = env.journal.peek_last()
+                if now is None or now.entry_id != expected:
+                    raise _Refuse("A última operação mudou depois da pergunta; não desfiz nada. Peça de novo.")
+            res = env.journal.undo_last(ctx.cancel)
+        return ToolResult(res.ok, res.message, data={"operacao": res.op, "manual": res.manual}, untrusted=True)
 
     # ------------------------------------------------------------ diário
     @staticmethod
@@ -559,7 +645,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
                     "Cria as pastas que faltarem. Não cria programas nem scripts (.exe, .bat, .ps1...).",
         parameters=obj({"caminho": path_prop, "conteudo": {"type": "string", "maxLength": max_write}}, ["caminho", "conteudo"]),
         risk=Risk.CONTROL, handler=g(t.criar, mutating=True), prepare=g(t.criar_prepare),
-        confirm_if=lambda a, tainted: tainted, audit_args=_audit, redact=frozenset({"conteudo"}), timeout_s=20))
+        confirm_if=lambda a, tainted: tainted or strong_confirm_extension(_leaf(a.get("caminho", ""))) is not None,
+        audit_args=_audit, redact=frozenset({"conteudo"}), timeout_s=20))
     registry.register(ToolSpec(
         name="editar_arquivo",
         description="Edita um arquivo de texto trocando UM trecho exato por outro. O trecho antigo precisa aparecer "
@@ -576,7 +663,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
                     "pasta, copia para dentro dela com o mesmo nome.",
         parameters=obj({"origem": path_prop, "destino": path_prop}, ["origem", "destino"]),
         risk=Risk.CONTROL, handler=g(t.copiar, mutating=True), prepare=g(t.copiar_prepare),
-        confirm_if=lambda a, tainted: tainted, audit_args=_audit, timeout_s=90))
+        confirm_if=lambda a, tainted: tainted or strong_confirm_extension(_leaf(a.get("destino", ""))) is not None,
+        audit_args=_audit, timeout_s=90))
     registry.register(ToolSpec(
         name="mover_arquivo",
         description="Move ou renomeia um arquivo ou pasta dentro da pasta liberada. Não sobrescreve. Se o destino "
@@ -594,5 +682,6 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         description="Desfaz a última operação de arquivo (criar, editar, copiar ou mover), se o arquivo não foi "
                     "alterado depois. Para arquivos apagados, a restauração é pela Lixeira do Windows.",
         parameters=obj({}, []),
-        risk=Risk.CONTROL, handler=g(t.desfazer, mutating=True), timeout_s=60))
+        risk=Risk.CONTROL, handler=g(t.desfazer, mutating=True), prepare=g(t.desfazer_prepare),
+        confirm_if=lambda a, tainted: True, audit_args=lambda a: {}, timeout_s=60))
     log.info("ferramentas de arquivos registradas; raízes: %d", len(cfg.files.roots))

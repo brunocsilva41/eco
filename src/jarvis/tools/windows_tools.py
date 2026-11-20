@@ -51,7 +51,7 @@ def _resolve(query: str) -> tuple[win.WindowInfo | None, ToolResult | None]:
     matches = best_matches(query, win.list_windows(), key=lambda w: w.title)
     shown = query.strip()[:40]
     if not matches:
-        return None, ToolResult(False, f"Não achei nenhuma janela com '{shown}'.")
+        return None, ToolResult(False, "Não achei nenhuma janela com esse trecho no título.")   # sem eco: a auditoria registra a mensagem
     if len(matches) > 1:
         options = [_describe(w) for w in matches[:_MAX_OPTIONS]]
         extra = f" e mais {len(matches) - _MAX_OPTIONS}" if len(matches) > _MAX_OPTIONS else ""
@@ -168,4 +168,5 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         risk=Risk.RISKY,
         handler=fechar_janela,
         prepare=prepare_fechar,
+        audit_args=lambda a: audit_label(a, "titulo"),
     ))

@@ -427,6 +427,30 @@ def validate(cfg: Config) -> list[str]:
         if len(rp.parts) <= 1 or low.startswith(sysroot) or any(low.startswith(x) for x in pf) \
                 or any(low.startswith(x) or x.startswith(low) for x in protected):
             p.append(f"files.roots: {r!r} é uma pasta protegida (raiz do disco, Windows, Program Files ou pasta do Jarvis)")
+            continue
+        # Pastas sensíveis: o perfil INTEIRO (ou acima), AppData, ProgramData, Inicializar, .ssh, .aws, .gnupg e qualquer
+        # pasta que as contenha. A raiz precisa estar ESTRITAMENTE dentro de uma subpasta do perfil (ex.: Documents\Jarvis).
+        env = os.environ
+        home_s = env.get("USERPROFILE") or str(Path.home())
+        sens_raw = [str(Path(home_s) / n) for n in ("AppData", ".ssh", ".aws", ".gnupg")]
+        sens_raw += [env[v] for v in ("APPDATA", "LOCALAPPDATA", "ProgramData", "ALLUSERSPROFILE") if env.get(v)]
+        sens_raw.append(r"C:\ProgramData")
+        sens: list[str] = []
+        homes: list[str] = []
+        for raw_path in sens_raw:
+            for form in {raw_path, str(Path(raw_path).resolve())}:
+                sens.append(form.lower().rstrip("\\") + "\\")
+        for raw_path in {home_s, str(Path(home_s).resolve())}:
+            homes.append(raw_path.lower().rstrip("\\") + "\\")
+        pieces = low.split("\\")
+        if any(h.startswith(low) for h in homes):
+            p.append(f"files.roots: {r!r} é o perfil do usuário inteiro (ou uma pasta acima dele); use uma subpasta, "
+                     "como Documents\\Jarvis")
+        elif any(low.startswith(x) or x.startswith(low) for x in sens) \
+                or any(c in (".ssh", ".aws", ".gnupg") for c in pieces) \
+                or "\\programs\\startup\\" in low or "\\programs\\inicializar\\" in low:
+            p.append(f"files.roots: {r!r} é uma pasta sensível (AppData, ProgramData, Inicializar, .ssh, .aws, .gnupg "
+                     "ou uma pasta que as contenha)")
     return p
 
 

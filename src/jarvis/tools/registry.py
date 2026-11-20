@@ -269,7 +269,8 @@ class ToolRegistry:
         if spec.prepare is not None:                                    # 3. resolver o alvo REAL antes de perguntar
             outcome = self._call(spec.prepare, ctx, args, PREPARE_TIMEOUT_S, parent, name + ".prepare")
             if isinstance(outcome, ToolResult):
-                audit.info(_line(origin, name, shown, f"preparo falhou: {outcome.message[:120]}"))
+                why = "[conteúdo omitido]" if (outcome.untrusted or spec.audit_args is not None) else outcome.message[:120]
+                audit.info(_line(origin, name, shown, f"preparo falhou: {why}"))   # nunca grava títulos/nomes de fora
                 return outcome
             ctx.prepared = outcome.state
             step = outcome.text

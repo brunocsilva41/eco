@@ -119,6 +119,11 @@ class Palette:
     hover: str             # fundo de hover sobre ``raised``
     pressed: str
 
+    @property
+    def focus_ring(self) -> str:
+        """Cor do anel de foco (ambar com >= 3:1 contra todas as superficies)."""
+        return self.accent_ink
+
     def state(self, name: str) -> str:
         return {"ok": self.ok, "warn": self.warn, "error": self.error}.get(name, self.text_muted)
 
@@ -279,7 +284,7 @@ def dp(n: float) -> int:
     return int(round(n))
 
 
-def _dpr(widget: QWidget | None) -> float:
+def dpr(widget: QWidget | None) -> float:
     if widget is not None:
         return widget.devicePixelRatioF()
     screen = QGuiApplication.primaryScreen()
@@ -288,12 +293,12 @@ def _dpr(widget: QWidget | None) -> float:
 
 def px(n: float, widget: QWidget | None = None) -> int:
     """Pixels FISICOS (n * devicePixelRatio): tamanho de pixmap/QImage para ficar nitido."""
-    return max(1, int(round(n * _dpr(widget))))
+    return max(1, int(round(n * dpr(widget))))
 
 
 def crisp(v: float, widget: QWidget | None = None) -> float:
     """Alinha ``v`` (logico) a grade de pixels fisicos, para tracos de 1 px sem borrao."""
-    d = _dpr(widget)
+    d = dpr(widget)
     return round(v * d) / d
 
 

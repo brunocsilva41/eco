@@ -2,18 +2,21 @@
 
 Regras: o texto que vem da memória ou de conversas antigas é DADO não confiável (`untrusted=True`), nunca instrução.
 `esquecer` e `editar_memoria` são RISKY: a fase `prepare` resolve a memória real e mostra o texto na confirmação.
-`audit_args` nunca leva o conteúdo das memórias (só id, tamanho e hash curto).
+`audit_args` nunca leva o conteúdo das memórias (só id, tamanho e resumo HMAC de core.auditkey).
+`lembrar` tem `prepare`: a confirmação (quando há) mostra o texto REAL que será guardado.
+Títulos de conversa vêm de fora: `listar_conversas` devolve `untrusted=True`.
 Contrato de threads: os handlers rodam em threads descartáveis do registro; a fachada é segura entre threads.
 """
 from __future__ import annotations
 
 import functools
-import hashlib
 import logging
 import time
+import unicodedata
 from typing import Any, Callable
 
 from ..config import Config
+from ..core.auditkey import digest
 from ..memory import MemoryError_
 from .registry import Prepared, Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
 
@@ -24,6 +27,7 @@ __all__ = ["register"]
 _KINDS = ["fato", "preferencia", "tarefa", "nota"]
 _MAX_REPLY_CHARS = 1500
 _NO_MEMORY = "A memória não está disponível."
+_REMEMBER_SHOW_CHARS = 300
 
 
 # ------------------------------------------------------------------ utilidades
@@ -49,16 +53,12 @@ def _day(ts: float) -> str:
     return time.strftime("%d/%m/%Y", time.localtime(ts))
 
 
-def _hash(text: Any) -> str:
-    return hashlib.sha256(str(text).encode("utf-8", "replace")).hexdigest()[:8]
-
-
 def _audit_text(args: dict[str, Any], field: str = "texto") -> dict[str, Any]:
-    """Tamanho e hash curto do texto; nunca o conteúdo. Tolerante: roda ANTES da validação dos argumentos."""
+    """Tamanho e HMAC do texto; nunca o conteúdo. Tolerante: roda ANTES da validação dos argumentos."""
     out: dict[str, Any] = {}
     value = args.get(field)
     out["tamanho"] = len(value) if isinstance(value, str) else 0
-    out["hash"] = _hash(value) if isinstance(value, str) else None
+    out["digest"] = digest(value, 16) if isinstance(value, str) else None
     for k in ("id", "tipo", "quantidade", "desde", "ate"):
         v = args.get(k)
         if isinstance(v, bool) or not isinstance(v, (int, str)):
@@ -98,7 +98,26 @@ def _format_items(items: list[Any]) -> str:
     return "\n".join(lines)
 
 
+def _show_full(text: str, limit: int) -> str:
+    """Texto inteiro até `limit` caracteres; se passar, o começo + '…e mais N caracteres' (nunca corta sem avisar)."""
+    one = " ".join(str(text).split())
+    return one if len(one) <= limit else f"{one[:limit]}…e mais {len(one) - limit} caracteres"
+
+
 # ------------------------------------------------------------------ escrita
+@_guarded
+def _prepare_lembrar(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:
+    """Recusa cedo (desligado, segredo, tamanho) e mostra o texto REAL que seria guardado."""
+    if not ctx.cfg.memory.model_can_remember:
+        return ToolResult(False, "Guardar memórias pelo assistente está desligado nas configurações; não guardei.")
+    text = ctx.memory.longterm.validate_text(args["texto"])
+    origin = " (conteúdo de origem externa, menos confiável)" if ctx.tainted else ""
+    invisible = sum(1 for c in text if unicodedata.category(c) in ("Cf", "Co"))
+    warn = f" ATENÇÃO: o texto tem {invisible} caracteres invisíveis que não aparecem aqui." if invisible else ""
+    return Prepared(f"Guardar na memória de longo prazo{origin}: \"{_show_full(text, _REMEMBER_SHOW_CHARS)}\"?{warn}",
+                    state=text)
+
+
 @_guarded
 def _lembrar(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     if not ctx.cfg.memory.model_can_remember:
@@ -106,7 +125,8 @@ def _lembrar(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     kind = args.get("tipo") or "fato"
     # conteúdo lido da tela/web/notas nesta rodada é não confiável: origem 'externo', confiança menor
     origin, confidence = ("externo", 0.5) if ctx.tainted else ("modelo", 0.8)
-    mem_id = ctx.memory.longterm.remember(args["texto"], kind, origin, confidence=confidence)
+    text = ctx.prepared if isinstance(ctx.prepared, str) else args["texto"]      # o mesmo texto que foi mostrado
+    mem_id = ctx.memory.longterm.remember(text, kind, origin, confidence=confidence)
     note = "" if getattr(ctx.memory, "persistent", True) else " (só até fechar o Jarvis: modo sem histórico)"
     return ToolResult(True, f"Guardei na memória (número {mem_id}).{note}", data={"id": mem_id})
 
@@ -224,7 +244,7 @@ def _listar_conversas(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         return ToolResult(True, "Não há conversas guardadas.")
     lines = [f"{s.id}: \"{_clip(s.title, 60)}\" ({_day(s.last_active)}{', atual' if s.state == 'ativa' else ''})"
              for s in sessions]
-    return ToolResult(True, "\n".join(lines), data={"ids": [s.id for s in sessions]})
+    return ToolResult(True, "\n".join(lines), data={"ids": [s.id for s in sessions]}, untrusted=True)   # títulos vêm de fora
 
 
 # ------------------------------------------------------------------ registro
@@ -243,7 +263,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
                      "Nunca guarde senhas, PINs, cartões, CPF ou chaves."),
         parameters=obj({"texto": {"type": "string", "minLength": 3, "maxLength": 1000},
                         "tipo": {"type": "string", "enum": _KINDS}}, ["texto"]),
-        risk=Risk.CONTROL, handler=_lembrar, audit_args=_audit_text))
+        risk=Risk.CONTROL, handler=_lembrar, prepare=_prepare_lembrar, audit_args=_audit_text))
     registry.register(ToolSpec(
         name="esquecer",
         description=("Apaga UMA memória de longo prazo pelo número (id). Se não souber o número, use buscar_memoria ou "
@@ -285,11 +305,13 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
     registry.register(ToolSpec(
         name="nova_conversa",
         description="Começa uma conversa nova, separada da atual. Use quando o Bruno pedir 'nova conversa' ou 'começar do zero'.",
-        parameters=obj({}), risk=Risk.CONTROL, handler=_nova_conversa, audit_args=lambda a: {}))
+        parameters=obj({}), risk=Risk.CONTROL, handler=_nova_conversa, audit_args=lambda a: {},
+        confirm_text=lambda a: "Começar uma conversa NOVA, separada desta?"))
     registry.register(ToolSpec(
         name="resumir_conversa",
         description="Pede para resumir a conversa atual e liberar espaço de memória de trabalho. Use quando o Bruno pedir 'resume a conversa'.",
-        parameters=obj({}), risk=Risk.CONTROL, handler=_resumir_conversa, audit_args=lambda a: {}))
+        parameters=obj({}), risk=Risk.CONTROL, handler=_resumir_conversa, audit_args=lambda a: {},
+        confirm_text=lambda a: "Resumir a conversa atual para liberar memória de trabalho?"))
     registry.register(ToolSpec(
         name="listar_conversas",
         description="Lista as conversas mais recentes (número, título e data). Use para o Bruno escolher uma conversa antiga.",

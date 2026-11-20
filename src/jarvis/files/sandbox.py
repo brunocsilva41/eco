@@ -11,7 +11,12 @@ Regras (todas recusam com `SandboxError`, mensagem em pt-BR):
     ponto/espaço, caracteres inválidos, de controle e de formatação Unicode (anti-spoofing);
   - nunca dentro (nem acima) de %SystemRoot%, Program Files, pasta do projeto, data, logs e config.toml;
   - caminho final de no máximo 259 caracteres;
-  - criar/editar arquivos executáveis ou scripts é recusado (`check_write_extension`).
+  - criar/editar arquivos executáveis ou scripts é recusado (`check_write_extension`); `.html/.svg/...` podem ser
+    criados, mas a ferramenta pede confirmação FORTE (`strong_confirm_extension`);
+  - raízes proibidas (ignoradas com aviso): o perfil do usuário inteiro ou acima dele, AppData, ProgramData, pastas
+    Inicializar, .ssh, .aws, .gnupg e qualquer pasta que as contenha;
+  - nomes típicos de segredo (.env, id_rsa, *.kdbx, *.pem, *.pfx, *.key, Cookies, Login Data, credentials.json,
+    .npmrc, .netrc...) não são lidos nem escritos (`is_sensitive_name`).
 O caminho devolvido é o REAL (realpath), conferido contra a raiz também depois de resolvido.
 Limitações: hardlinks e nomes 8.3 não são detectados como tal (8.3 é recusado por divergir do nome longo).
 """
@@ -51,7 +56,30 @@ BLOCKED_EXTENSIONS: frozenset[str] = frozenset({
     ".appx", ".msix", ".appxbundle", ".msixbundle", ".chm", ".library-ms", ".searchconnector-ms",
     ".py", ".pyw", ".pyc", ".pyz", ".sh", ".bash", ".pl", ".rb", ".php", ".lua",
     ".docm", ".xlsm", ".pptm", ".dotm", ".xlam", ".ppam", ".iso", ".vhd", ".vhdx",
+    ".wsc", ".sct", ".ws", ".psc1", ".settingcontent-ms", ".xll", ".diagcab", ".rdp", ".theme", ".themepack",
+    ".vba", ".bas", ".hlp", ".shs", ".mde", ".ade", ".cab",
 })
+
+# Criar NÃO é bloqueado, mas executa script no navegador: exige confirmação FORTE (ver `strong_confirm_extension`).
+STRONG_CONFIRM_EXTENSIONS: frozenset[str] = frozenset({
+    ".html", ".htm", ".svg", ".xhtml", ".xht", ".mht", ".mhtml", ".xml-stylesheet",
+})
+
+# Nomes sensíveis (senhas, chaves, cookies): nem lê nem escreve, em qualquer pasta liberada.
+_SENSITIVE_NAMES: frozenset[str] = frozenset({
+    ".env", "credentials.json", ".npmrc", ".netrc", ".pgpass", "cookies", "login data", "web data",
+})
+_SENSITIVE_STEMS: frozenset[str] = frozenset({"id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"})   # com ou sem extensão (.pub, .bak)
+_SENSITIVE_SUFFIXES: tuple[str, ...] = (".kdbx", ".pem", ".pfx", ".key", ".p12", ".ppk")
+_SENSITIVE_DIRS: frozenset[str] = frozenset({".ssh", ".aws", ".gnupg"})
+
+
+def is_sensitive_name(component: str) -> bool:
+    """True se o nome (arquivo ou pasta) é típico de segredo: .env, chaves privadas, cofres, cookies, credenciais."""
+    low = component.casefold().rstrip(" .")
+    if low in _SENSITIVE_NAMES or low in _SENSITIVE_DIRS or low.startswith(".env."):
+        return True
+    return low.split(".", 1)[0] in _SENSITIVE_STEMS or low.endswith(_SENSITIVE_SUFFIXES)
 
 
 class SandboxError(Exception):
@@ -84,14 +112,41 @@ def is_reserved_name(component: str) -> bool:
     return stem in _RESERVED
 
 
-def blocked_extension(name: str) -> str | None:
-    """Extensão bloqueada do nome (ex.: '.exe') ou None."""
+def _extension_of(name: str) -> str | None:
     low = name.casefold().rstrip(" .")
     dot = low.rfind(".")
-    if dot < 0:
-        return None
-    ext = low[dot:]
+    return low[dot:] if dot >= 0 else None
+
+
+def blocked_extension(name: str) -> str | None:
+    """Extensão bloqueada do nome (ex.: '.exe') ou None."""
+    ext = _extension_of(name)
     return ext if ext in BLOCKED_EXTENSIONS else None
+
+
+def strong_confirm_extension(name: str) -> str | None:
+    """Extensão que exige confirmação FORTE para criar (ex.: '.html', '.svg') ou None."""
+    ext = _extension_of(name)
+    return ext if ext in STRONG_CONFIRM_EXTENSIONS else None
+
+
+def _forbidden_root_paths() -> list[tuple[str, str]]:
+    """(rótulo, caminho) de pastas que NUNCA podem ser raiz, nem estar dentro de uma raiz, nem ser contidas por ela."""
+    env = os.environ
+    home = env.get("USERPROFILE") or str(Path.home())
+    out: list[tuple[str, str]] = [("AppData", str(Path(home) / "AppData")),
+                                  (".ssh", str(Path(home) / ".ssh")), (".aws", str(Path(home) / ".aws")),
+                                  (".gnupg", str(Path(home) / ".gnupg"))]
+    for label, var in (("AppData", "APPDATA"), ("AppData", "LOCALAPPDATA"), ("ProgramData", "ProgramData"),
+                       ("ProgramData", "ALLUSERSPROFILE")):
+        if env.get(var):
+            out.append((label, env[var]))
+    out.append(("ProgramData", r"C:\ProgramData"))
+    for label, base in (("a pasta Inicializar", env.get("APPDATA")), ("a pasta Inicializar", env.get("ProgramData"))):
+        if base:
+            for leaf in ("Startup", "Inicializar"):
+                out.append((label, str(Path(base) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / leaf)))
+    return out
 
 
 @dataclass(frozen=True)
@@ -121,7 +176,45 @@ class Sandbox:
                     self._protected.append((label, lex))
             except (OSError, ValueError):
                 log.warning("sandbox: não consegui resolver a pasta protegida %r", text)
+        # Raízes proibidas: o perfil inteiro (ou qualquer pasta que o contenha) e pastas sensíveis (AppData, ProgramData,
+        # Inicializar, .ssh, .aws, .gnupg), tanto dentro delas quanto contendo-as. Uma raiz precisa estar ESTRITAMENTE
+        # dentro de uma subpasta do perfil (ex.: Documents\Jarvis).
+        home = env.get("USERPROFILE") or str(Path.home())
+        self._home_parts: list[tuple[str, ...]] = []
+        self._sensitive_roots: list[tuple[str, tuple[str, ...]]] = []
+        for text in {home, str(Path.home())}:
+            self._home_parts.extend(self._both_forms(text))
+        for label, text in _forbidden_root_paths():
+            self._sensitive_roots.extend((label, parts) for parts in self._both_forms(text))
         self._warned: set[str] = set()
+
+    @staticmethod
+    def _both_forms(text: str) -> list[tuple[str, ...]]:
+        """Forma léxica e forma real (realpath) de um caminho, em partes casefold, sem repetir."""
+        forms: list[tuple[str, ...]] = []
+        for fn in (os.path.abspath, os.path.realpath):
+            try:
+                parts = _cf_parts(fn(text))
+            except (OSError, ValueError):
+                continue
+            if parts not in forms:
+                forms.append(parts)
+        return forms
+
+    def _forbidden_root_reason(self, parts: tuple[str, ...]) -> str | None:
+        """Motivo pelo qual `parts` (casefold) não pode ser raiz de arquivos, ou None."""
+        for home in self._home_parts:
+            if _is_prefix(parts, home):                        # é o perfil ou uma pasta que o contém (ex.: C:\Users)
+                return "o perfil do usuário inteiro (use uma subpasta, como Documents\\Jarvis)"
+        for label, prot in self._sensitive_roots:
+            if _is_prefix(prot, parts) or _is_prefix(parts, prot):
+                return f"{label} (sensível)"
+        if any(p in _SENSITIVE_DIRS for p in parts):
+            return "uma pasta de chaves (.ssh, .aws, .gnupg)"
+        for i in range(len(parts) - 1):
+            if parts[i] == "programs" and parts[i + 1] in ("startup", "inicializar"):
+                return "a pasta Inicializar"
+        return None
 
     # ------------------------------------------------------------ raízes
     def _roots(self) -> list[_Root]:
@@ -142,6 +235,10 @@ class Sandbox:
                 continue
             if self._protected_label(parts, ancestor=False):
                 self._warn(text, "é uma pasta protegida")
+                continue
+            forbidden = self._forbidden_root_reason(parts) or self._forbidden_root_reason(_cf_parts(absolute))
+            if forbidden:
+                self._warn(text, f"raiz proibida: {forbidden}")
                 continue
             out.append(_Root(real, parts, _cf_parts(absolute)))
         return out
@@ -249,6 +346,8 @@ class Sandbox:
         for c in rel:
             if is_reserved_name(c):
                 raise SandboxError(f"O nome {c!r} é reservado do Windows.")
+            if is_sensitive_name(c):
+                raise SandboxError(f"O nome {c[:40]!r} é típico de segredo (senha, chave, cookie); não leio nem escrevo.")
 
         cur = root.real
         exists = True
