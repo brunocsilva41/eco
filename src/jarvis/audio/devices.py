@@ -4,7 +4,7 @@ Regras de resolução (``cfg.audio.input_device`` / ``output_device``):
 
 * ``None`` ou ``""``  -> dispositivo padrão do Windows (padrão da melhor API host disponível);
 * ``int`` (ou texto só com dígitos) -> índice do PortAudio, validado;
-* ``str``  -> trecho do nome, sem diferenciar caixa nem acentos. O mesmo aparelho aparece uma vez por
+* ``str``  -> trecho do nome, sem diferenciar caixa nem acentos (``core.textutil.fold``). O mesmo aparelho aparece uma vez por
   API host (MME, DirectSound, WASAPI...); isso conta como UM candidato e escolhemos a melhor API.
   Dois aparelhos diferentes que casem com o trecho geram ``DeviceError`` de ambiguidade.
 
@@ -23,12 +23,12 @@ stream, microfone ou toca som: só consulta.
 from __future__ import annotations
 
 import logging
-import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..config import AudioCfg
+from ..core.textutil import fold
 
 log = logging.getLogger(__name__)
 
@@ -133,12 +133,6 @@ def stream_extra_settings(device: AudioDevice) -> Any | None:
 
 
 # ----------------------------------------------------------------------------- resolução
-def _norm(text: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", text)
-    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return " ".join(stripped.casefold().split())
-
-
 def _best(devices: Sequence[AudioDevice]) -> AudioDevice:
     return min(devices, key=lambda d: (d.api_rank, d.index))
 
@@ -147,7 +141,7 @@ def _available_text(devices: Sequence[AudioDevice]) -> str:
     seen: dict[str, AudioDevice] = {}
     for d in sorted(devices, key=lambda x: (x.api_rank, x.index)):
         if d.api_rank < _EXCLUDED_RANK:
-            seen.setdefault(_norm(d.name)[:_NAME_KEY_LEN], d)
+            seen.setdefault(fold(d.name)[:_NAME_KEY_LEN], d)
     return "; ".join(f"[{d.index}] {d.name}" for d in seen.values()) or "(nenhum)"
 
 
@@ -183,17 +177,17 @@ def resolve_device(spec: DeviceSpec, kind: Kind) -> AudioDevice:
                 return d
         raise DeviceError(f"não existe dispositivo de áudio com índice {spec} (0..{len(everything) - 1})")
 
-    needle = _norm(spec)
+    needle = fold(spec)
     usable = [d for d in capable if d.api_rank < _EXCLUDED_RANK]
-    matches = [d for d in usable if needle in _norm(d.name)]
+    matches = [d for d in usable if needle in fold(d.name)]
     if not matches:
         raise DeviceError(f"dispositivo de {label} {spec!r} não encontrado. Disponíveis: {_available_text(capable)}")
-    exact = [d for d in matches if _norm(d.name) == needle]
+    exact = [d for d in matches if fold(d.name) == needle]
     matches = exact or matches
 
     groups: dict[str, list[AudioDevice]] = {}
     for d in matches:
-        groups.setdefault(_norm(d.name)[:_NAME_KEY_LEN], []).append(d)
+        groups.setdefault(fold(d.name)[:_NAME_KEY_LEN], []).append(d)
     if len(groups) > 1:
         names = "; ".join(f"[{_best(g).index}] {_best(g).name}" for g in groups.values())
         raise DeviceError(f"dispositivo de {label} {spec!r} é ambíguo ({names}). Use um trecho maior ou o índice")

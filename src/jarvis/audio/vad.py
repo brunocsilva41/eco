@@ -11,13 +11,14 @@ from typing import Any
 
 import numpy as np
 
+from .constants import SAMPLE_RATE
 from .devices import AudioError
 
 log = logging.getLogger(__name__)
 
-SAMPLE_RATE = 16000
 WINDOW_SAMPLES = 512                                  # 32 ms a 16 kHz
 VAD_RELATIVE_PATH = Path("silero") / "silero_vad.onnx"
+MIN_MODEL_BYTES = 100_000                             # abaixo disso o arquivo está truncado
 _CONTEXT_SAMPLES = 64                                 # contexto do modelo v5 (últimas 64 amostras da janela anterior)
 _REQUIRED_INPUTS = frozenset({"input", "state", "sr"})
 
@@ -34,11 +35,27 @@ def default_model_path(models_dir: Path | None = None) -> Path:
     return Path(models_dir) / VAD_RELATIVE_PATH
 
 
+def validate_model_file(path: Path | str) -> int:
+    """Confere que o arquivo do VAD existe e não está truncado. Devolve o tamanho; ``VadError`` se falhar.
+
+    É a MESMA checagem usada pelo runtime (``SileroVAD``) e pelo ``doctor``.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise VadError(f"modelo do VAD não encontrado: {path} (coloque silero_vad.onnx em <paths.models>/silero/)")
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise VadError(f"não consegui ler o modelo do VAD {path}: {exc}") from exc
+    if size < MIN_MODEL_BYTES:
+        raise VadError(f"modelo do VAD {path.name} com {size} bytes: parece truncado")
+    return size
+
+
 class SileroVAD:
     def __init__(self, model_path: Path | str | None = None) -> None:
         path = Path(model_path) if model_path is not None else default_model_path()
-        if not path.is_file():
-            raise VadError(f"modelo do VAD não encontrado: {path}")
+        validate_model_file(path)
         try:
             import onnxruntime as ort
         except ImportError as exc:

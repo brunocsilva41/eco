@@ -5,13 +5,26 @@ Pontos de projeto:
   faster-whisper 1.2.1 quebra com o ``av`` 19 do venv ao decodificar arquivos.
 * O VAD já foi feito na captura, então ``vad_filter=False``; ``condition_on_previous_text=False``
   evita que um erro contamine a próxima janela.
-* O modelo é carregado sob demanda (``preload()`` para aquecer) e só uma transcrição roda por vez.
+* O modelo é carregado sob demanda (``preload()`` para aquecer).
 * Privacidade: o texto transcrito só aparece em logs DEBUG; em INFO vão apenas durações.
 
-Contrato de threads: ``Transcriber`` é thread-safe. O carregamento é protegido por um lock e as
-transcrições são serializadas por outro (uma de cada vez; as demais esperam). Não cria threads.
-``transcribe`` levanta ``Cancelled`` (de ``core.cancel``) se o token disparar antes ou entre segmentos
-(o segmento em curso do CTranslate2 não é interrompível: a latência de cancelamento é de um segmento).
+Contrato de threads e cancelamento
+----------------------------------
+``Transcriber`` é thread-safe. A decodificação roda numa thread DESCARTÁVEL (daemon, "jarvis-stt-decode"),
+enquanto a thread chamadora espera com polling (50 ms) do ``CancelToken``: ao cancelar, ``transcribe``
+levanta ``Cancelled`` NA HORA, mesmo no meio da decodificação de uma janela (que o CTranslate2 não
+consegue interromper). O resultado de uma execução abandonada é descartado e ela encerra sozinha no
+próximo limite de segmento.
+
+Decisão sobre o lock: transcrições "vivas" são serializadas por ``_run_lock``, que é segurado pela
+thread CHAMADORA (nunca por uma execução abandonada), então um abandono não trava a próxima chamada.
+Para não acumular CPU, no máximo ``_MAX_ABANDONED`` (1) execução abandonada roda ao mesmo tempo que
+uma nova (teto de 2 decodificações simultâneas; com ``num_workers=1`` o CTranslate2 as enfileira
+internamente). Se já houver uma abandonada, a nova inicia normalmente; se uma segunda for abandonada
+enquanto a primeira ainda roda, a chamada seguinte espera (cancelável, com prazo) até uma terminar.
+Há também um prazo total por chamada (``_BASE_TIMEOUT_S`` + ``_TIMEOUT_PER_S`` por segundo de áudio):
+estourar vira ``TranscribeError`` e a execução é abandonada.
+
 Entrada inválida levanta ``TypeError``/``ValueError``; falhas do modelo viram ``TranscribeError``.
 """
 from __future__ import annotations
@@ -19,7 +32,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -27,17 +40,39 @@ import numpy as np
 
 from ..config import SttCfg
 from ..core.cancel import Cancelled, CancelToken
+from ..core.textutil import words
+from .constants import SAMPLE_RATE
 from .devices import AudioError
 
 log = logging.getLogger(__name__)
 
-SAMPLE_RATE = 16000
 MIN_AUDIO_S = 0.2                   # abaixo disso não há palavra: devolve texto vazio sem rodar o modelo
 MAX_AUDIO_S = 60.0                  # acima disso o excedente é cortado (config limita a fala a 60 s)
+MAX_BEAM_SIZE = 10
 _SILENCE_PEAK = 1e-4                # pico abaixo disso = silêncio digital
-_NO_SPEECH_PROB = 0.6               # segmento provavelmente sem fala E com baixa confiança é descartado
-_MIN_AVG_LOGPROB = -1.0
+_QUIET_RMS = 0.008                  # RMS abaixo disso = áudio "silencioso" (ruído de fundo)
+_SHORT_AUDIO_S = 3.0                # áudio "muito curto" para frases típicas de alucinação
 _MODEL_FILE = "model.bin"
+_POLL_S = 0.05
+_BASE_TIMEOUT_S = 30.0
+_TIMEOUT_PER_S = 4.0
+_MAX_TIMEOUT_S = 300.0
+_MAX_ABANDONED = 1
+
+# Filtro anti-alucinação (o Whisper inventa texto em ruído/silêncio)
+_NO_SPEECH_DROP = 0.9               # quase certeza de não-fala: descarta sempre
+_NO_SPEECH_PROB = 0.6               # provável não-fala E baixa confiança: descarta
+_MIN_AVG_LOGPROB = -1.0
+_MAX_COMPRESSION = 2.4              # texto muito repetitivo (limiar do próprio Whisper)
+_WEAK_NO_SPEECH = 0.4               # frases fracas ("obrigado") só caem com esta probabilidade de não-fala
+# frases típicas de legenda de vídeo que o Whisper "ouve" em silêncio (comparadas via core.textutil.words)
+_HALLUCINATION_PHRASES: tuple[str, ...] = (
+    "obrigado por assistir", "obrigada por assistir", "legendas pela comunidade amara org",
+    "legenda adriana zanotto", "inscreva se no canal", "se inscreva no canal", "nao se esqueca de se inscrever",
+    "ate o proximo video", "ate a proxima", "deixe seu like", "tchau tchau",
+)
+# frases que também são fala real curta: só descartadas com forte indício de não-fala
+_WEAK_PHRASES = frozenset({"obrigado", "obrigada", "tchau", "valeu", "ate logo", "ate mais"})
 
 
 class TranscribeError(AudioError):
@@ -90,12 +125,58 @@ def prepare_audio(audio: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(samples)
 
 
+def is_hallucination(text: str, *, no_speech_prob: float, duration_s: float, rms: float) -> bool:
+    """True se ``text`` parece alucinação do Whisper (frase de legenda em áudio curto/silencioso, ou repetição)."""
+    ws = words(text)
+    if not ws:
+        return True
+    flat = " ".join(ws)
+    suspicious_audio = duration_s < _SHORT_AUDIO_S or rms < _QUIET_RMS or no_speech_prob > 0.3
+    if suspicious_audio and any(phrase in flat for phrase in _HALLUCINATION_PHRASES):
+        return True
+    if flat in _WEAK_PHRASES and no_speech_prob > _WEAK_NO_SPEECH:
+        return True
+    if len(ws) >= 4 and len(set(ws)) / len(ws) <= 0.25:     # "obrigado obrigado obrigado obrigado ..."
+        return True
+    return False
+
+
+def _keep_segment(seg: Any, duration_s: float, rms: float) -> bool:
+    no_speech = float(getattr(seg, "no_speech_prob", 0.0) or 0.0)
+    logprob = float(getattr(seg, "avg_logprob", 0.0) or 0.0)
+    compression = float(getattr(seg, "compression_ratio", 0.0) or 0.0)
+    if no_speech >= _NO_SPEECH_DROP or (no_speech > _NO_SPEECH_PROB and logprob < _MIN_AVG_LOGPROB):
+        log.debug("segmento descartado (no_speech=%.2f, logprob=%.2f)", no_speech, logprob)
+        return False
+    if compression > _MAX_COMPRESSION and logprob < _MIN_AVG_LOGPROB:
+        log.debug("segmento repetitivo descartado (compressão=%.2f)", compression)
+        return False
+    if is_hallucination(seg.text, no_speech_prob=no_speech, duration_s=duration_s, rms=rms):
+        log.debug("segmento descartado como alucinação (no_speech=%.2f)", no_speech)
+        return False
+    return True
+
+
+@dataclass
+class _Job:
+    """Uma decodificação. Os campos de resultado só são lidos depois de ``done``."""
+    abandon: threading.Event = field(default_factory=threading.Event)
+    done: threading.Event = field(default_factory=threading.Event)
+    finished: bool = False          # (sob _cv) a thread terminou
+    abandoned: bool = False         # (sob _cv) o chamador desistiu dela
+    text: str = ""
+    language: str = ""
+    error: BaseException | None = None
+
+
 class Transcriber:
     def __init__(self, cfg: SttCfg) -> None:
         self._cfg = cfg
         self._model: Any | None = None
         self._load_lock = threading.Lock()
-        self._run_lock = threading.Lock()
+        self._run_lock = threading.Lock()                  # transcrições vivas, uma por vez (segurado pelo chamador)
+        self._cv = threading.Condition()                   # protege _abandoned e os flags de _Job
+        self._abandoned = 0
         lang = cfg.language.strip().lower()
         self._language: str | None = None if lang in ("", "auto") else lang
 
@@ -108,7 +189,7 @@ class Transcriber:
         self._ensure_model()
 
     def close(self) -> None:
-        """Libera o modelo (será recarregado no próximo uso)."""
+        """Libera o modelo (será recarregado no próximo uso). Decodificações em curso terminam com a referência antiga."""
         with self._load_lock:
             self._model = None
 
@@ -124,8 +205,8 @@ class Transcriber:
             if local is None:
                 # o Jarvis roda 100% local: nunca baixa modelo sozinho
                 raise TranscribeError(
-                    f"modelo Whisper não encontrado em {cfg.model_dir}. Baixe-o antes (ex.: src\\f2\\dl_whisper.py) "
-                    f"ou ajuste [stt] model_dir no config.toml.")
+                    f"modelo Whisper não encontrado em {cfg.model_dir}. Baixe o modelo faster-whisper "
+                    f"'{cfg.model_name}' para essa pasta (ou ajuste [stt] model_dir no config.toml).")
             source = str(local)
             t0 = time.perf_counter()
             try:
@@ -139,43 +220,110 @@ class Transcriber:
                      time.perf_counter() - t0, Path(source).name, cfg.compute_type, cfg.cpu_threads)
             return model
 
-    def transcribe(self, audio: np.ndarray, cancel: CancelToken | None = None) -> Transcript:
-        """Transcreve ``audio`` (float32/int16 mono 16 kHz). Texto vazio se for silêncio ou curto demais."""
+    # ------------------------------------------------------------------ decodificação
+    def _decode(self, job: _Job, model: Any, samples: np.ndarray, beam: int, duration: float, rms: float) -> None:
+        """Corpo da thread descartável. Nunca levanta; entrega resultado/erro em ``job``."""
+        try:
+            segments, info = model.transcribe(
+                samples, language=self._language, beam_size=beam,
+                vad_filter=False, condition_on_previous_text=False)
+            job.language = str(getattr(info, "language", None) or "")
+            parts: list[str] = []
+            for seg in segments:
+                if job.abandon.is_set():
+                    return
+                if not _keep_segment(seg, duration, rms):
+                    continue
+                piece = seg.text.strip()
+                if piece:
+                    parts.append(piece)
+            job.text = " ".join(" ".join(parts).split())
+        except BaseException as exc:  # noqa: BLE001 - entregue ao chamador
+            job.error = exc
+        finally:
+            with self._cv:
+                job.finished = True
+                if job.abandoned:
+                    self._abandoned -= 1
+                    log.debug("decodificação abandonada terminou (%d restantes)", self._abandoned)
+                self._cv.notify_all()
+            job.done.set()
+
+    def _abandon(self, job: _Job) -> None:
+        job.abandon.set()
+        with self._cv:
+            if not job.finished and not job.abandoned:
+                job.abandoned = True
+                self._abandoned += 1
+
+    def _acquire_run_lock(self, cancel: CancelToken, deadline: float) -> None:
+        while not self._run_lock.acquire(timeout=_POLL_S):
+            cancel.raise_if_cancelled()
+            if time.monotonic() >= deadline:
+                raise TranscribeError("o reconhecedor de fala está ocupado")
+
+    def _wait_abandoned_slot(self, cancel: CancelToken, deadline: float) -> None:
+        with self._cv:
+            while self._abandoned > _MAX_ABANDONED:
+                cancel.raise_if_cancelled()
+                if time.monotonic() >= deadline:
+                    raise TranscribeError("o reconhecedor de fala está ocupado com decodificações abandonadas")
+                self._cv.wait(_POLL_S)
+
+    def transcribe(self, audio: np.ndarray, cancel: CancelToken | None = None, *,
+                   beam_size: int | None = None) -> Transcript:
+        """Transcreve ``audio`` (float32/int16 mono 16 kHz). Texto vazio se for silêncio ou curto demais.
+
+        Levanta ``Cancelled`` assim que ``cancel`` dispara (a decodificação em curso é abandonada).
+        ``beam_size`` (1..10) sobrepõe ``cfg.beam_size`` nesta chamada: use 1 para respostas curtas
+        ("sim"/"não"), onde a latência importa mais que a precisão.
+        """
         cancel = cancel or CancelToken()
+        if beam_size is not None and not 1 <= beam_size <= MAX_BEAM_SIZE:
+            raise ValueError(f"beam_size deve estar em 1..{MAX_BEAM_SIZE}")
+        beam = beam_size if beam_size is not None else max(1, int(self._cfg.beam_size))
         samples = prepare_audio(audio)
         duration = samples.size / SAMPLE_RATE
         language = self._language or ""
         cancel.raise_if_cancelled()
-        if duration < MIN_AUDIO_S or float(np.max(np.abs(samples), initial=0.0)) < _SILENCE_PEAK:
+        peak = float(np.max(np.abs(samples), initial=0.0))
+        if duration < MIN_AUDIO_S or peak < _SILENCE_PEAK:
             log.debug("áudio curto ou silencioso (%.2f s); sem transcrição", duration)
             return Transcript("", language, duration, 0.0)
+        rms = float(np.sqrt(np.dot(samples, samples) / samples.size))
 
         model = self._ensure_model()
-        with self._run_lock:
-            cancel.raise_if_cancelled()
-            t0 = time.perf_counter()
-            parts: list[str] = []
+        cancel.raise_if_cancelled()
+        timeout = min(_MAX_TIMEOUT_S, _BASE_TIMEOUT_S + _TIMEOUT_PER_S * duration)
+        deadline = time.monotonic() + timeout
+        t0 = time.perf_counter()
+        job = _Job()
+        self._acquire_run_lock(cancel, deadline)
+        try:
+            self._wait_abandoned_slot(cancel, deadline)
+            worker = threading.Thread(target=self._decode, args=(job, model, samples, beam, duration, rms),
+                                      name="jarvis-stt-decode", daemon=True)
             try:
-                segments, info = model.transcribe(
-                    samples, language=self._language, beam_size=self._cfg.beam_size,
-                    vad_filter=False, condition_on_previous_text=False)
-                language = str(getattr(info, "language", None) or language)
-                for seg in segments:
-                    cancel.raise_if_cancelled()
-                    if seg.no_speech_prob > _NO_SPEECH_PROB and seg.avg_logprob < _MIN_AVG_LOGPROB:
-                        log.debug("segmento descartado (no_speech=%.2f, logprob=%.2f)", seg.no_speech_prob, seg.avg_logprob)
-                        continue
-                    piece = seg.text.strip()
-                    if piece:
-                        parts.append(piece)
-            except Cancelled:
-                raise
-            except Exception as exc:
-                raise TranscribeError(f"falha na transcrição: {exc}") from exc
-            elapsed = time.perf_counter() - t0
+                worker.start()
+            except RuntimeError as exc:
+                raise TranscribeError(f"não consegui iniciar a decodificação: {exc}") from exc
+            while not job.done.wait(_POLL_S):
+                if cancel.cancelled:
+                    self._abandon(job)
+                    log.debug("transcrição cancelada; decodificação abandonada")
+                    raise Cancelled(cancel.reason)
+                if time.monotonic() >= deadline:
+                    self._abandon(job)
+                    raise TranscribeError(f"a transcrição passou de {timeout:.0f} s e foi abandonada")
+        finally:
+            self._run_lock.release()
 
-        text = " ".join(" ".join(parts).split())
+        cancel.raise_if_cancelled()                        # cancelou na última fatia: descarta o resultado
+        if job.error is not None:
+            raise TranscribeError(f"falha na transcrição: {job.error}") from job.error
+        elapsed = time.perf_counter() - t0
+        language = job.language or language
         log.info("transcrição: %.2f s de áudio em %.2f s (RTF %.2f), %d caracteres",
-                 duration, elapsed, elapsed / duration, len(text))
-        log.debug("texto transcrito: %r", text)
-        return Transcript(text, language, duration, elapsed)
+                 duration, elapsed, elapsed / duration, len(job.text))
+        log.debug("texto transcrito: %r", job.text)
+        return Transcript(job.text, language, duration, elapsed)

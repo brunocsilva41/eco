@@ -6,19 +6,15 @@ from __future__ import annotations
 
 import difflib
 import re
-import unicodedata
 from typing import Callable, Iterable, TypeVar
+
+from ..core.textutil import fold
+
+__all__ = ["best_matches", "clip", "fold"]    # `fold` é reexportada de core.textutil (única normalização do projeto)
 
 T = TypeVar("T")
 
 _SPACES = re.compile(r"\s+")
-
-
-def fold(text: str) -> str:
-    """Minúsculas, sem acentos e com espaços normalizados: 'Configurações ' -> 'configuracoes'."""
-    decomposed = unicodedata.normalize("NFKD", text)
-    base = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    return _SPACES.sub(" ", base.casefold()).strip()
 
 
 def clip(text: str, limit: int) -> str:

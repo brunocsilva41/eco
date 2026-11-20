@@ -179,6 +179,23 @@ def foreground_window() -> WindowInfo | None:
     return _describe(hwnd) if hwnd else None
 
 
+def foreground_hwnd() -> int:
+    """Handle da janela em primeiro plano (0 se não há; barato, serve de guarda a cada bloco digitado)."""
+    return int(_user32.GetForegroundWindow() or 0)
+
+
+def pid_of(hwnd: int) -> int:
+    """PID do processo dono da janela (0 se a janela não existe mais)."""
+    return _pid_of(hwnd)
+
+
+def describe_window(hwnd: int) -> WindowInfo | None:
+    """Estado ATUAL de uma janela pelo handle (None se não existe mais ou ficou sem título)."""
+    if not hwnd or not is_window(hwnd):
+        return None
+    return _describe(hwnd)
+
+
 def is_window(hwnd: int) -> bool:
     return bool(_user32.IsWindow(hwnd))
 

@@ -14,11 +14,20 @@ Contrato de threads
 * ``open``, ``close``, ``mute``, ``unmute`` e as propriedades são thread-safe e idempotentes.
 * Esta classe não cria threads próprias.
 
-Áudio recebido enquanto o Jarvis fala ou antes da chamada é descartado no início de cada captura
-(``flush_backlog``), para não transcrever o eco da própria voz nem fala velha.
+Áudio recebido antes da chamada é descartado no início de cada captura (``flush_backlog``). Para ignorar
+também o eco da fala/pergunta do próprio Jarvis, ``listen_utterance(not_before=t)`` descarta todo bloco
+capturado antes de ``t`` (``time.monotonic()``): cada bloco é carimbado no callback com a hora de chegada
+(erro ~ latência de entrada, dezenas de ms). O app deve esperar o fim da fala (``Voice.idle_since()`` /
+``Speaker.idle_since()``) e passar esse instante, mais uma margem para o eco da sala.
 
-Quando o dispositivo some (stream inativo ou sem callbacks por ``_STALL_S``), a captura tenta reabrir
+O VAD é carregado em ``open()``/``preload()`` (erro claro e cedo se o modelo faltar), a partir de
+``vad_path`` ou ``models_dir`` (use ``cfg.paths.models``: o mesmo caminho que o ``doctor`` valida).
+
+Quando o dispositivo some (stream inativo ou sem callbacks por ``STALL_INPUT_S``), a captura tenta reabrir
 com backoff exponencial (0,25 s .. 2 s) até ``max_open_attempts`` vezes e então levanta ``DeviceError``.
+A reabertura NÃO segura ``_state_lock`` durante a abertura do dispositivo (que pode demorar): aberturas
+são serializadas por ``_open_lock`` e o stream novo só é publicado sob ``_state_lock`` se ainda for
+desejado; ``close()`` é sempre rápido e descarta um stream aberto concorrentemente.
 """
 from __future__ import annotations
 
@@ -38,15 +47,16 @@ import numpy as np
 from ..config import AudioCfg
 from ..core.cancel import CancelToken
 from ..core.events import EventBus
-from .devices import AudioError, DeviceError, load_sounddevice, resolve_input_device, stream_extra_settings
+from .constants import SAMPLE_RATE, STALL_INPUT_S
+from .devices import (AudioDevice, AudioError, DeviceError, load_sounddevice, resolve_input_device,
+                      stream_extra_settings)
 from .levels import LevelMeter
-from .vad import SAMPLE_RATE, WINDOW_SAMPLES, SileroVAD
+from .vad import WINDOW_SAMPLES, SileroVAD, default_model_path
 
 log = logging.getLogger(__name__)
 
 FRAME_MS = WINDOW_SAMPLES * 1000.0 / SAMPLE_RATE       # 32 ms
 _POLL_S = 0.1                                          # fatia máxima de espera por áudio (reatividade a cancel/close)
-_STALL_S = 2.0                                         # sem callback por tanto tempo = dispositivo morto
 _TAIL_KEEP_FRAMES = 6                                  # silêncio final mantido (~190 ms) ao devolver a fala
 _HYSTERESIS = 0.15                                     # limiar para CONTINUAR a fala = limiar de início - 0,15
 _STATS_EVERY_S = 5.0
@@ -68,6 +78,7 @@ class Microphone:
         bus: EventBus | None = None,
         *,
         vad_path: Path | str | None = None,
+        models_dir: Path | str | None = None,
         queue_seconds: float = 20.0,
         max_open_attempts: int = 5,
     ) -> None:
@@ -76,8 +87,11 @@ class Microphone:
         if queue_seconds <= 0 or max_open_attempts < 1:
             raise ValueError("queue_seconds > 0 e max_open_attempts >= 1")
         self._cfg = cfg
-        self._vad_path = vad_path
+        # vad_path explícito vence; senão deriva de models_dir (passe cfg.paths.models); senão o padrão de PathsCfg
+        self._vad_path: Path = Path(vad_path) if vad_path is not None else default_model_path(
+            Path(models_dir) if models_dir is not None else None)
         self._vad: SileroVAD | None = None
+        self._vad_lock = threading.Lock()
         self._meter = LevelMeter(bus, "mic")
         self._max_attempts = max_open_attempts
 
@@ -88,10 +102,11 @@ class Microphone:
         self._start_thr = float(cfg.vad_threshold)
         self._keep_thr = max(0.01, self._start_thr - _HYSTERESIS)
 
-        self._queue: queue.Queue[np.ndarray] = queue.Queue(
+        self._queue: queue.Queue[tuple[float, np.ndarray]] = queue.Queue(
             maxsize=max(8, math.ceil(queue_seconds * SAMPLE_RATE / WINDOW_SAMPLES)))
         self._carry: np.ndarray = _EMPTY                   # sobra de amostras (só a thread consumidora mexe)
-        self._state_lock = threading.RLock()               # protege _stream e _wanted
+        self._state_lock = threading.Lock()                # protege _stream e _wanted (seções curtas, sem E/S)
+        self._open_lock = threading.Lock()                 # serializa aberturas de stream (E/S fora do _state_lock)
         self._capture_lock = threading.Lock()              # uma captura por vez
         self._stream: Any | None = None
         self._wanted = False                               # True entre open() e close(); impede reabrir após close
@@ -120,18 +135,30 @@ class Microphone:
     def muted(self) -> bool:
         return self._muted.is_set()
 
+    @property
+    def vad_path(self) -> Path:
+        return self._vad_path
+
+    def preload(self) -> None:
+        """Carrega o VAD agora (idempotente). Levanta ``VadError`` se o modelo faltar ou for inválido."""
+        self._get_vad()
+
     def open(self) -> None:
-        """Abre o stream (idempotente). Levanta ``DeviceError`` se o microfone não abrir (uma tentativa)."""
+        """Carrega o VAD e abre o stream (idempotente). Levanta ``VadError``/``DeviceError`` (uma tentativa)."""
+        self.preload()
         with self._state_lock:
             self._wanted = True
-            if self._stream is None:
-                self._open_locked()
+            has_stream = self._stream is not None
+        if not has_stream:
+            self._open_stream()
 
     def close(self) -> None:
         """Fecha o stream (idempotente) e interrompe qualquer captura em andamento em outra thread."""
         with self._state_lock:
             self._wanted = False
-            self._close_stream_locked()
+            stream, self._stream = self._stream, None
+        self._close_raw(stream)
+        self._drain_queue()
 
     def mute(self) -> None:
         """Descarta o áudio daqui em diante; capturas em andamento são abandonadas (voltam a esperar)."""
@@ -146,7 +173,8 @@ class Microphone:
             self._muted.clear()
             log.info("microfone ativo")
 
-    def _open_locked(self) -> None:
+    def _create_stream(self) -> tuple[Any, AudioDevice]:
+        """Resolve o dispositivo e abre/inicia um stream (E/S lenta; chamar SEM ``_state_lock``)."""
         sd = load_sounddevice()
         device = resolve_input_device(self._cfg)
         stream: Any | None = None
@@ -159,25 +187,43 @@ class Microphone:
             self._last_cb = time.monotonic()
             stream.start()
         except Exception as exc:  # PortAudioError, ValueError de parâmetros, OSError do driver
-            if stream is not None:
-                try:
-                    stream.close()
-                except Exception:
-                    pass
+            self._close_raw(stream)
             raise DeviceError(f"não consegui abrir o microfone {device.label}: {exc}") from exc
-        self._stream = stream
-        log.info("microfone aberto: %s", device.label)
+        return stream, device
 
-    def _close_stream_locked(self) -> None:
-        stream, self._stream = self._stream, None
-        if stream is not None:
-            for action in (stream.abort, stream.close):
-                try:
-                    action()
-                except Exception as exc:
-                    log.debug("erro ao fechar o stream de entrada: %s", exc)
-            log.debug("microfone fechado")
-        self._drain_queue()
+    def _open_stream(self) -> bool:
+        """Garante um stream aberto sem segurar ``_state_lock`` durante a abertura.
+
+        True se há stream aberto ao final; False se ``close()`` aconteceu no meio (o stream novo é descartado).
+        """
+        with self._open_lock:
+            with self._state_lock:
+                if self._stream is not None:
+                    return True
+                if not self._wanted:
+                    return False
+            stream, device = self._create_stream()
+            with self._state_lock:
+                installed = self._wanted and self._stream is None
+                if installed:
+                    self._stream = stream
+        if not installed:
+            self._close_raw(stream)
+            self._drain_queue()
+            log.debug("microfone fechado durante a abertura; stream novo descartado")
+            return False
+        log.info("microfone aberto: %s", device.label)
+        return True
+
+    @staticmethod
+    def _close_raw(stream: Any | None) -> None:
+        if stream is None:
+            return
+        for action in (stream.abort, stream.close):
+            try:
+                action()
+            except Exception as exc:
+                log.debug("erro ao fechar o stream de entrada: %s", exc)
 
     def _drain_queue(self) -> None:
         try:
@@ -193,34 +239,41 @@ class Microphone:
             with self._state_lock:
                 if not self._wanted:
                     return False
-                self._close_stream_locked()
-                try:
-                    self._open_locked()
-                except DeviceError as exc:
-                    last = exc
-                    log.warning("microfone indisponível (tentativa %d/%d): %s", attempt, self._max_attempts, exc)
-                else:
-                    self._carry = _EMPTY
-                    return True
+                stale, self._stream = self._stream, None
+            if stale is not None:                          # fecha o stream morto FORA do lock
+                self._close_raw(stale)
+                log.debug("microfone fechado para reabrir")
+            self._drain_queue()
+            try:
+                opened = self._open_stream()
+            except DeviceError as exc:
+                last = exc
+                log.warning("microfone indisponível (tentativa %d/%d): %s", attempt, self._max_attempts, exc)
+            else:
+                if not opened:
+                    return False
+                self._carry = _EMPTY
+                return True
             if attempt < self._max_attempts and cancel.wait(min(0.25 * 2 ** (attempt - 1), 2.0)):
                 return False
         raise DeviceError(f"microfone indisponível após {self._max_attempts} tentativas: {last}") from last
 
     # ------------------------------------------------------------------ callback (thread do PortAudio)
     def _on_audio(self, indata: np.ndarray, frames: int, time_info: Any, status: Any) -> None:
-        self._last_cb = time.monotonic()
+        now = time.monotonic()
+        self._last_cb = now
         if status.input_overflow:
             self._overflows += 1
         if self._muted.is_set():
             return
         block = indata[:, 0].copy()
         try:
-            self._queue.put_nowait(block)
+            self._queue.put_nowait((now, block))
         except queue.Full:                                 # consumidor atrasado: mantém o áudio mais novo
             self._dropped += 1
             try:
                 self._queue.get_nowait()
-                self._queue.put_nowait(block)
+                self._queue.put_nowait((now, block))
             except (queue.Empty, queue.Full):
                 pass
 
@@ -242,14 +295,18 @@ class Microphone:
             dead = stream is None or not stream.active
         except Exception:
             dead = True
-        if not dead and time.monotonic() - self._last_cb > _STALL_S:
+        if not dead and time.monotonic() - self._last_cb > STALL_INPUT_S:
             dead = True
         if dead:
             log.warning("stream de entrada parou ou ficou sem dados; tentando reabrir")
             self._recover(cancel)
 
-    def _next_frame(self, cancel: CancelToken, deadline: float | None) -> np.ndarray | None:
-        """Próxima janela de 512 amostras. None se cancelado, fechado ou ``deadline`` (monotonic) vencido."""
+    def _next_frame(self, cancel: CancelToken, deadline: float | None,
+                    not_before: float | None = None) -> np.ndarray | None:
+        """Próxima janela de 512 amostras. None se cancelado, fechado ou ``deadline`` (monotonic) vencido.
+
+        Blocos carimbados antes de ``not_before`` (monotonic) são descartados.
+        """
         while True:
             if len(self._carry) >= WINDOW_SAMPLES:
                 frame = self._carry[:WINDOW_SAMPLES]
@@ -264,10 +321,12 @@ class Microphone:
                     return None
                 timeout = min(timeout, remaining)
             try:
-                block = self._queue.get(timeout=timeout)
+                stamp, block = self._queue.get(timeout=timeout)
             except queue.Empty:
                 self._check_health(cancel)
                 continue
+            if not_before is not None and stamp < not_before:
+                continue                                   # eco / áudio anterior ao instante pedido
             self._carry = block if self._carry.size == 0 else np.concatenate((self._carry, block))
             self._log_stats()
 
@@ -295,9 +354,15 @@ class Microphone:
             self._capture_lock.release()
 
     def _get_vad(self) -> SileroVAD:
-        if self._vad is None:
-            self._vad = SileroVAD(self._vad_path)
-        return self._vad
+        vad = self._vad
+        if vad is not None:
+            return vad
+        with self._vad_lock:
+            if self._vad is None:
+                t0 = time.perf_counter()
+                self._vad = SileroVAD(self._vad_path)
+                log.info("VAD carregado em %.2f s (%s)", time.perf_counter() - t0, self._vad_path)
+            return self._vad
 
     # ------------------------------------------------------------------ API pública de captura
     def listen_utterance(
@@ -306,6 +371,7 @@ class Microphone:
         *,
         max_wait_s: float | None,
         flush_backlog: bool = True,
+        not_before: float | None = None,
     ) -> np.ndarray | None:
         """Espera uma fala e a devolve (float32 mono 16 kHz, com pré-roll) ou None.
 
@@ -313,16 +379,27 @@ class Microphone:
         ela só termina por silêncio final (``end_silence_ms``) ou ``max_utterance_s`` (devolve o que
         gravou até ali). Ruído mais curto que ``min_speech_ms`` é descartado e a escuta continua.
         Retorna None se cancelado, se o microfone foi fechado, ou se estourou ``max_wait_s``.
+
+        ``not_before`` (``time.monotonic()``): todo áudio capturado antes desse instante é descartado
+        (eco da fala/pergunta do Jarvis e sobras do buffer). Pode estar no futuro (fim da fala + margem);
+        nesse caso ``max_wait_s`` conta a partir dele. Com o microfone MUDO a chamada espera (sem
+        busy-loop) até desmutar, cancelar ou vencer ``max_wait_s``; só então devolve None.
         """
         if max_wait_s is not None and max_wait_s <= 0:
             raise ValueError("max_wait_s deve ser > 0 ou None")
+        if not_before is not None and not math.isfinite(not_before):
+            raise ValueError("not_before deve ser um instante finito de time.monotonic()")
         with self._capture_session(cancel, flush_backlog) as ready:
-            return self._listen_loop(cancel, max_wait_s) if ready else None
+            return self._listen_loop(cancel, max_wait_s, not_before) if ready else None
 
-    def _listen_loop(self, cancel: CancelToken, max_wait_s: float | None) -> np.ndarray | None:
+    def _listen_loop(self, cancel: CancelToken, max_wait_s: float | None,
+                     not_before: float | None) -> np.ndarray | None:
         vad = self._get_vad()
         vad.reset()
-        deadline = None if max_wait_s is None else time.monotonic() + max_wait_s
+        start = time.monotonic()
+        if not_before is not None:
+            start = max(start, not_before)
+        deadline = None if max_wait_s is None else start + max_wait_s
         ring: deque[np.ndarray] = deque(maxlen=self._pre_roll_frames)
         utterance: list[np.ndarray] = []
         speaking = False
@@ -337,13 +414,17 @@ class Microphone:
                     ring.clear()
                     vad.reset()
                 self._discard_pending()
-                if cancel.wait(_POLL_S) or not self._wanted:
-                    return None
-                if deadline is not None and time.monotonic() >= deadline:
+                wait_s = _POLL_S
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return None
+                    wait_s = min(wait_s, remaining)
+                if cancel.wait(wait_s) or not self._wanted:
                     return None
                 continue
 
-            frame = self._next_frame(cancel, None if speaking else deadline)
+            frame = self._next_frame(cancel, None if speaking else deadline, not_before)
             if frame is None:
                 if not cancel.cancelled and self._wanted:
                     log.debug("nenhuma fala dentro de %.1f s", max_wait_s or 0.0)

@@ -16,12 +16,11 @@ from pathlib import Path
 from ..config import Config
 from .devices import DeviceError, resolve_input_device, resolve_output_device
 from .stt import find_local_model
-from .vad import default_model_path
+from .vad import VadError, default_model_path, validate_model_file
 
 log = logging.getLogger(__name__)
 
 _MIN_VOICE_BYTES = 1_000_000
-_MIN_VAD_BYTES = 100_000
 _PACKAGES = ("sounddevice", "numpy", "onnxruntime", "faster_whisper", "piper")
 
 
@@ -60,7 +59,7 @@ def _check_whisper(cfg: Config) -> CheckResult:
     local = find_local_model(cfg.stt.model_dir)
     if local is None:
         return CheckResult(name, False, f"sem model.bin em {cfg.stt.model_dir} (o modelo {cfg.stt.model_name!r} "
-                                        "teria de ser baixado da internet)")
+                                        "teria de ser baixado para essa pasta)")
     try:
         return CheckResult(name, True, f"{cfg.stt.model_name}: {_mb(_dir_size(local))} em {local}, "
                                        f"{cfg.stt.compute_type}, {cfg.stt.cpu_threads} threads")
@@ -86,12 +85,12 @@ def _check_piper(cfg: Config) -> CheckResult:
 
 def _check_vad(cfg: Config) -> CheckResult:
     name = "VAD Silero"
+    # mesmo caminho e mesma validação do runtime (Microphone(models_dir=cfg.paths.models) -> SileroVAD)
     path = default_model_path(cfg.paths.models)
-    if not path.is_file():
-        return CheckResult(name, False, f"ausente: {path}")
-    size = path.stat().st_size
-    if size < _MIN_VAD_BYTES:
-        return CheckResult(name, False, f"{path.name} com {size} bytes: parece truncado")
+    try:
+        size = validate_model_file(path)
+    except VadError as exc:
+        return CheckResult(name, False, str(exc))
     return CheckResult(name, True, f"{path} ({_mb(size)})")
 
 

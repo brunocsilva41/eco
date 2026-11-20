@@ -9,7 +9,7 @@ from typing import Any
 
 from ..config import Config
 from ..win import windows as win
-from .registry import Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
+from .registry import Prepared, Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
 from ._matching import best_matches, clip
 
 log = logging.getLogger(__name__)
@@ -77,13 +77,30 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return ToolResult(True, f"Trouxe para frente: {_describe(target)}.", untrusted=True)
         return ToolResult(False, "O Windows não deixou trazer essa janela para frente.", untrusted=True)
 
-    def fechar_janela(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    def prepare_fechar(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:
+        """Resolve UMA janela agora; ambígua ou inexistente nem chega à confirmação."""
         target, problem = _resolve(str(args["titulo"]))
         if problem is not None:
             return problem
         assert target is not None
+        proc = target.process or "programa desconhecido"
+        return Prepared(
+            text=(f"Fechar a janela «{clip(target.title, _TITLE_CLIP)}» do {proc}? "
+                  "Trabalho não salvo pode ser perdido."),
+            state=target)
+
+    def fechar_janela(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        target = ctx.prepared
+        if not isinstance(target, win.WindowInfo):
+            return ToolResult(False, "Não consegui confirmar qual janela fechar; não fechei nada.")
         if ctx.cancel.cancelled:
             return ToolResult(False, "Cancelado.")
+        now = win.describe_window(target.hwnd)
+        if now is None:
+            return ToolResult(False, "Essa janela já não existe; não fechei nada.", untrusted=True)
+        if now.title != target.title or now.pid != target.pid:
+            log.warning("fechar_janela: a janela 0x%X mudou entre a confirmação e a execução", target.hwnd)
+            return ToolResult(False, "A janela mudou depois da confirmação; não fechei nada.", untrusted=True)
         if not win.close_window(target.hwnd):
             return ToolResult(False, "Não consegui pedir o fechamento dessa janela.", untrusted=True)
         # Espera a janela sumir; se ela pergunta "salvar?", continua aberta e avisamos.
@@ -92,7 +109,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             if not win.is_window(target.hwnd):
                 return ToolResult(True, f"Fechei: {_describe(target)}.", untrusted=True)
             if ctx.cancel.wait(0.1):
-                return ToolResult(False, "Cancelado.")
+                return ToolResult(False, "Cancelado. O pedido de fechamento já foi enviado.", effect_unknown=True)
             waited += 0.1
         return ToolResult(True, f"Pedi para fechar {_describe(target)}, mas ela ainda está aberta; "
                                 "talvez esteja perguntando se deve salvar.", untrusted=True)
@@ -127,6 +144,5 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         parameters=_TITLE_SCHEMA,
         risk=Risk.RISKY,
         handler=fechar_janela,
-        confirm_text=lambda a: (f"Fechar a janela que contém '{str(a.get('titulo', ''))[:60]}'? "
-                                "Trabalho não salvo pode ser perdido."),
+        prepare=prepare_fechar,
     ))

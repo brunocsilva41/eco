@@ -3,19 +3,71 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+import re
+from pathlib import Path, PureWindowsPath
+from typing import Any, Final
 
 from ..config import Config
+from ..core.textutil import fold
+from ._matching import best_matches
 from .registry import Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
-from ._matching import best_matches, fold
 
 log = logging.getLogger(__name__)
 
 _FUZZY_CUTOFF = 0.72
+ALLOWED_URI_SCHEMES: Final = frozenset({"ms-settings"})
+_URI: Final = re.compile(r"^([A-Za-z][A-Za-z0-9+.\-]+):")     # 2+ caracteres: uma letra só é unidade (C:)
+
+
+def _system_dirs() -> tuple[Path, ...]:
+    """Únicas pastas onde se procura executável sem caminho: System32 e a raiz do Windows (%SystemRoot%)."""
+    root = Path(os.environ.get("SystemRoot") or os.environ.get("windir") or r"C:\Windows")
+    return (root / "System32", root)
+
+
+def _find_system_exe(name: str, dirs: tuple[Path, ...]) -> Path | None:
+    """Procura `name` (sem caminho) só nas pastas dadas, nunca no diretório atual nem no PATH."""
+    suffixes = ("",) if Path(name).suffix else (".exe", ".com")
+    for directory in dirs:
+        for suffix in suffixes:
+            candidate = directory / (name + suffix)
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def _resolve_target(name: str, target: str, dirs: tuple[Path, ...]) -> str | None:
+    """Alvo da configuração -> caminho absoluto (ou URI de esquema permitido). None = fora da allowlist."""
+    scheme = _URI.match(target)
+    if scheme:
+        if scheme.group(1).lower() not in ALLOWED_URI_SCHEMES:
+            log.warning("apps.launch: %r usa o esquema %r, não permitido (%s); ignorado",
+                        name, scheme.group(1), ", ".join(sorted(ALLOWED_URI_SCHEMES)))
+            return None
+        return target
+    path = PureWindowsPath(target)
+    if target.startswith(("\\\\", "//")):
+        log.warning("apps.launch: %r aponta para caminho de rede; ignorado", name)
+        return None
+    if path.is_absolute():
+        if not Path(target).is_file():
+            log.warning("apps.launch: %r -> %s não existe; ignorado", name, target)
+            return None
+        return str(Path(target))
+    if path.drive or len(path.parts) != 1:                  # relativo com pasta/unidade: não há como resolver com segurança
+        log.warning("apps.launch: %r -> %r é caminho relativo; use caminho absoluto. Ignorado", name, target)
+        return None
+    found = _find_system_exe(target, dirs)
+    if found is None:
+        log.warning("apps.launch: %r -> %r não foi achado em %s; ignorado",
+                    name, target, ", ".join(str(d) for d in dirs))
+        return None
+    return str(found)
 
 
 def _allowlist(cfg: Config) -> dict[str, str]:
-    """Nome falado -> alvo, indexado pelo nome sem acento/caixa. Nomes repetidos após a normalização: vale o primeiro."""
+    """Nome falado -> alvo ABSOLUTO resolvido agora. Nomes repetidos após a normalização: vale o primeiro."""
+    dirs = _system_dirs()
     index: dict[str, tuple[str, str]] = {}
     for name, target in cfg.apps.launch.items():
         key = fold(name)
@@ -25,7 +77,11 @@ def _allowlist(cfg: Config) -> dict[str, str]:
         if key in index:
             log.warning("apps.launch: %r repete %r após normalizar; ignorado", name, index[key][0])
             continue
-        index[key] = (name, target.strip())
+        resolved = _resolve_target(name, target.strip(), dirs)
+        if resolved is None:
+            continue
+        log.info("apps.launch: %r -> %s", name, resolved)
+        index[key] = (name, resolved)
     return {name: target for name, target in index.values()}
 
 
@@ -47,7 +103,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return ToolResult(False, "Cancelado.")
         name = matches[0]
         try:
-            # Alvo vem só da configuração; nenhum argumento do modelo é repassado ao programa.
+            # Alvo = caminho absoluto resolvido na partida; nenhum argumento do modelo é repassado ao programa.
             os.startfile(apps[name])  # noqa: S606 - allowlist, sem shell
         except OSError as exc:
             log.warning("falha ao abrir %r: %s", name, exc)

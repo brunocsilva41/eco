@@ -16,10 +16,11 @@ _MODULES: Final[tuple[str, ...]] = (
 )
 
 
-def register_all(registry: ToolRegistry, cfg: Config) -> None:
-    """Registra cada módulo; se um falhar ao importar ou registrar, loga e segue com os outros.
+def register_all(registry: ToolRegistry, cfg: Config) -> list[str]:
+    """Registra cada módulo; se um falhar ao importar ou registrar, loga em ERROR e segue com os outros.
 
-    Falha parcial dentro de um módulo (ex.: 2ª ferramenta duplicada) deixa as já registradas ativas.
+    Devolve os nomes dos módulos que falharam (lista vazia = tudo carregado). Falha parcial dentro de um
+    módulo (ex.: 2ª ferramenta duplicada) deixa as já registradas ativas, e o módulo conta como falho.
     """
     failed: list[str] = []
     for name in _MODULES:
@@ -31,4 +32,5 @@ def register_all(registry: ToolRegistry, cfg: Config) -> None:
             failed.append(name)
     log.info("ferramentas carregadas: %d (%s)", len(registry.names()), ", ".join(registry.names()))
     if failed:
-        log.warning("módulos de ferramentas com falha: %s", ", ".join(failed))
+        log.error("módulos de ferramentas com falha: %s", ", ".join(failed))
+    return failed

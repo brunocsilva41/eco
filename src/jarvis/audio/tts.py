@@ -2,24 +2,21 @@
 
 * ``clean_for_speech`` / ``split_sentences``: preparam o texto do LLM para ser FALADO (sem markdown,
   emojis, URLs, abreviações cruas).
-* ``Synthesizer.synthesize``: gerador de ``AudioChunk`` (int16 mono) por sentença.
-* ``Synthesizer.speak``: sintetiza a próxima frase enquanto a atual toca (produtor + fila de 2).
+* ``Synthesizer.synthesize``: gerador de ``AudioChunk`` (int16 mono) por sentença. O pipeline
+  síntese -> reprodução contínua (um único stream por resposta) vive em ``voice.Voice``.
 
 Contrato de threads
 -------------------
 * ``Synthesizer`` é thread-safe: um lock protege o carregamento da voz e outro serializa as chamadas
   ao Piper (uma sentença por vez; o Piper não é reentrante no fonemizador).
-* ``synthesize`` é um gerador executado na thread de quem o consome. Quando o ``CancelToken``
-  dispara ele simplesmente ENCERRA (confira ``cancel.cancelled`` se precisar distinguir).
-* ``speak`` bloqueia a thread chamadora (que toca o áudio) e cria UMA thread daemon produtora
-  ("jarvis-tts-synth"). Ela é sempre parada e juntada no ``finally``, mesmo em cancelamento/erro. Se
-  uma sentença estiver no meio da síntese, o join espera por ela (centenas de ms; limite de 5 s).
+* ``synthesize`` é um gerador executado na thread de quem o consome (não cria threads). Quando o
+  ``CancelToken`` dispara ele simplesmente ENCERRA entre sentenças (confira ``cancel.cancelled`` se
+  precisar distinguir); uma sentença em síntese não é interrompível (centenas de ms).
 * Erros de síntese viram ``TtsError``; entrada de texto não-str levanta ``TypeError``.
 """
 from __future__ import annotations
 
 import logging
-import queue
 import re
 import threading
 import time
@@ -31,18 +28,14 @@ import numpy as np
 from ..config import TtsCfg
 from ..core.cancel import CancelToken
 from .devices import AudioError
-from .playback import AudioChunk, Speaker
+from .playback import AudioChunk
 
 log = logging.getLogger(__name__)
 
-__all__ = ["AudioChunk", "Synthesizer", "TtsError", "clean_for_speech", "split_sentences"]
+__all__ = ["Synthesizer", "TtsError", "clean_for_speech", "split_sentences"]
 
 MAX_TEXT_CHARS = 2000               # por chamada; o excedente é cortado numa fronteira de sentença
 MAX_SENTENCE_CHARS = 240            # sentenças maiores são quebradas em vírgula/espaço
-_JOIN_S = 5.0
-_POLL_S = 0.05
-_PIPELINE_DEPTH = 2
-_DONE = object()
 
 
 class TtsError(AudioError):
@@ -236,58 +229,3 @@ class Synthesizer:
     def _to_chunk(piper_chunk: Any) -> AudioChunk:
         pcm = np.ascontiguousarray(piper_chunk.audio_int16_array, dtype=np.int16).reshape(-1)
         return AudioChunk(pcm, int(piper_chunk.sample_rate))
-
-    def speak(self, text: str, speaker: Speaker, cancel: CancelToken | None = None) -> bool:
-        """Sintetiza e toca ``text``. True se falou tudo; False se cancelado/parado. Bloqueia até acabar."""
-        cancel = cancel or CancelToken()
-        pipe: queue.Queue[Any] = queue.Queue(maxsize=_PIPELINE_DEPTH)
-        halt = threading.Event()
-        failures: list[BaseException] = []
-
-        def put(item: Any) -> bool:
-            while not (halt.is_set() or cancel.cancelled):
-                try:
-                    pipe.put(item, timeout=_POLL_S)
-                    return True
-                except queue.Full:
-                    continue
-            return False
-
-        def produce() -> None:
-            try:
-                for chunk in self.synthesize(text, cancel):
-                    if not put(chunk):
-                        return
-            except BaseException as exc:                      # repassado à thread chamadora
-                failures.append(exc)
-            finally:
-                put(_DONE)
-
-        def consume() -> Iterator[AudioChunk]:
-            while not (halt.is_set() or cancel.cancelled):
-                try:
-                    item = pipe.get(timeout=_POLL_S)
-                except queue.Empty:
-                    if not producer.is_alive() and pipe.empty():
-                        return
-                    continue
-                if item is _DONE:
-                    return
-                yield item
-
-        producer = threading.Thread(target=produce, name="jarvis-tts-synth", daemon=True)
-        producer.start()
-        completed = False
-        try:
-            completed = speaker.play_stream(consume(), cancel)
-        finally:
-            halt.set()
-            producer.join(_JOIN_S)
-            if producer.is_alive():
-                log.warning("thread de síntese não encerrou em %.0f s", _JOIN_S)
-        if failures:
-            exc = failures[0]
-            if isinstance(exc, TtsError):
-                raise exc
-            raise TtsError(f"falha na síntese: {exc}") from exc
-        return completed

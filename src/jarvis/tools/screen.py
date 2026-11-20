@@ -15,11 +15,28 @@ from .registry import Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
 log = logging.getLogger(__name__)
 
 
+def _primary_monitor(sct: Any) -> Any:
+    """Monitor PRIMÁRIO de verdade (mss >= 10.2: `primary_monitor`; antes, o marcado `is_primary`).
+
+    O índice 0 do mss é a tela virtual inteira; o 1 NÃO é garantidamente o principal.
+    """
+    try:
+        return sct.primary_monitor
+    except AttributeError:                                  # mss antigo
+        monitors = sct.monitors
+        for monitor in monitors[1:]:
+            if monitor.get("is_primary", False):
+                return monitor
+        if len(monitors) > 1:
+            log.warning("mss não informou o monitor primário; usando o primeiro")
+            return monitors[1]
+        return monitors[0]
+
+
 def _capture_primary() -> Image.Image:
     """Captura o monitor principal como imagem RGB. Libera o recurso de captura ao sair."""
     with mss.mss() as sct:
-        monitors = sct.monitors
-        monitor = monitors[1] if len(monitors) > 1 else monitors[0]   # [0] = todos juntos
+        monitor = _primary_monitor(sct)
         shot = sct.grab(monitor)
         return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
 

@@ -5,6 +5,7 @@ Pontos de atenção:
   Se o tamanho estiver errado, o Windows rejeita a chamada; por isso há uma verificação no import.
 - SendInput devolve quantos eventos foram injetados. Menos que o pedido = bloqueio (UIPI: janela
   elevada/administrador, desktop seguro/UAC). Isso vira `InputBlockedError` com mensagem clara.
+- `send_text` só digita uma linha de caracteres Unicode (nunca Enter/Tab) e aceita uma guarda de foco por bloco.
 - Tudo que o módulo deixa pressionado fica registrado; `release_all()` solta o que sobrou
   (usada pela tecla de emergência) sem tocar em teclas que o usuário esteja segurando de verdade.
 """
@@ -14,8 +15,9 @@ import ctypes
 import logging
 import threading
 import time
+import unicodedata
 from ctypes import wintypes
-from typing import Final, Sequence
+from typing import Callable, Final, Sequence
 
 from ..core.cancel import CancelToken
 from .keys import Combo
@@ -30,22 +32,22 @@ KEYEVENTF_EXTENDEDKEY: Final = 0x0001
 KEYEVENTF_KEYUP: Final = 0x0002
 KEYEVENTF_UNICODE: Final = 0x0004
 
+MOUSEEVENTF_MOVE: Final = 0x0001
 MOUSEEVENTF_LEFTDOWN: Final = 0x0002
 MOUSEEVENTF_LEFTUP: Final = 0x0004
 MOUSEEVENTF_RIGHTDOWN: Final = 0x0008
 MOUSEEVENTF_RIGHTUP: Final = 0x0010
 MOUSEEVENTF_MIDDLEDOWN: Final = 0x0020
 MOUSEEVENTF_MIDDLEUP: Final = 0x0040
+MOUSEEVENTF_VIRTUALDESK: Final = 0x4000
+MOUSEEVENTF_ABSOLUTE: Final = 0x8000
 
 SM_XVIRTUALSCREEN: Final = 76
 SM_YVIRTUALSCREEN: Final = 77
 SM_CXVIRTUALSCREEN: Final = 78
 SM_CYVIRTUALSCREEN: Final = 79
 
-VK_RETURN: Final = 0x0D
-VK_TAB: Final = 0x09
 VK_MENU: Final = 0x12
-VK_LWIN: Final = 0x5B
 
 # Teclas que exigem o flag EXTENDEDKEY (setas, navegação, Win, etc.).
 _EXTENDED_VKS: Final = frozenset({
@@ -60,6 +62,7 @@ _CHUNK_CHARS: Final = 16        # caracteres por SendInput em send_text
 _CHUNK_PAUSE_S: Final = 0.008   # respiro entre pedaços (e ponto de checagem do cancelamento)
 _KEY_GAP_S: Final = 0.012       # intervalo entre teclas de um atalho
 _CLICK_HOLD_S: Final = 0.03
+_ABS_RANGE: Final = 65535       # coordenadas absolutas do SendInput vão de 0 a 65535 sobre a tela virtual
 
 
 class InputBlockedError(OSError):
@@ -109,8 +112,6 @@ if ctypes.sizeof(INPUT) != _EXPECTED_SIZE:  # pragma: no cover - proteção cont
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _user32.SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
 _user32.SendInput.restype = wintypes.UINT
-_user32.SetCursorPos.argtypes = (ctypes.c_int, ctypes.c_int)
-_user32.SetCursorPos.restype = wintypes.BOOL
 _user32.GetSystemMetrics.argtypes = (ctypes.c_int,)
 _user32.GetSystemMetrics.restype = ctypes.c_int
 
@@ -141,9 +142,9 @@ def _unicode_event(unit: int, up: bool) -> INPUT:
     return ev
 
 
-def _mouse_event(flags: int) -> INPUT:
+def _mouse_event(flags: int, dx: int = 0, dy: int = 0) -> INPUT:
     ev = INPUT(type=INPUT_MOUSE)
-    ev.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flags, time=0, dwExtraInfo=0)
+    ev.mi = MOUSEINPUT(dx=dx, dy=dy, mouseData=0, dwFlags=flags, time=0, dwExtraInfo=0)
     return ev
 
 
@@ -177,35 +178,35 @@ def _release(vk: int) -> None:
 
 
 # ----------------------------------------------------------------- API pública
-def _sanitize(text: str) -> str:
-    """Remove caracteres de controle (exceto quebra de linha e tab) e normaliza CRLF."""
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    return "".join(ch for ch in text if ch in "\n\t" or (ch >= " " and ch != "\x7f"))
+def has_control_chars(text: str) -> bool:
+    """True se o texto tem quebra de linha, tab, outro caractere de controle ou surrogate solto (Cc, Zl, Zp, Cs)."""
+    return any(unicodedata.category(ch) in ("Cc", "Zl", "Zp", "Cs") for ch in text)
 
 
-def send_text(text: str, cancel: CancelToken) -> int:
-    """Digita `text` na janela em foco, em pedaços, checando `cancel` entre eles.
+def send_text(text: str, cancel: CancelToken, guard: Callable[[], bool] | None = None) -> int:
+    """Digita `text` (UMA linha, só como caracteres Unicode) na janela em foco, em pedaços de 16 caracteres.
 
-    Devolve quantos caracteres foram digitados (menos que len(text) se cancelou ou se havia
-    caracteres de controle descartados). Levanta `InputBlockedError` se o Windows recusar.
+    Nunca converte quebra de linha em Enter nem tab em Tab: texto com caracteres de controle levanta
+    `ValueError` (Enter e atalhos são outra ferramenta). `guard` é chamado ANTES de cada pedaço (inclusive
+    o primeiro); se devolver False, a digitação para com `InputBlockedError` (o foco mudou). Checa `cancel`
+    entre os pedaços. Devolve quantos caracteres foram digitados. Levanta `InputBlockedError` se o Windows recusar.
     """
-    clean = _sanitize(text)
+    if has_control_chars(text):
+        raise ValueError("o texto tem quebra de linha ou caractere de controle")
     typed = 0
-    for start in range(0, len(clean), _CHUNK_CHARS):
+    for start in range(0, len(text), _CHUNK_CHARS):
         if cancel.cancelled:
             break
-        chunk = clean[start:start + _CHUNK_CHARS]
+        if guard is not None and not guard():
+            log.warning("send_text: o foco mudou após %d caracteres; digitação interrompida", typed)
+            raise InputBlockedError(f"A janela em foco mudou; parei a digitação após {typed} caracteres.")
+        chunk = text[start:start + _CHUNK_CHARS]
         events: list[INPUT] = []
         for ch in chunk:
-            if ch == "\n":
-                events += [_key_event(VK_RETURN), _key_event(VK_RETURN, up=True)]
-            elif ch == "\t":
-                events += [_key_event(VK_TAB), _key_event(VK_TAB, up=True)]
-            else:
-                data = ch.encode("utf-16-le")           # pares substitutos viram 2 unidades
-                for i in range(0, len(data), 2):
-                    unit = int.from_bytes(data[i:i + 2], "little")
-                    events += [_unicode_event(unit, up=False), _unicode_event(unit, up=True)]
+            data = ch.encode("utf-16-le")               # caracteres fora do BMP viram 2 unidades (par substituto)
+            for i in range(0, len(data), 2):
+                unit = int.from_bytes(data[i:i + 2], "little")
+                events += [_unicode_event(unit, up=False), _unicode_event(unit, up=True)]
         try:
             _send(events)
         except InputBlockedError as exc:
@@ -246,18 +247,30 @@ def send_combo(combo: Combo) -> None:
         raise failure
 
 
+def _normalize_abs(value: int, origin: int, extent: int) -> int:
+    """Pixel físico -> coordenada absoluta 0..65535 sobre a tela virtual."""
+    if extent <= 1:
+        return 0
+    return max(0, min(_ABS_RANGE, round((value - origin) * _ABS_RANGE / (extent - 1))))
+
+
 def click(x: int, y: int, button: str = "left") -> None:
-    """Move o cursor para (x, y) em coordenadas de tela e clica. Rejeita pontos fora da tela virtual."""
+    """Move o cursor para o pixel físico (x, y) e clica, via SendInput absoluto sobre a tela virtual.
+
+    Usa MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK normalizado pela tela virtual (correto com vários
+    monitores; exige processo DPI-aware, ver win.dpi). Rejeita pontos fora da tela virtual (ValueError).
+    """
     if button not in _BUTTONS:
         raise ValueError(f"botão inválido: {button!r}")
     left = _user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
     top = _user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
     width = _user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
     height = _user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
-    if not (left <= x < left + width and top <= y < top + height):
+    if width <= 0 or height <= 0 or not (left <= x < left + width and top <= y < top + height):
         raise ValueError(f"ponto ({x}, {y}) fora da tela")
-    if not _user32.SetCursorPos(x, y):
-        raise InputBlockedError(f"Não consegui mover o cursor (erro {ctypes.get_last_error()}).")
+    move = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK
+    _send([_mouse_event(move, _normalize_abs(x, left, width), _normalize_abs(y, top, height))])
+    time.sleep(_KEY_GAP_S)
     down, up = _BUTTONS[button]
     _send([_mouse_event(down)])
     with _state_lock:
