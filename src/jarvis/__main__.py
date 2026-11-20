@@ -4,6 +4,7 @@
     python -m jarvis run --text     # também aceita comandos digitados no terminal
     python -m jarvis settings       # tela de Configurações
     python -m jarvis record         # gravador de voz ("Minha voz")
+    python -m jarvis memory         # o que o Jarvis sabe de mim (memórias e conversas)
     python -m jarvis doctor         # confere o ambiente
     python -m jarvis tools          # lista as ferramentas que o agente pode usar
     python -m jarvis config         # mostra a configuração efetiva
@@ -96,6 +97,11 @@ def _cmd_settings(_: argparse.Namespace) -> int:
     return main_settings()
 
 
+def _cmd_memory(_: argparse.Namespace) -> int:
+    from .ui.memory_panel import main_memory
+    return main_memory()
+
+
 def _cmd_record(_: argparse.Namespace) -> int:
     from .ui.recorder_window import main_recorder
     return main_recorder(load())
@@ -145,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     run.set_defaults(fn=_cmd_run)
     sub.add_parser("settings", help="tela de Configurações").set_defaults(fn=_cmd_settings)
     sub.add_parser("record", help="gravador de voz (Minha voz)").set_defaults(fn=_cmd_record)
+    sub.add_parser("memory", help="o que o Jarvis sabe de mim (memórias e conversas)").set_defaults(fn=_cmd_memory)
     sub.add_parser("doctor", help="confere o ambiente").set_defaults(fn=_cmd_doctor)
     sub.add_parser("tools", help="lista as ferramentas").set_defaults(fn=_cmd_tools)
     sub.add_parser("config", help="mostra a configuração efetiva").set_defaults(fn=_cmd_config)
