@@ -1,92 +1,37 @@
 """Tokens de design do Jarvis (fonte unica) e gerenciador de tema em tempo de execucao.
 
-Tudo que e cor, tamanho, raio, espacamento, fonte ou duracao mora aqui. O resto da UI
-(``ui/kit`` e as telas) so le estes tokens; nada de cor ou numero solto em outro arquivo.
+Tudo que e cor, tamanho, raio, espacamento, fonte ou duracao mora aqui; o resto da UI so le estes
+tokens. Uso::
 
-Uso rapido::
-
-    from jarvis.ui.theme import ThemeManager, pal, SPACE, RADIUS, TYPE
-
+    from jarvis.ui.theme import ThemeManager, pal, SPACE, RADIUS, TYPE, SIZE, MOTION
     mgr = ThemeManager.instance()
-    mgr.set_mode("system")          # "dark" | "light" | "system"
-    mgr.apply(app)                  # estilo Fusion, fonte, QPalette e stylesheet gerada
-    mgr.changed.connect(widget.update)   # sinal emitido a cada troca (str: "dark"|"light")
-    color = pal().accent            # paleta do tema efetivo agora
+    mgr.set_mode("system")             # "dark" | "light" | "system" (segue o Windows)
+    mgr.apply(app)                     # Fusion, fonte, QPalette e stylesheet gerada dos tokens
+    mgr.changed.connect(slot)          # sinal(str "dark"|"light") a cada troca, sem reiniciar
+    color = pal().accent_ink           # paleta do tema efetivo agora
 
-Unidades: tamanhos de layout/QSS em pixels LOGICOS (o Qt 6 ja multiplica pelo fator de escala
-do monitor); texto em pontos (px * 72 / 96), entao acompanha DPI e escala do Windows de 100% a
-200%. ``dp(n)`` devolve pixels logicos inteiros; ``px(n, widget)`` devolve pixels FISICOS
-(n * devicePixelRatio), para criar pixmaps nitidos; ``crisp(v, widget)`` alinha uma coordenada
-a grade de pixels fisicos (linhas finas sem borrao).
-
-Compatibilidade DEPRECATED (telas antigas ainda importam estes nomes): ``apply_theme``,
-``build_stylesheet``, ``build_settings_stylesheet``, ``level_state``, ``state_color``,
-``repolish`` e as constantes BG, SURFACE, SURFACE_ALT, BORDER, TEXT, TEXT_MUTED, ACCENT,
-ACCENT_HOVER, ACCENT_PRESSED, ON_ACCENT, OK, WARN, ERROR, DISABLED_TEXT, SP1..SP4, RADIUS_*.
+Unidades: layout/QSS em pixels LOGICOS (o Qt 6 ja aplica a escala do monitor); texto em pontos
+(px*72/96), entao acompanha DPI e escala de 100% a 200%. ``dp(n)`` = px logicos inteiros;
+``px(n, widget)`` = px FISICOS (n*devicePixelRatio) para pixmaps nitidos; ``crisp(v, widget)`` alinha
+a grade fisica. DEPRECATED (telas antigas): apply_theme, build_stylesheet, build_settings_stylesheet,
+level_state, state_color, repolish, constantes BG/SURFACE/.../SP1..SP4/RADIUS_*.
 """
 from __future__ import annotations
 
-import colorsys
-import ctypes
-import os
-import sys
 from dataclasses import dataclass
-from typing import Any, Final, Iterable, Literal
+from typing import Any, Final, Literal
 
-from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtGui import QFont, QGuiApplication
 from PySide6.QtWidgets import QApplication, QWidget
+
+from .kit.color import contrast, contrast_pairs, ensure_contrast, luminance, mix  # noqa: F401 (re-export)
+from .kit.platform import motion_enabled, set_motion_override, system_prefers_dark  # noqa: F401 (re-export)
+
 
 Mode = Literal["dark", "light", "system"]
 Effective = Literal["dark", "light"]
 State = Literal["ok", "warn", "error"]
-
-# ---------------------------------------------------------------- matematica de cor (WCAG 2.x)
-
-
-def _rgb(h: str) -> tuple[float, float, float]:
-    return int(h[1:3], 16) / 255, int(h[3:5], 16) / 255, int(h[5:7], 16) / 255
-
-
-def _hex(r: float, g: float, b: float) -> str:
-    return "#{:02X}{:02X}{:02X}".format(*(max(0, min(255, round(c * 255))) for c in (r, g, b)))
-
-
-def luminance(h: str) -> float:
-    """Luminancia relativa WCAG de ``#RRGGBB``."""
-    def lin(c: float) -> float:
-        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-    r, g, b = (lin(c) for c in _rgb(h))
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-
-def contrast(a: str, b: str) -> float:
-    """Razao de contraste WCAG (1 a 21) entre duas cores ``#RRGGBB``."""
-    la, lb = luminance(a), luminance(b)
-    hi, lo = max(la, lb), min(la, lb)
-    return (hi + 0.05) / (lo + 0.05)
-
-
-def mix(a: str, b: str, t: float) -> str:
-    """Mistura linear: ``t`` e a parcela de ``b`` (0 devolve ``a``)."""
-    (ar, ag, ab), (br, bg, bb) = _rgb(a), _rgb(b)
-    return _hex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t)
-
-
-def ensure_contrast(fg: str, bgs: Iterable[str], target: float) -> str:
-    """Move a luminosidade de ``fg`` (mesmo matiz) ate atingir ``target`` contra todos os ``bgs``."""
-    bg_list = list(bgs)
-    if all(contrast(fg, bg) >= target for bg in bg_list):
-        return fg
-    go_dark = sum(luminance(bg) for bg in bg_list) / len(bg_list) > 0.4
-    h, lig, s = colorsys.rgb_to_hls(*_rgb(fg))
-    for _ in range(100):
-        lig = max(0.0, lig - 0.01) if go_dark else min(1.0, lig + 0.01)
-        cand = _hex(*colorsys.hls_to_rgb(h, lig, s))
-        if all(contrast(cand, bg) >= target for bg in bg_list):
-            return cand
-    return "#000000" if go_dark else "#FFFFFF"
-
 
 # ---------------------------------------------------------------- paleta
 
@@ -171,24 +116,6 @@ def _build(name: Effective) -> Palette:
 
 DARK: Final = _build("dark")
 LIGHT: Final = _build("light")
-
-
-def contrast_pairs(p: Palette) -> list[tuple[str, str, str, float, float]]:
-    """Pares (rotulo, primeiro plano, fundo, razao, minimo exigido) para auditoria WCAG AA."""
-    rows: list[tuple[str, str, str, float]] = []
-    surfaces = {"fundo": p.bg, "superficie": p.surface, "elevada": p.raised}
-    for sname, s in surfaces.items():
-        rows += [(f"texto / {sname}", p.text, s, 7.0), (f"texto secundario / {sname}", p.text_muted, s, 4.5),
-                 (f"acento (tinta) / {sname}", p.accent_ink, s, 4.5), (f"borda de campo / {sname}", p.border_strong, s, 3.0)]
-        rows += [(f"{k} / {sname}", getattr(p, k), s, 4.5) for k in ("ok", "warn", "error")]
-    rows += [("texto sobre acento / botao primario", p.on_accent, p.accent, 4.5),
-             ("texto sobre acento (hover)", p.on_accent, p.accent_hover, 4.5),
-             ("texto sobre acento (pressionado)", p.on_accent, p.accent_pressed, 4.5),
-             ("texto sobre perigo / botao perigo", p.on_error, p.error, 4.5),
-             ("anel de foco / fundo", p.accent_ink, p.bg, 3.0),
-             ("borda do botao primario / fundo (componente)", p.accent_ink, p.bg, 3.0)]
-    rows += [(f"{k} / chip {k}", getattr(p, k), getattr(p, f"{k}_bg"), 4.5) for k in ("ok", "warn", "error")]
-    return [(lbl, fg, bg, round(contrast(fg, bg), 2), req) for lbl, fg, bg, req in rows]
 
 
 # ---------------------------------------------------------------- escalas
@@ -302,52 +229,10 @@ def crisp(v: float, widget: QWidget | None = None) -> float:
     return round(v * d) / d
 
 
-# ---------------------------------------------------------------- movimento e tema do sistema
-
-_motion_override: bool | None = None
-
-
-def set_motion_override(enabled: bool | None) -> None:
-    """Forca animacoes ligadas/desligadas (None = seguir o Windows). Usado por testes e Configuracoes."""
-    global _motion_override
-    _motion_override = enabled
-
-
-def motion_enabled() -> bool:
-    """False se o usuario pediu 'reduzir animacoes' no Windows (SPI_GETCLIENTAREAANIMATION)."""
-    if _motion_override is not None:
-        return _motion_override
-    if os.environ.get("JARVIS_REDUCE_MOTION") == "1":
-        return False
-    if sys.platform != "win32":
-        return True
-    flag = ctypes.c_int(1)
-    ok = ctypes.windll.user32.SystemParametersInfoW(0x1042, 0, ctypes.byref(flag), 0)  # type: ignore[attr-defined]
-    return bool(flag.value) if ok else True
-
 
 def duration(ms: int) -> int:
-    """``ms`` se animar, senao 0."""
+    """``ms`` se animar, senao 0 ('reduzir animacoes' do Windows)."""
     return ms if motion_enabled() else 0
-
-
-def system_prefers_dark() -> bool:
-    """Tema do Windows: QStyleHints.colorScheme (Qt 6.5+), com o registro como reserva."""
-    hints = QGuiApplication.styleHints() if QGuiApplication.instance() else None
-    scheme = hints.colorScheme() if hints is not None else Qt.ColorScheme.Unknown
-    if scheme == Qt.ColorScheme.Dark:
-        return True
-    if scheme == Qt.ColorScheme.Light:
-        return False
-    if sys.platform == "win32":
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
-                return winreg.QueryValueEx(k, "AppsUseLightTheme")[0] == 0
-        except OSError:
-            return True
-    return True
 
 
 # ---------------------------------------------------------------- gerenciador
@@ -435,9 +320,10 @@ class ThemeManager(QObject):
         app = self._app
         if app is None:
             return
+        from .kit.qss import build_qpalette
         app.setStyle("Fusion")
         app.setFont(make_font())
-        app.setPalette(_qpalette(self.palette))
+        app.setPalette(build_qpalette(self.palette))
         app.setStyleSheet(self.stylesheet())
 
 
@@ -450,22 +336,6 @@ def pal() -> Palette:
     return ThemeManager.instance().palette
 
 
-def _qpalette(p: Palette) -> QPalette:
-    qp = QPalette()
-    roles = {QPalette.ColorRole.Window: p.bg, QPalette.ColorRole.WindowText: p.text,
-             QPalette.ColorRole.Base: p.surface, QPalette.ColorRole.AlternateBase: p.raised,
-             QPalette.ColorRole.Text: p.text, QPalette.ColorRole.Button: p.raised,
-             QPalette.ColorRole.ButtonText: p.text, QPalette.ColorRole.Highlight: p.accent,
-             QPalette.ColorRole.HighlightedText: p.on_accent, QPalette.ColorRole.PlaceholderText: p.text_muted,
-             QPalette.ColorRole.ToolTipBase: p.raised, QPalette.ColorRole.ToolTipText: p.text,
-             QPalette.ColorRole.Link: p.accent_ink, QPalette.ColorRole.BrightText: p.text}
-    for role, color in roles.items():
-        qp.setColor(role, QColor(color))
-    for role in (QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText, QPalette.ColorRole.WindowText):
-        qp.setColor(QPalette.ColorGroup.Disabled, role, QColor(p.text_disabled))
-    return qp
-
-
 def repolish(widget: QWidget) -> None:
     """Reaplica o stylesheet depois de mudar uma propriedade dinamica (variant, state, invalid...)."""
     style = widget.style()
@@ -476,38 +346,28 @@ def repolish(widget: QWidget) -> None:
 
 # ---------------------------------------------------------------- compatibilidade DEPRECATED
 
-SP1: Final = 8     # DEPRECATED: grade antiga de 8 px; use SPACE.*
-SP2: Final = 16
-SP3: Final = 24
-SP4: Final = 32
-SPACE_LEGACY: Final = 8
-RADIUS_SM: Final = RADIUS.sm   # DEPRECATED
-RADIUS_MD: Final = RADIUS.md
-RADIUS_LG: Final = RADIUS.lg
+SP1, SP2, SP3, SP4 = 8, 16, 24, 32   # DEPRECATED: grade antiga de 8 px; use SPACE.*
+RADIUS_SM, RADIUS_MD, RADIUS_LG = RADIUS.sm, RADIUS.md, RADIUS.lg   # DEPRECATED
 FONT_FAMILY: Final = TYPE.families[-1]
-FONT_SIZE_BASE, FONT_SIZE_SMALL, FONT_SIZE_TITLE = 10, 9, 14   # pt antigos (DEPRECATED)
-FONT_SIZE_PHRASE, FONT_SIZE_COUNTDOWN = 22, 40
-_LEGACY_COLORS: Final = {"BG": "bg", "SURFACE": "surface", "SURFACE_ALT": "raised", "BORDER": "border",
-                         "TEXT": "text", "TEXT_MUTED": "text_muted", "ACCENT": "accent",
-                         "ACCENT_HOVER": "accent_hover", "ACCENT_PRESSED": "accent_pressed",
-                         "ON_ACCENT": "on_accent", "OK": "ok", "WARN": "warn", "ERROR": "error",
-                         "DISABLED_TEXT": "text_disabled"}
-_LEVEL_STATE: Final[dict[str, State]] = {"ok": "ok", "baixo": "warn", "saturado": "error", "silencio": "error"}
+FONT_SIZE_BASE, FONT_SIZE_SMALL, FONT_SIZE_TITLE, FONT_SIZE_PHRASE, FONT_SIZE_COUNTDOWN = 10, 9, 14, 22, 40  # pt antigos
 
 
 def __getattr__(name: str) -> Any:
-    """Constantes de cor antigas (BG, TEXT...) resolvem para a paleta ATUAL."""
-    if name in _LEGACY_COLORS:
-        return getattr(pal(), _LEGACY_COLORS[name])
+    """Constantes de cor antigas (BG, TEXT, OK...) resolvem para a paleta ATUAL."""
+    if not name.isupper():       # o import system consulta __path__/__spec__: nao delegue
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from .kit.legacy_qss import LEGACY_COLORS
+    if name in LEGACY_COLORS:
+        return getattr(pal(), LEGACY_COLORS[name])
     if name == "STATE_COLORS":
-        p = pal()
-        return {"ok": p.ok, "warn": p.warn, "error": p.error}
+        return {k: pal().state(k) for k in ("ok", "warn", "error")}
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def level_state(level: str) -> State:
     """DEPRECATED. Mapeia o veredito de ``audio_analysis.assess`` para o estado de cor."""
-    return _LEVEL_STATE.get(level, "warn")
+    from .kit.legacy_qss import LEVEL_STATE
+    return LEVEL_STATE.get(level, "warn")  # type: ignore[return-value]
 
 
 def state_color(state: str) -> str:

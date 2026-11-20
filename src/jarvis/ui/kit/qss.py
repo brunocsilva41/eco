@@ -7,6 +7,8 @@ O anel de foco dos controles pintados e feito no ``paintEvent``; campos de texto
 """
 from __future__ import annotations
 
+from PySide6.QtGui import QColor, QPalette
+
 from ..theme import RADIUS, SIZE, SPACE, TYPE, Palette, mix, pt
 
 _PAD_V = SPACE.xs                                   # preenchimento vertical dos controles
@@ -51,7 +53,7 @@ QPushButton[variant="text"]:pressed, QPushButton[variant="ghost"]:pressed {{ bac
 QPushButton[variant="text"]:disabled, QPushButton[variant="ghost"]:disabled {{ background: transparent; border-color: transparent; }}
 QPushButton[iconOnly="true"] {{ padding: 0; min-width: {SIZE.target - 2 * SIZE.border}px; max-width: {SIZE.target}px;
   min-height: {SIZE.target - 2 * SIZE.border}px; }}
-QPushButton[kit="keycapture"] {{ text-align: left; background: {p.surface}; font-weight: {TYPE.regular}; }}
+QPushButton[kit="keycapture"] {{ text-align: left; padding: {_PAD_V}px {_PAD_H}px; background: {p.surface}; font-weight: {TYPE.regular}; }}
 QPushButton[kit="keycapture"][capturing="true"] {{ border: {SIZE.focus_ring}px solid {p.focus_ring}; color: {p.accent_ink}; }}
 QPushButton[kit="keycapture"][invalid="true"] {{ border-color: {p.error}; }}
 """
@@ -69,6 +71,7 @@ QLineEdit:focus, QAbstractSpinBox:focus, QPlainTextEdit:focus, QTextEdit:focus, 
   border: {SIZE.focus_ring}px solid {p.focus_ring}; padding: {pad_f}; }}
 QLineEdit:disabled, QAbstractSpinBox:disabled, QPlainTextEdit:disabled, QTextEdit:disabled, QComboBox:disabled {{
   background: {p.bg}; color: {p.text_disabled}; border-color: {p.border}; }}
+QComboBox QLineEdit {{ background: transparent; border: none; padding: 0; min-height: 0; }}
 QLineEdit[readOnly="true"] {{ color: {p.text_muted}; }}
 QLineEdit[invalid="true"], QAbstractSpinBox[invalid="true"], QComboBox[invalid="true"], QPlainTextEdit[invalid="true"] {{
   border-color: {p.error}; }}
@@ -102,6 +105,7 @@ QFrame[kit="nav"] {{ background: {p.surface}; border: none; border-right: {SIZE.
 QFrame[kit="toast"] {{ background: {p.raised}; border: {SIZE.border}px solid {p.border_strong}; border-radius: {RADIUS.md}px; }}
 QFrame[kit="banner"] {{ background: {p.raised}; border: {SIZE.border}px solid {p.border_strong}; border-radius: {RADIUS.md}px; }}
 {"".join(f'QFrame[kit="banner"][state="{s}"], QFrame[kit="toast"][state="{s}"] {{ background: {p.state_bg(s)}; border-color: {p.state(s)}; }}' for s in ("ok", "warn", "error"))}
+QFrame[kit="chip"] {{ background: {p.raised}; border: {SIZE.border}px solid {p.border_strong}; border-radius: {RADIUS.sm}px; }}
 QFrame[kit="plain"] {{ background: transparent; border: none; }}
 QAbstractItemView {{ background: {p.surface}; color: {p.text}; border: {SIZE.border}px solid {p.border};
   border-radius: {RADIUS.md}px; outline: 0; selection-background-color: {p.pressed}; selection-color: {p.text}; }}
@@ -111,7 +115,7 @@ QListWidget[kit="nav"]:focus {{ border: none; }}
 QHeaderView::section {{ background: {p.raised}; color: {p.text}; border: none; border-bottom: {SIZE.border}px solid {p.border};
   padding: {_PAD_V}px {_PAD_H}px; font-weight: {TYPE.semibold}; }}
 QProgressBar {{ background: {p.raised}; border: none; border-radius: {SPACE.xs // 2}px; min-height: {SPACE.xs}px; max-height: {SPACE.xs}px; }}
-QProgressBar::chunk {{ background: {p.accent}; border-radius: {SPACE.xs // 2}px; }}
+QProgressBar::chunk {{ background: {p.text_muted}; border-radius: {SPACE.xs // 2}px; }}
 QScrollBar:vertical {{ background: transparent; width: {SPACE.md}px; margin: 0; }}
 QScrollBar:horizontal {{ background: transparent; height: {SPACE.md}px; margin: 0; }}
 QScrollBar::handle {{ background: {p.border_strong}; border-radius: {RADIUS.sm}px; min-height: {SPACE.xl}px; min-width: {SPACE.xl}px; margin: 2px; }}
@@ -124,3 +128,20 @@ QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 def build_qss(p: Palette) -> str:
     """Stylesheet global do tema ``p`` (instale com ``ThemeManager.apply``)."""
     return _labels(p) + _buttons(p) + _inputs(p) + _containers(p)
+
+
+def build_qpalette(p: Palette) -> QPalette:
+    """QPalette do tema (para widgets nativos, popups e caixas de mensagem)."""
+    qp = QPalette()
+    roles = {QPalette.ColorRole.Window: p.bg, QPalette.ColorRole.WindowText: p.text,
+             QPalette.ColorRole.Base: p.surface, QPalette.ColorRole.AlternateBase: p.raised,
+             QPalette.ColorRole.Text: p.text, QPalette.ColorRole.Button: p.raised,
+             QPalette.ColorRole.ButtonText: p.text, QPalette.ColorRole.Highlight: p.accent,
+             QPalette.ColorRole.HighlightedText: p.on_accent, QPalette.ColorRole.PlaceholderText: p.text_muted,
+             QPalette.ColorRole.ToolTipBase: p.raised, QPalette.ColorRole.ToolTipText: p.text,
+             QPalette.ColorRole.Link: p.accent_ink, QPalette.ColorRole.BrightText: p.text}
+    for role, color in roles.items():
+        qp.setColor(role, QColor(color))
+    for role in (QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText, QPalette.ColorRole.WindowText):
+        qp.setColor(QPalette.ColorGroup.Disabled, role, QColor(p.text_disabled))
+    return qp

@@ -9,6 +9,13 @@ from __future__ import annotations
 from ..theme import RADIUS, SIZE, SPACE, TYPE, Palette, pt
 
 
+LEGACY_COLORS = {"BG": "bg", "SURFACE": "surface", "SURFACE_ALT": "raised", "BORDER": "border", "TEXT": "text",
+                 "TEXT_MUTED": "text_muted", "ACCENT": "accent", "ACCENT_HOVER": "accent_hover",
+                 "ACCENT_PRESSED": "accent_pressed", "ON_ACCENT": "on_accent", "OK": "ok", "WARN": "warn",
+                 "ERROR": "error", "DISABLED_TEXT": "text_disabled"}
+LEVEL_STATE = {"ok": "ok", "baixo": "warn", "saturado": "error", "silencio": "error"}
+
+
 def _base(p: Palette) -> str:
     small, title, phrase, countdown = (f"{pt(x):.2f}pt" for x in (TYPE.small, TYPE.title, TYPE.display, TYPE.counter))
     return f"""
