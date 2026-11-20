@@ -3,3 +3,6 @@ models/
 venv/
 logs/
 __pycache__/
+data/
+tests/audio_*/
+*.pyc

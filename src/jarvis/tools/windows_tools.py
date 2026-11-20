@@ -1,0 +1,132 @@
+"""Ferramentas de janelas: listar, ver a ativa, focar e fechar.
+
+Títulos de janela vêm de programas externos (páginas web, documentos): sempre `untrusted=True`.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from ..config import Config
+from ..win import windows as win
+from .registry import Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
+from ._matching import best_matches, clip
+
+log = logging.getLogger(__name__)
+
+_MAX_LISTED = 25          # janelas devolvidas por listar_janelas
+_MAX_OPTIONS = 6          # opções mostradas quando o título é ambíguo
+_TITLE_CLIP = 70
+_CLOSE_WAIT_S = 2.0       # quanto esperar a janela sumir depois do pedido de fechamento
+
+_TITLE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"titulo": {"type": "string", "minLength": 2, "maxLength": 100,
+                              "description": "Parte do título da janela."}},
+    "required": ["titulo"],
+    "additionalProperties": False,
+}
+
+
+def _describe(info: win.WindowInfo) -> str:
+    return f"{clip(info.title, _TITLE_CLIP)} ({info.process})" if info.process else clip(info.title, _TITLE_CLIP)
+
+
+def _resolve(query: str) -> tuple[win.WindowInfo | None, ToolResult | None]:
+    """Acha UMA janela pelo trecho do título; senão devolve o ToolResult explicando (nada, ou ambígua)."""
+    matches = best_matches(query, win.list_windows(), key=lambda w: w.title)
+    shown = query.strip()[:40]
+    if not matches:
+        return None, ToolResult(False, f"Não achei nenhuma janela com '{shown}'.")
+    if len(matches) > 1:
+        options = [_describe(w) for w in matches[:_MAX_OPTIONS]]
+        extra = f" e mais {len(matches) - _MAX_OPTIONS}" if len(matches) > _MAX_OPTIONS else ""
+        return None, ToolResult(False, f"Mais de uma janela combina com '{shown}': "
+                                       + "; ".join(options) + extra + ". Diga um trecho mais específico.",
+                                data={"opcoes": options}, untrusted=True)
+    return matches[0], None
+
+
+def register(registry: ToolRegistry, cfg: Config) -> None:
+    def listar_janelas(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        windows = win.list_windows()
+        if not windows:
+            return ToolResult(True, "Não há janelas abertas.", data={"janelas": []}, untrusted=True)
+        items = [{"titulo": clip(w.title, _TITLE_CLIP), "processo": w.process} for w in windows[:_MAX_LISTED]]
+        text = "; ".join(_describe(w) for w in windows[:_MAX_LISTED])
+        more = f" (e mais {len(windows) - _MAX_LISTED})" if len(windows) > _MAX_LISTED else ""
+        return ToolResult(True, f"{len(windows)} janelas abertas: {text}{more}.",
+                          data={"janelas": items}, untrusted=True)
+
+    def janela_ativa(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        info = win.foreground_window()
+        if info is None:
+            return ToolResult(True, "Nenhuma janela está em foco.", untrusted=True)
+        return ToolResult(True, f"Janela ativa: {_describe(info)}.",
+                          data={"titulo": clip(info.title, _TITLE_CLIP), "processo": info.process},
+                          untrusted=True)
+
+    def focar_janela(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        target, problem = _resolve(str(args["titulo"]))
+        if problem is not None:
+            return problem
+        assert target is not None
+        if ctx.cancel.cancelled:
+            return ToolResult(False, "Cancelado.")
+        if win.focus_window(target.hwnd):
+            return ToolResult(True, f"Trouxe para frente: {_describe(target)}.", untrusted=True)
+        return ToolResult(False, "O Windows não deixou trazer essa janela para frente.", untrusted=True)
+
+    def fechar_janela(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        target, problem = _resolve(str(args["titulo"]))
+        if problem is not None:
+            return problem
+        assert target is not None
+        if ctx.cancel.cancelled:
+            return ToolResult(False, "Cancelado.")
+        if not win.close_window(target.hwnd):
+            return ToolResult(False, "Não consegui pedir o fechamento dessa janela.", untrusted=True)
+        # Espera a janela sumir; se ela pergunta "salvar?", continua aberta e avisamos.
+        waited = 0.0
+        while waited < _CLOSE_WAIT_S:
+            if not win.is_window(target.hwnd):
+                return ToolResult(True, f"Fechei: {_describe(target)}.", untrusted=True)
+            if ctx.cancel.wait(0.1):
+                return ToolResult(False, "Cancelado.")
+            waited += 0.1
+        return ToolResult(True, f"Pedi para fechar {_describe(target)}, mas ela ainda está aberta; "
+                                "talvez esteja perguntando se deve salvar.", untrusted=True)
+
+    registry.register(ToolSpec(
+        name="listar_janelas",
+        description="Lista as janelas abertas no computador (título e programa). Use para saber o que está aberto.",
+        parameters={"type": "object", "properties": {}, "additionalProperties": False},
+        risk=Risk.READ,
+        handler=listar_janelas,
+    ))
+    registry.register(ToolSpec(
+        name="janela_ativa",
+        description="Diz qual janela está em primeiro plano agora (a que o usuário está vendo).",
+        parameters={"type": "object", "properties": {}, "additionalProperties": False},
+        risk=Risk.READ,
+        handler=janela_ativa,
+    ))
+    registry.register(ToolSpec(
+        name="focar_janela",
+        description=("Traz uma janela já aberta para frente, pelo título ou parte dele "
+                     "(ex.: 'bloco de notas', 'chrome'). Se várias combinarem, devolve as opções."),
+        parameters=_TITLE_SCHEMA,
+        risk=Risk.CONTROL,
+        handler=focar_janela,
+        confirm_text=lambda a: f"Trazer para frente a janela '{str(a.get('titulo', ''))[:60]}'",
+    ))
+    registry.register(ToolSpec(
+        name="fechar_janela",
+        description=("Fecha uma janela aberta pelo título ou parte dele. Pode perder trabalho não salvo, "
+                     "por isso pede confirmação."),
+        parameters=_TITLE_SCHEMA,
+        risk=Risk.RISKY,
+        handler=fechar_janela,
+        confirm_text=lambda a: (f"Fechar a janela que contém '{str(a.get('titulo', ''))[:60]}'? "
+                                "Trabalho não salvo pode ser perdido."),
+    ))
