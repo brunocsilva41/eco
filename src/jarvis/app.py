@@ -1,41 +1,55 @@
 """Orquestrador do Jarvis: liga áudio, cérebro, agente, segurança e atalhos numa só aplicação.
 
 Threads:
-- principal: laço de entrada (tecla de falar, texto, mudo); captura e transcreve a fala;
+- principal: laço de entrada (tecla de falar, texto, mudo, supervisão, pedidos de controle); captura e transcreve a fala;
 - requisição: um pedido por vez (agente -> ferramentas -> fala), cancelável;
-- voz: fila de frases (voice.py); atalhos: laço de mensagens do Windows (win/hotkeys.py).
-A tecla de emergência cancela o token de sessão (tudo que estiver rodando) e solta mouse/teclado.
+- voz: síntese + reprodução (voice.py); atalhos: laço de mensagens do Windows (win/hotkeys.py).
+A tecla de emergência cancela o token de sessão (tudo que estiver rodando) e solta mouse/teclado. Cada pedido nasce
+do token de sessão CAPTURADO no momento da fala: se a emergência disparar no meio, o pedido nunca chega a rodar.
 Apertar a tecla de falar durante uma resposta interrompe o Jarvis (barge-in por tecla).
+Configuração: `apply_config` aplica na hora o que é seguro (temperatura, timeouts, ferramentas ligadas...) e lista o que
+exige reiniciar; o app em execução também atende `reload`/`restart` pedidos pela tela de Configurações.
 """
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import threading
 import time
+from contextlib import ExitStack
 from dataclasses import dataclass
 
+from . import config as cfgmod
 from .agent import Agent
 from .audio.capture import Microphone
 from .audio.playback import Speaker
 from .audio.stt import Transcriber
 from .audio.tts import Synthesizer
-from .config import Config
+from .config import Config, ConfigError
 from .core import logsetup
 from .core.cancel import CancelToken, Cancelled
 from .core.events import EventBus, State
 from .core.state import StateMachine
 from .llm.client import LlmClient
-from .llm.server import LlamaServer, ServerError
+from .llm.server import LlamaServer
 from .memory import Memory
-from .safety import ConfirmationBroker, EmergencyStop, parse_yes_no
-from .tools import builtin, notes
+from .safety import ConfirmationBroker, EmergencyStop
+from .settings import control
+from .settings.store import SettingsStore
+from .tools import catalog
 from .tools.registry import ToolRegistry
 from .voice import Voice
+from .win import dpi
 from .win import input as win_input
 from .win.hotkeys import HotkeyError, HotkeyListener, KeyHold
 
 log = logging.getLogger(__name__)
+
+LOAD_TIMEOUT_S = 300.0
+SUPERVISE_EVERY_S = 2.0
+CONTROL_EVERY_S = 1.0
+RESTART_EXIT = control.RESTART_EXIT_CODE
 
 
 class StartupError(RuntimeError):
@@ -66,48 +80,74 @@ class JarvisApp:
         self._session = CancelToken()
         self._session_lock = threading.Lock()
         self._stop = threading.Event()
+        self._exit_code = 0
         self._muted = False
         self._req_thread: threading.Thread | None = None
         self._req_cancel: CancelToken | None = None
         self._text_q: "queue.Queue[str]" = queue.Queue()
         self._p: _Parts | None = None
+        self._pending_restart: tuple[str, ...] = ()
+        self._started = time.time()
+        self._hotkeys_ok = True
+        self._settings = SettingsStore()
 
     # ================================================================ ciclo de vida
     def start(self) -> None:
-        """Carrega tudo. Levanta StartupError (com todos os problemas) se algo essencial falhar."""
+        """Carrega tudo. Levanta StartupError (com todos os problemas) se algo essencial falhar; nada fica aberto nesse caso."""
         cfg = self.cfg
-        logsetup.setup(cfg.paths.logs, cfg.log_level)
+        dpi.ensure_per_monitor_v2()                                     # antes de qualquer captura/coordenada
+        logsetup.setup(cfg.paths.logs, cfg.logs)
         log.info("iniciando o Jarvis (raiz %s)", cfg.paths.root)
-
-        memory = Memory(cfg.paths.data / "jarvis.db")
-        confirmer = ConfirmationBroker(self.bus, cfg.safety.confirm_timeout_s)
-        registry = ToolRegistry(cfg, self.bus, confirmer)
-        builtin.register_all(registry, cfg)
-        notes.register(registry, cfg)
-
-        server = LlamaServer(cfg)
-        llm = LlmClient(cfg)
-        speaker = Speaker(cfg.audio, cfg.tts, self.bus)
-        tts = Synthesizer(cfg.tts)
-        stt = Transcriber(cfg.stt)
-        mic = Microphone(cfg.audio, self.bus)
-        voice = Voice(tts, speaker, self.state)
-        agent = Agent(cfg, llm, registry, memory, self.bus, self.state)
-        hotkeys = HotkeyListener()
-        self._p = _Parts(memory, registry, server, llm, mic, speaker, stt, tts, voice, agent, confirmer, hotkeys)
-
-        confirmer.set_voice_listener(self._listen_for_answer)
-
-        errors = self._load_models(server, stt, tts, mic)
-        if errors:
+        try:
+            self._build(cfg)
+        except BaseException:
+            self._p = None                                              # o ExitStack de _build já fechou tudo que abriu
             self.shutdown()
-            raise StartupError("não consegui iniciar:\n - " + "\n - ".join(errors))
-        self._start_hotkeys()
-        log.info("Jarvis pronto. Segure %s para falar; %s para parar tudo.",
+            raise
+        control.write_runtime(cfg.paths.data, control.Runtime(os.getpid(), self._started,
+                                                              control.config_mtime(cfgmod.CONFIG_FILE), self._pending_restart))
+        log.info("Jarvis pronto. %s para falar; %s para parar tudo.",
                  cfg.safety.talk_key.upper(), cfg.safety.emergency_hotkey.upper())
 
+    def _build(self, cfg: Config) -> None:
+        with ExitStack() as stack:                                      # se um construtor falhar, o que já abriu é fechado
+            memory = Memory(cfg.paths.data / "jarvis.db", cfg.memory)
+            stack.callback(memory.close)
+            confirmer = ConfirmationBroker(self.bus, cfg.safety.confirm_timeout_s)
+            registry = ToolRegistry(cfg, self.bus, confirmer)
+            failed = catalog.register_everything(registry, cfg)
+            if failed:
+                log.error("módulos de ferramentas com falha: %s", ", ".join(failed))
+
+            server = LlamaServer(cfg, on_event=lambda kind, text: self.bus.publish("notice", kind=kind, text=text))
+            stack.callback(server.stop)
+            llm = LlmClient(cfg, api_key=lambda: server.api_key)
+            speaker = Speaker(cfg.audio, cfg.tts, self.bus)
+            stack.callback(speaker.close)
+            tts = Synthesizer(cfg.tts)
+            stt = Transcriber(cfg.stt)
+            mic = Microphone(cfg.audio, self.bus, models_dir=cfg.paths.models)
+            stack.callback(mic.close)
+            voice = Voice(tts, speaker, self.state)
+            stack.callback(voice.close)
+            agent = Agent(cfg, llm, registry, memory, self.bus, self.state)
+            hotkeys = HotkeyListener()
+            stack.callback(hotkeys.stop)
+            parts = _Parts(memory, registry, server, llm, mic, speaker, stt, tts, voice, agent, confirmer, hotkeys)
+            self._p = parts
+
+            confirmer.set_voice_listener(self._listen_for_answer, available=lambda: not self._muted)
+            confirmer.set_speaker(lambda text, cancel: voice.say_and_wait(text, cancel))
+            self.bus.subscribe(lambda ev: agent.request_compaction(), kind="compact_request")
+
+            errors = self._load_models(server, stt, tts, mic)
+            if errors:
+                raise StartupError("não consegui iniciar:\n - " + "\n - ".join(errors))
+            self._start_hotkeys()
+            stack.pop_all()                                             # tudo certo: o shutdown() assume a limpeza
+
     def _load_models(self, server: LlamaServer, stt: Transcriber, tts: Synthesizer, mic: Microphone) -> list[str]:
-        """Carrega LLM, STT, TTS e abre o microfone em paralelo; devolve as falhas."""
+        """Carrega LLM, STT, TTS e abre o microfone em paralelo; devolve as falhas. Com prazo total e cancelável."""
         errors: list[str] = []
         lock = threading.Lock()
         cancel = self._session.child()
@@ -126,13 +166,25 @@ class JarvisApp:
         if self.cfg.llm.autostart:
             jobs.append(("llama-server", lambda: server.start(cancel)))
         elif not server.is_running():
-            errors.append("llama-server não está rodando e llm.autostart = false")
+            errors.append("llm.autostart = false e o Jarvis não usa servidores que não iniciou")
         threads = [threading.Thread(target=job, args=j, name=f"load-{j[0]}", daemon=True) for j in jobs]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join()
-        cancel.release()
+        deadline = time.monotonic() + LOAD_TIMEOUT_S
+        try:
+            for t in threads:
+                while t.is_alive():
+                    if time.monotonic() > deadline:
+                        cancel.cancel("tempo de carga esgotado")
+                        with lock:
+                            errors.append(f"{t.name}: não terminou em {LOAD_TIMEOUT_S:.0f}s")
+                        break
+                    t.join(0.25)
+        except KeyboardInterrupt:
+            cancel.cancel("interrompido")
+            raise
+        finally:
+            cancel.release()
         return errors
 
     def _start_hotkeys(self) -> None:
@@ -143,39 +195,40 @@ class JarvisApp:
         try:
             p.hotkeys.add(s.emergency_hotkey, lambda: stop.trigger("tecla de emergência"))
         except HotkeyError as exc:
-            # sem a tecla de emergência o Jarvis NÃO controla o PC
-            self.shutdown()
-            raise StartupError(f"tecla de emergência indisponível: {exc}") from exc
+            raise StartupError(f"tecla de emergência indisponível: {exc}") from exc    # sem ela o Jarvis NÃO controla o PC
         for combo, cb, label in ((s.mute_hotkey, self.toggle_mute, "mudo"),
-                                 (s.confirm_yes_hotkey, lambda: p.confirmer.answer(True), "confirmar SIM"),
-                                 (s.confirm_no_hotkey, lambda: p.confirmer.answer(False), "confirmar NÃO")):
+                                 (s.confirm_yes_hotkey, lambda: p.confirmer.answer(True, via="key"), "confirmar SIM"),
+                                 (s.confirm_no_hotkey, lambda: p.confirmer.answer(False, via="key"), "confirmar NÃO")):
             try:
                 p.hotkeys.add(combo, cb)
             except HotkeyError as exc:
                 log.warning("atalho de %s indisponível: %s", label, exc)
-        # a confirmação por voz fala a pergunta pelo canal de voz
-        p.confirmer.set_speaker(lambda text: p.voice.say_and_wait(text, self._current_session()))
 
     def shutdown(self) -> None:
-        """Encerra tudo e libera áudio, atalhos, servidor e banco. Idempotente."""
+        """Encerra tudo e libera áudio, atalhos, servidor e banco. Idempotente. Ordem: parar o trabalho, esperar, fechar."""
         self._stop.set()
         self._session.cancel("encerrando")
-        p, self._p = self._p, None
-        if p is None:
-            return
-        for name, fn in (("voz", p.voice.close), ("alto-falante", p.speaker.close), ("microfone", p.mic.close),
-                         ("atalhos", p.hotkeys.stop), ("STT", p.stt.close), ("TTS", p.tts.close),
-                         ("llama-server", p.server.stop), ("memória", p.memory.close)):
-            try:
-                fn()
-            except Exception:  # noqa: BLE001 - encerrar o resto mesmo se um falhar
-                log.exception("erro ao encerrar %s", name)
         t = self._req_thread
         if t is not None and t.is_alive():
-            t.join(3.0)
+            t.join(5.0)                                   # o pedido termina ANTES de fecharmos memória/voz
+        p, self._p = self._p, None
+        if p is not None:
+            for name, fn in (("voz", p.voice.close), ("alto-falante", p.speaker.close), ("microfone", p.mic.close),
+                             ("atalhos", p.hotkeys.stop), ("STT", p.stt.close), ("TTS", p.tts.close),
+                             ("llama-server", p.server.stop), ("memória", p.memory.close)):
+                try:
+                    fn()
+                except Exception:  # noqa: BLE001 - encerrar o resto mesmo se um falhar
+                    log.exception("erro ao encerrar %s", name)
+        try:
+            control.clear_runtime(self.cfg.paths.data)
+        except Exception:  # noqa: BLE001
+            log.exception("erro ao limpar runtime.json")
+        self.bus.close()
         log.info("Jarvis encerrado")
 
-    def request_stop(self) -> None:
+    def request_stop(self, exit_code: int = 0) -> None:
+        self._exit_code = exit_code
         self._stop.set()
 
     # ================================================================ entrada
@@ -192,15 +245,23 @@ class JarvisApp:
         self.bus.publish("mute", muted=self._muted)
         log.info("microfone %s", "DESLIGADO" if self._muted else "ligado")
 
-    def run(self) -> None:
-        """Laço principal. Retorna ao receber request_stop() ou Ctrl+C."""
+    def run(self) -> int:
+        """Laço principal. Devolve o código de saída (0 normal; 75 = reiniciar pedido pelas Configurações)."""
         p = self._p
         if p is None:
             raise StartupError("chame start() antes de run()")
         talk = KeyHold(self.cfg.safety.talk_key)
         p.voice.say("Jarvis pronto.")
+        next_supervise = next_control = time.monotonic()
         try:
             while not self._stop.is_set():
+                now = time.monotonic()
+                if now >= next_supervise:
+                    next_supervise = now + SUPERVISE_EVERY_S
+                    self._supervise()
+                if now >= next_control:
+                    next_control = now + CONTROL_EVERY_S
+                    self._poll_control()
                 if self._drain_text():
                     continue
                 if not self._muted and talk():
@@ -209,6 +270,7 @@ class JarvisApp:
                 self._stop.wait(0.02)
         except KeyboardInterrupt:
             log.info("Ctrl+C: encerrando")
+        return self._exit_code
 
     def _drain_text(self) -> bool:
         try:
@@ -218,12 +280,10 @@ class JarvisApp:
         p = self._p
         assert p is not None
         if p.confirmer.has_pending():
-            verdict = parse_yes_no(text)
-            if verdict is not None:
-                p.confirmer.answer(verdict)
+            p.confirmer.answer_text(text)
             return True
         self._interrupt_request()
-        self._start_request(text)
+        self._start_request(text, self._current_session())
         return True
 
     def _on_talk_key(self, talk: KeyHold) -> None:
@@ -233,11 +293,20 @@ class JarvisApp:
             time.sleep(0.05)                                    # a resposta é por voz/tecla de confirmação; não interromper
             return
         self._interrupt_request()                               # barge-in: falar por cima interrompe o Jarvis
-        session = self._current_session()
-        self.state.go(State.LISTENING)
+        session = self._current_session()                       # CAPTURADO: a emergência cancela ESTE token
+        if not self.state.go(State.LISTENING):
+            log.warning("não consegui entrar em LISTENING (estado %s)", self.state.agent_state.value)
+            return
         t_listen = time.monotonic()
         try:
-            audio = p.mic.record_while(session, talk)
+            if self.cfg.safety.talk_mode == "toggle":
+                while talk():                                   # espera soltar: o toggle é um aperto só
+                    time.sleep(0.02)
+                audio = p.mic.listen_utterance(session, max_wait_s=8.0)
+            else:
+                audio = p.mic.record_while(session, talk)
+                while talk() and not session.cancelled:         # segurou além do limite: espera soltar (B-04)
+                    time.sleep(0.02)
             if audio is None or session.cancelled:
                 self.state.reset()
                 return
@@ -255,20 +324,20 @@ class JarvisApp:
         log.info("fala %.1fs -> texto em %.2fs", heard.duration_s, heard.elapsed_s)
         log.debug("transcrição: %s", text)
         self.bus.publish("transcript", text=text, final=True)
-        if not text:
+        if not text or session.cancelled:                       # emergência no meio: o pedido NÃO nasce
             self.state.reset()
             return
-        self._start_request(text, t_listen)
+        self._start_request(text, session, t_listen)
 
     # ================================================================ pedido (agente)
     def _current_session(self) -> CancelToken:
         with self._session_lock:
             return self._session
 
-    def _start_request(self, text: str, t0: float | None = None) -> None:
-        p = self._p
-        assert p is not None
-        req = self._current_session().child()
+    def _start_request(self, text: str, session: CancelToken, t0: float | None = None) -> None:
+        if session.cancelled:
+            return
+        req = session.child()
         self._req_cancel = req
         self._req_thread = threading.Thread(target=self._request, args=(text, req, t0 or time.monotonic()),
                                             name="request", daemon=True)
@@ -281,12 +350,16 @@ class JarvisApp:
         first = threading.Event()
 
         def on_sentence(sentence: str) -> None:
+            if cancel.cancelled:                                # B-03: nada fala depois de cancelar
+                return
             if not first.is_set():
                 first.set()
                 log.info("latência até a 1ª frase: %.2f s", time.monotonic() - t0)
             p.voice.say(sentence)
 
         try:
+            if p.agent.prepare_session():                       # inatividade: avisa por voz que abriu outra conversa
+                on_sentence("Começando uma nova conversa.")
             result = p.agent.handle(text, cancel, on_sentence)
             p.voice.wait_done(cancel)
             log.info("pedido concluído em %.2f s (%d passos, ferramentas: %s)",
@@ -315,27 +388,92 @@ class JarvisApp:
                 log.warning("a thread do pedido não terminou em 5 s")
         self._req_cancel = None
 
-    # ================================================================ segurança
+    # ================================================================ segurança e supervisão
     def _emergency(self, source: str) -> None:
-        """Parada de emergência: cancela sessão inteira, para a fala, volta ao repouso e abre nova sessão."""
+        """Parada de emergência: cancela a sessão (e tudo que nasceu dela), para a fala e abre uma sessão nova."""
         with self._session_lock:
             old, self._session = self._session, CancelToken()
-        old.cancel(source)
+        old.cancel(source)                                      # PRIMEIRO: nada novo pode começar na sessão antiga
         p = self._p
         if p is not None:
             p.voice.interrupt()
         self.state.reset()
         self.bus.publish("emergency", source=source)
 
-    def _listen_for_answer(self, cancel: CancelToken, timeout_s: float) -> str | None:
-        """Escuta uma resposta curta (Sim/Não) para o ConfirmationBroker."""
+    def _supervise(self) -> None:
+        """Se a thread de atalhos morrer, tenta restaurá-la; sem a tecla de emergência o PC não é controlado."""
+        p = self._p
+        if p is None:
+            return
+        if p.hotkeys.alive or p.hotkeys.ensure_alive():
+            if not self._hotkeys_ok:
+                self._hotkeys_ok = True
+                p.registry.unblock_actions()
+                p.voice.say("Atalhos restaurados.")
+            return
+        if self._hotkeys_ok:
+            self._hotkeys_ok = False
+            p.registry.block_actions("a tecla de emergência deixou de funcionar")
+            self.bus.publish("error", where="hotkeys", text="a tecla de emergência deixou de funcionar")
+            p.voice.say("A tecla de emergência parou de funcionar. Não vou mexer no computador até restaurar.")
+
+    def _listen_for_answer(self, cancel: CancelToken, timeout_s: float, not_before: float) -> str | None:
+        """Escuta uma resposta curta (Sim/Não) para o ConfirmationBroker, ignorando a fala do próprio Jarvis."""
         p = self._p
         if p is None or self._muted:
             return None
-        audio = p.mic.listen_utterance(cancel, max_wait_s=timeout_s)
+        while p.voice.speaking and not cancel.cancelled:        # nunca escutar enquanto o Jarvis fala
+            cancel.wait(0.05)
+        if cancel.cancelled:
+            return None
+        quiet_since = p.voice.idle_since() or time.monotonic()
+        start_at = max(not_before, quiet_since) + 0.4           # margem para o eco da sala morrer
+        audio = p.mic.listen_utterance(cancel, max_wait_s=timeout_s, not_before=start_at)
         if audio is None or cancel.cancelled:
             return None
         try:
-            return p.stt.transcribe(audio, cancel).text
+            return p.stt.transcribe(audio, cancel, beam_size=1).text
         except Cancelled:
             return None
+
+    # ================================================================ configuração em execução
+    def _poll_control(self) -> None:
+        for kind in sorted(control.consume(self.cfg.paths.data)):
+            if kind == "restart":
+                log.info("reinício pedido pelas Configurações")
+                self.request_stop(RESTART_EXIT)
+                return
+            if kind == "reload":
+                self.reload_config()
+
+    def reload_config(self) -> None:
+        """Relê o config.toml e aplica o que dá sem reiniciar. Se o arquivo estiver inválido, mantém a configuração atual."""
+        try:
+            new = cfgmod.load()
+        except ConfigError as exc:
+            log.error("config.toml inválido; mantendo a configuração atual: %s", exc)
+            self.bus.publish("error", where="config", text=str(exc))
+            return
+        self.apply_config(new)
+
+    def apply_config(self, new: Config) -> None:
+        p = self._p
+        if p is None:
+            return
+        changes = self._settings.diff(self.cfg, new)
+        if not changes.any:
+            return
+        # o que vale na hora: cada componente recebe a configuração nova
+        self.cfg = new
+        p.agent.reconfigure(new)
+        p.llm.reconfigure(new)
+        p.registry.reconfigure(new)
+        p.confirmer.set_timeout(new.safety.confirm_timeout_s)
+        p.memory.reconfigure(new.memory)
+        logsetup.set_level(new.logs.level)
+        pending = tuple(sorted(set(self._pending_restart) | set(changes.restart)))
+        self._pending_restart = pending
+        control.write_runtime(new.paths.data, control.Runtime(os.getpid(), self._started,
+                                                              control.config_mtime(cfgmod.CONFIG_FILE), pending))
+        log.info("configuração aplicada: %d na hora; aguardam reinício: %s", len(changes.live), ", ".join(pending) or "nenhuma")
+        self.bus.publish("config_applied", live=list(changes.live), restart=list(pending))

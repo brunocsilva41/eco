@@ -2,6 +2,8 @@
 
     python -m jarvis run            # roda por voz (segure a tecla de falar)
     python -m jarvis run --text     # também aceita comandos digitados no terminal
+    python -m jarvis settings       # tela de Configurações
+    python -m jarvis record         # gravador de voz ("Minha voz")
     python -m jarvis doctor         # confere o ambiente
     python -m jarvis tools          # lista as ferramentas que o agente pode usar
     python -m jarvis config         # mostra a configuração efetiva
@@ -13,7 +15,11 @@ import dataclasses
 import sys
 import threading
 
-from .config import ConfigError, load
+from .win import dpi
+
+dpi.ensure_per_monitor_v2()          # PRIMEIRO: antes de qualquer import que use janelas/captura/coordenadas
+
+from .config import ConfigError, load  # noqa: E402
 
 
 def _out(text: str) -> None:
@@ -30,11 +36,16 @@ def _console_sink(app) -> None:
         elif ev.kind == "reply_text":
             _out(f"  jarvis: {d['text']}")
         elif ev.kind == "action_step" and d.get("status") in ("ok", "error", "denied"):
-            _out(f"  [{d['status']}] {d.get('tool')}: {d.get('result', d.get('text', ''))}")
+            detail = d.get("result") or d.get("text", "")
+            _out(f"  [{d['status']}] {d.get('tool')}: {detail}")
         elif ev.kind == "confirm_request":
             _out(f"  ? CONFIRMAR: {d['text']}  (diga sim/não, Ctrl+Alt+Y / Ctrl+Alt+N, ou digite)")
         elif ev.kind == "emergency":
             _out("  !! PARADA DE EMERGÊNCIA")
+        elif ev.kind == "notice":
+            _out(f"  ! {d.get('text')}")
+        elif ev.kind == "config_applied":
+            _out(f"  configuração aplicada; aguardam reinício: {', '.join(d.get('restart', [])) or 'nenhuma'}")
         elif ev.kind == "error":
             _out(f"  erro ({d.get('where')}): {d.get('text')}")
     app.bus.subscribe(on_event)
@@ -60,20 +71,34 @@ def _cmd_run(args: argparse.Namespace) -> int:
         app.start()
     except StartupError as exc:
         _out(str(exc))
-        _out("Rode `python -m jarvis doctor` para um diagnóstico completo.")
+        _out("Rode `Jarvis.cmd doctor` para um diagnóstico completo.")
         return 2
+    except KeyboardInterrupt:
+        _out("Interrompido durante a partida.")
+        return 130
     _console_sink(app)
     stop = threading.Event()
     if args.text:
         threading.Thread(target=_stdin_reader, args=(app, stop), name="stdin", daemon=True).start()
         _out("Modo texto: digite um comando e Enter. /sair encerra.")
-    _out(f"Jarvis no ar. Segure {cfg.safety.talk_key.upper()} para falar; {cfg.safety.emergency_hotkey.upper()} para parar tudo; Ctrl+C encerra.")
+    _out(f"Jarvis no ar. {cfg.safety.talk_key.upper()} para falar; {cfg.safety.emergency_hotkey.upper()} para parar tudo; Ctrl+C encerra.")
+    code = 0
     try:
-        app.run()
+        code = app.run()
     finally:
         stop.set()
         app.shutdown()
-    return 0
+    return code
+
+
+def _cmd_settings(_: argparse.Namespace) -> int:
+    from .ui.settings_window import main_settings
+    return main_settings()
+
+
+def _cmd_record(_: argparse.Namespace) -> int:
+    from .ui.recorder_window import main_recorder
+    return main_recorder(load())
 
 
 def _cmd_doctor(_: argparse.Namespace) -> int:
@@ -87,17 +112,14 @@ def _cmd_doctor(_: argparse.Namespace) -> int:
     return 1 if bad else 0
 
 
+_RISK = {0: "leitura", 1: "controla", 2: "ARRISCADA"}
+
+
 def _cmd_tools(_: argparse.Namespace) -> int:
-    from .core.events import EventBus
-    from .tools import builtin, notes
-    from .tools.registry import ToolRegistry
-    cfg = load()
-    reg = ToolRegistry(cfg, EventBus())
-    builtin.register_all(reg, cfg)
-    notes.register(reg, cfg)
-    for name in reg.names():
-        spec = reg.get(name)
-        _out(f"{name:24} risco={spec.risk.name:8} {spec.description}")
+    from .tools.catalog import describe_tools
+    for t in describe_tools(load()):
+        state = "" if t.enabled else " (desligada)"
+        _out(f"{t.name:24} {_RISK[t.risk]:9}{state} {t.description}")
     return 0
 
 
@@ -108,10 +130,8 @@ def _cmd_config(_: argparse.Namespace) -> int:
         if dataclasses.is_dataclass(val):
             _out(f"[{sec.name}]")
             for f in dataclasses.fields(val):
-                if f.name in {"launch", "hotkeys"}:
-                    _out(f"  {f.name} = <{len(getattr(val, f.name))} itens>")
-                else:
-                    _out(f"  {f.name} = {getattr(val, f.name)}")
+                v = getattr(val, f.name)
+                _out(f"  {f.name} = " + (f"<{len(v)} itens>" if isinstance(v, (dict, tuple)) and len(v) > 6 else str(v)))
         else:
             _out(f"{sec.name} = {val}")
     return 0
@@ -123,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="roda o assistente")
     run.add_argument("--text", action="store_true", help="aceita também comandos digitados")
     run.set_defaults(fn=_cmd_run)
+    sub.add_parser("settings", help="tela de Configurações").set_defaults(fn=_cmd_settings)
+    sub.add_parser("record", help="gravador de voz (Minha voz)").set_defaults(fn=_cmd_record)
     sub.add_parser("doctor", help="confere o ambiente").set_defaults(fn=_cmd_doctor)
     sub.add_parser("tools", help="lista as ferramentas").set_defaults(fn=_cmd_tools)
     sub.add_parser("config", help="mostra a configuração efetiva").set_defaults(fn=_cmd_config)

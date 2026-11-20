@@ -11,7 +11,7 @@ from .audio.checks import CheckResult, check_audio
 from .config import Config
 from .core.events import EventBus
 from .llm.server import health_ok
-from .tools import builtin, notes
+from .tools import catalog
 from .tools.registry import ToolRegistry
 from .win.hotkeys import HotkeyError, HotkeyListener
 
@@ -87,12 +87,24 @@ def _check_hotkeys(cfg: Config) -> list[CheckResult]:
     return out
 
 
+_CORE_TOOLS = frozenset({
+    "abrir_app", "listar_apps_permitidos", "listar_janelas", "janela_ativa", "focar_janela", "fechar_janela",
+    "digitar_texto", "apertar_atalho", "ver_tela", "listar_controles", "clicar_controle", "hora_atual",
+    "ajustar_volume", "abrir_pasta"})
+
+
 def _check_tools(cfg: Config) -> CheckResult:
     reg = ToolRegistry(cfg, EventBus())
-    builtin.register_all(reg, cfg)
-    notes.register(reg, cfg)
-    names = reg.names()
-    return CheckResult("ferramentas", len(names) >= 10, f"{len(names)} registradas: {', '.join(names)}")
+    failed = catalog.register_everything(reg, cfg)
+    names = set(reg.names())
+    missing = sorted(_CORE_TOOLS - names)
+    ok = not failed and not missing
+    detail = f"{len(names)} registradas"
+    if missing:
+        detail += f"; FALTAM: {', '.join(missing)}"
+    if failed:
+        detail += f"; módulos com falha: {', '.join(failed)}"
+    return CheckResult("ferramentas", ok, detail)
 
 
 def run_doctor(cfg: Config) -> list[CheckResult]:
