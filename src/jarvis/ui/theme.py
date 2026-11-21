@@ -12,14 +12,12 @@ tokens. Uso::
 
 Unidades: layout/QSS em pixels LOGICOS (o Qt 6 ja aplica a escala do monitor); texto em pontos
 (px*72/96), entao acompanha DPI e escala de 100% a 200%. ``dp(n)`` = px logicos inteiros;
-``px(n, widget)`` = px FISICOS (n*devicePixelRatio) para pixmaps nitidos; ``crisp(v, widget)`` alinha
-a grade fisica. DEPRECATED (telas antigas): apply_theme, build_stylesheet, build_settings_stylesheet,
-level_state, state_color, repolish, constantes BG/SURFACE/.../SP1..SP4/RADIUS_*.
+a grade fisica.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Final, Literal
+from typing import Final, Literal
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QFont, QGuiApplication
@@ -250,7 +248,6 @@ class ThemeManager(QObject):
         self._mode: Mode = "system"
         self._effective: Effective = "dark"
         self._app: QApplication | None = None
-        self._legacy = False
 
     @classmethod
     def instance(cls) -> "ThemeManager":
@@ -295,13 +292,9 @@ class ThemeManager(QObject):
 
     def stylesheet(self) -> str:
         from .kit.qss import build_qss
-        css = build_qss(self.palette)
-        if self._legacy:
-            from .kit.legacy_qss import build_legacy_qss
-            css += build_legacy_qss(self.palette)
-        return css
+        return build_qss(self.palette)
 
-    def apply(self, app: QApplication | None = None, *, legacy: bool = False) -> None:
+    def apply(self, app: QApplication | None = None) -> None:
         """Instala estilo Fusion, fonte, QPalette e stylesheet no app e passa a acompanhar o Windows."""
         target = app or QApplication.instance()
         if not isinstance(target, QApplication):
@@ -311,7 +304,6 @@ class ThemeManager(QObject):
             hints = target.styleHints()
             if hasattr(hints, "colorSchemeChanged"):
                 hints.colorSchemeChanged.connect(lambda *_: self.refresh())
-        self._legacy = self._legacy or legacy
         self._effective = self._resolve()
         self._install()
         self.changed.emit(self._effective)
@@ -342,55 +334,3 @@ def repolish(widget: QWidget) -> None:
     style.unpolish(widget)
     style.polish(widget)
     widget.update()
-
-
-# ---------------------------------------------------------------- compatibilidade DEPRECATED
-
-SP1, SP2, SP3, SP4 = 8, 16, 24, 32   # DEPRECATED: grade antiga de 8 px; use SPACE.*
-RADIUS_SM, RADIUS_MD, RADIUS_LG = RADIUS.sm, RADIUS.md, RADIUS.lg   # DEPRECATED
-FONT_FAMILY: Final = TYPE.families[-1]
-FONT_SIZE_BASE, FONT_SIZE_SMALL, FONT_SIZE_TITLE, FONT_SIZE_PHRASE, FONT_SIZE_COUNTDOWN = 10, 9, 14, 22, 40  # pt antigos
-
-
-def __getattr__(name: str) -> Any:
-    """Constantes de cor antigas (BG, TEXT, OK...) resolvem para a paleta ATUAL."""
-    if not name.isupper():       # o import system consulta __path__/__spec__: nao delegue
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    from .kit.legacy_qss import LEGACY_COLORS
-    if name in LEGACY_COLORS:
-        return getattr(pal(), LEGACY_COLORS[name])
-    if name == "STATE_COLORS":
-        return {k: pal().state(k) for k in ("ok", "warn", "error")}
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-def level_state(level: str) -> State:
-    """DEPRECATED. Mapeia o veredito de ``audio_analysis.assess`` para o estado de cor."""
-    from .kit.legacy_qss import LEVEL_STATE
-    return LEVEL_STATE.get(level, "warn")  # type: ignore[return-value]
-
-
-def state_color(state: str) -> str:
-    """DEPRECATED. Cor do estado no tema atual."""
-    return pal().state(state)
-
-
-def build_stylesheet() -> str:
-    """DEPRECATED. Stylesheet base + papeis antigos (role/variant/state) do tema atual."""
-    from .kit.legacy_qss import build_legacy_qss
-    from .kit.qss import build_qss
-    return build_qss(pal()) + build_legacy_qss(pal(), extras=False)
-
-
-def build_settings_stylesheet() -> str:
-    """DEPRECATED. Estilos extras das telas antigas (cartao, nav, tabelas, selos)."""
-    from .kit.legacy_qss import build_legacy_qss
-    return build_legacy_qss(pal(), extras=True, base=False)
-
-
-def apply_theme(app: QApplication) -> None:
-    """DEPRECATED. Aplica o novo sistema forcando tema ESCURO (as telas antigas foram feitas so para ele)."""
-    mgr = ThemeManager.instance()
-    mgr._mode = "dark"
-    mgr._effective = "dark"
-    mgr.apply(app, legacy=True)

@@ -150,6 +150,13 @@ class PhraseBook:
         if not 0 <= index < limit:
             raise PhraseError(f"Posição inválida: {index}.")
 
+    def validate(self, text: str, ignore: int | None = None) -> str:
+        """Devolve a frase normalizada se for válida (tamanho, caracteres, sem duplicata) ou levanta
+        ``PhraseError``. Não altera nada; ``ignore`` é a posição que está sendo editada."""
+        clean = validate_phrase(text)
+        self._check_unique(clean, ignore=ignore)
+        return clean
+
     def add(self, text: str, index: int | None = None) -> int:
         """Insere a frase (no fim se ``index`` for None). Devolve a posição."""
         clean = validate_phrase(text)
