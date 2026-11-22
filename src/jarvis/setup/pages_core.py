@@ -150,6 +150,10 @@ class _Job(QObject):
     finished = Signal(object)          # DownloadError | None | tuple (importação)
 
 
+class _Scan(QObject):
+    done = Signal(object)              # (achados, profundo)
+
+
 class ModelsPage(Page):
     key = "models"
 
@@ -194,10 +198,26 @@ class ModelsPage(Page):
         self.btn_off.clicked.connect(self.pick_offline)
         self.btn_ver = Button(S.M_VERIFY, icon_name="check")
         self.btn_ver.clicked.connect(self.verify_all)
-        for b in (self.btn_dl, self.btn_pause, self.btn_off, self.btn_ver):
+        self.btn_use = Button(S.M_FOUND_USE, variant="primary", icon_name="check")
+        self.btn_use.clicked.connect(self.use_found)
+        self.btn_use.setVisible(False)
+        self.btn_deep = Button(S.M_SCAN_DEEP, icon_name="folder")
+        self.btn_deep.clicked.connect(lambda: self._start_scan(deep=True))
+        self._scan = _Scan()
+        self._scan.done.connect(self._on_scan_done)
+        self._scanning = False
+        self._found: dict[str, list[Path]] = {}
+        self._scan_cancel = threading.Event()
+        self._scanned_once = False
+        for b in (self.btn_use, self.btn_dl, self.btn_pause):
             btns.addWidget(b)
         btns.addStretch(1)
         self.col.addLayout(btns)
+        btns2 = QHBoxLayout()                              # ações secundárias em outra linha: nenhum rótulo fica cortado
+        for b in (self.btn_off, self.btn_deep, self.btn_ver):
+            btns2.addWidget(b)
+        btns2.addStretch(1)
+        self.col.addLayout(btns2)
 
         self.sel = QVBoxLayout()
         self.sel.setSpacing(SPACE.md)
@@ -280,11 +300,64 @@ class ModelsPage(Page):
         self.btn_dl.setText(S.M_RESUME if part else S.M_DOWNLOAD)
         self.btn_dl.setVisible(bool(miss) and not self._running())
         self.btn_off.setVisible(bool(miss) and not self._running())
+        self.btn_deep.setVisible(bool(miss) and not self._running() and not self._scanning)
+        self.btn_use.setVisible(bool(miss) and bool(self._found) and not self._running() and not self._scanning)
         self.changed.emit()
 
     def on_enter(self) -> None:
         self.ctx.state.components = self._selected()
         self.refresh()
+        if self.missing() and not self._scanned_once:
+            self._scanned_once = True
+            self._start_scan(deep=False)                    # procura sozinho o que o usuário já tem
+
+    # ---- modelos que já existem no PC
+    def _start_scan(self, deep: bool) -> None:
+        if self._scanning or self._running():
+            return
+        miss = self.missing()
+        if not miss:
+            return
+        from . import discover
+        self._scanning = True
+        self._found = {}
+        self._scan_cancel = threading.Event()
+        self._banner("ok", S.M_SCANNING)
+        self.btn_dl.setEnabled(False)
+        self.btn_deep.setVisible(False)
+        root, cancel = self.ctx.root, self._scan_cancel
+
+        def target() -> None:
+            try:
+                found = discover.scan(miss, deep=deep, cancel=cancel, install_root=root)
+            except Exception:  # noqa: BLE001 - a busca é um extra: nunca derruba o assistente
+                log.exception("falha na busca de modelos existentes")
+                found = {}
+            self._scan.done.emit((found, deep))
+        threading.Thread(target=target, name="setup-scan", daemon=True).start()
+
+    def _on_scan_done(self, res) -> None:
+        found, deep = res
+        self._scanning = False
+        self.btn_dl.setEnabled(True)
+        self._found = found
+        miss = {e.path: e for e in self.missing()}
+        if found:
+            size = sum(miss[p].size for p in found if p in miss)
+            self._banner("ok", S.M_FOUND.format(n=len(found), size=human_bytes(size)))
+        else:
+            self._banner("warn", S.M_FOUND_NONE, "", S.M_FOUND_NONE_TODO if not deep else "")
+        self.refresh()
+
+    def use_found(self) -> None:
+        if self._running() or not self._found:
+            return
+        from . import discover
+        entries = self.entries()
+        found = dict(self._found)
+        self._begin()
+        root, cancel = self.ctx.root, self.cancel
+        self._run(lambda cb: ("found", *discover.import_found(found, entries, root, cb, cancel)))
 
     def can_advance(self) -> bool:
         return not self._running()
@@ -304,6 +377,7 @@ class ModelsPage(Page):
 
     def teardown(self) -> None:
         self.cancel.set()
+        self._scan_cancel.set()
 
     # ---- execução
     def _running(self) -> bool:
@@ -424,6 +498,15 @@ class ModelsPage(Page):
                 self._banner("ok", S.M_OFFLINE_DONE.format(n=len(imported)))
             else:
                 self._banner("warn", S.M_OFFLINE_NONE)
+            return
+        if isinstance(res, tuple) and res and res[0] == "found":
+            _tag, imported, missing, copied = res
+            self._found = {}
+            if imported:
+                self._banner("ok", S.M_FOUND_DONE.format(n=len(imported), copied=len(copied)),
+                             S.M_FOUND_PARTIAL.format(left=len(missing)) if missing else "", "")
+            else:
+                self._banner("warn", S.M_FOUND_NONE)
             return
         if isinstance(res, tuple) and res and res[0] == "verify":
             bad = res[1]

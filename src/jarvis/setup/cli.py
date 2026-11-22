@@ -6,6 +6,9 @@
                                               baixa e confere os modelos, sem janela (usado pelo instalador)
     Jarvis.cmd setup --offline PASTA_OU_ZIP   importa modelos de um pacote offline (confere o SHA-256)
     Jarvis.cmd setup --make-pack PASTA        cria um pacote offline a partir dos modelos já instalados
+    Jarvis.cmd setup --scan [--deep] [--use-found]
+                                              procura modelos que você JÁ TEM no PC (pastas comuns; --deep = discos inteiros);
+                                              --use-found confere o SHA-256 e liga/copia para a instalação
     Jarvis.cmd setup --status                 mostra o estado dos arquivos de modelo
     Jarvis.cmd setup --capture PASTA          (desenvolvimento) grava PNG de todas as telas, offscreen
 Códigos de saída: 0 ok, 2 uso/arquivo, 3 sem internet, 4 falha de download/integridade, 5 disco cheio, 130 cancelado.
@@ -57,10 +60,47 @@ def _progress_printer():
     return cb
 
 
+def _adopt_existing(entries, root: Path, deep: bool = False, use: bool = True) -> int:
+    """Procura os modelos que faltam no PC e (se `use`) traz os que conferem. Devolve quantos faltam depois."""
+    from . import discover
+    missing = [e for e in entries if not quick_present(e, root)]
+    if not missing:
+        return 0
+    _out(f"Procurando {len(missing)} arquivo(s) de modelo que você já possa ter no computador" + (" (discos inteiros, pode demorar)..." if deep else "..."))
+    found = discover.scan(missing, deep=deep, install_root=root)
+    for e in missing:
+        for c in found.get(e.path, [])[:1]:
+            _out(f"  achei: {Path(e.path).name} -> {c}")
+    if not found:
+        _out("  nenhum modelo existente encontrado.")
+        return len(missing)
+    if not use:
+        return len(missing) - len(found)
+    imported, still, copied = discover.import_found(found, missing, root, _progress_printer())
+    for p in imported:
+        _out(f"  usado: {p}" + (" (copiado)" if p in copied else " (ligado, sem espaço extra)"))
+    return len(still)
+
+
+def cmd_scan(components: list[str], root: Path, deep: bool, use: bool) -> int:
+    from .config_io import apply_stt_choice
+    man = load_manifest(root)
+    entries = man.files_for(components)
+    left = _adopt_existing(entries, root, deep, use)
+    if use and not left:
+        if root == ROOT:                                          # --root é só para teste: não mexe na configuração real
+            apply_stt_choice(components, man)
+        _out("Todos os modelos já estavam no PC e foram conferidos (SHA-256).")
+    elif left:
+        _out(f"{left} arquivo(s) ainda faltam (use --fetch para baixar só o que falta).")
+    return 0 if not left else 4
+
+
 def cmd_fetch(components: list[str], root: Path) -> int:
     from .config_io import apply_stt_choice
     man = load_manifest(root)
     entries = man.files_for(components)
+    _adopt_existing(entries, root, deep=False, use=True)          # aproveita o que já existe antes de baixar
     _out(f"Baixando/conferindo {len(entries)} arquivo(s), {human_bytes(sum(e.size for e in entries))} no total...")
     try:
         Downloader(root, _progress_printer()).fetch_all(entries)
@@ -106,6 +146,9 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--components", default=None, help="lista separada por vírgula (vision,voice,stt_small,stt_base)")
     ap.add_argument("--offline", metavar="PASTA_OU_ZIP", help="importa modelos de um pacote offline")
     ap.add_argument("--make-pack", metavar="PASTA", help="cria um pacote offline com os modelos instalados")
+    ap.add_argument("--scan", action="store_true", help="procura modelos que você já tem no PC")
+    ap.add_argument("--deep", action="store_true", help="com --scan: procura nos discos inteiros")
+    ap.add_argument("--use-found", action="store_true", help="com --scan: confere e traz os modelos achados")
     ap.add_argument("--status", action="store_true", help="mostra o estado dos modelos")
     ap.add_argument("--capture", metavar="PASTA", help="(dev) grava PNG de todas as telas, offscreen")
     ap.add_argument("--theme", default="dark", choices=("dark", "light"))
@@ -123,6 +166,8 @@ def run_setup(ns: argparse.Namespace) -> int:
         done = make_offline_pack(Path(ns.make_pack), man.files_for(list(man.components)), root)
         _out(f"Pacote offline com {len(done)} arquivo(s) em {ns.make_pack}")
         return 0 if done else 2
+    if ns.scan:
+        return cmd_scan(_components(ns.components, root), root, ns.deep, ns.use_found)
     if ns.status:
         return cmd_status(_components(ns.components, root), root)
     if ns.capture:

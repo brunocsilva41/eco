@@ -5,6 +5,11 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 ## [Não lançado]
 - Licença do projeto ainda pendente de definição.
 
+## [0.1.1] - 2026-11-22
+### Corrigido
+- **Assistente de instalação não encontrava modelos já existentes no PC.** Agora ele procura sozinho (nome e tamanho, depois confere o SHA-256) em pastas comuns, instalações anteriores, cache do Hugging Face, LM Studio e Ollama; botão «Procurar no computador inteiro» para varrer os discos. Os arquivos conferidos são ligados à instalação por link físico (sem ocupar espaço extra) ou copiados quando estão em outro disco. `Jarvis.cmd setup --scan [--deep] [--use-found]` faz o mesmo sem janela; `--fetch` também aproveita o que já existe antes de baixar.
+- Botões da etapa de modelos reorganizados (rótulos não são mais cortados).
+
 ## [0.1.0] - 2026-11-22
 Primeira versão. Desenvolvida entre 2026-11-19 e 2026-11-22 (33 commits).
 
