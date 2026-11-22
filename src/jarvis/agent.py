@@ -13,8 +13,10 @@ thread de trabalho, é cancelável e não é reentrante.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -25,7 +27,7 @@ from .core.cancel import CancelToken
 from .core.events import EventBus, State
 from .core.state import StateMachine
 from .core.text import SentenceSplitter
-from .llm.client import ContextOverflow, LlmClient, LlmError, Reply, TruncatedReply, image_content
+from .llm.client import ContextOverflow, LlmClient, LlmError, Reply, ToolCall, TruncatedReply, image_content
 from .memory import Memory, MemoryError_, Session
 from .tools.registry import ToolRegistry, ToolResult
 
@@ -34,6 +36,7 @@ log = logging.getLogger(__name__)
 SYSTEM_PROMPT = """Você é o Jarvis, o assistente de voz local do Bruno, no computador dele. Fale sempre em português do Brasil.
 Suas respostas serão FALADAS: no máximo 2 frases curtas, naturais, sem markdown, listas, emojis ou links.
 Para agir no computador use SOMENTE as ferramentas fornecidas. Se faltar ferramenta, diga com franqueza que não consegue.
+Hora, janela ativa, volume, conteúdo da tela e lista de arquivos ou apps: NUNCA responda de memória nem estime; chame a ferramenta (hora_atual, janela_ativa, ver_tela...) e use o resultado.
 Nunca diga que fez algo sem ter chamado a ferramenta e recebido o resultado. Confirme em uma frase o que de fato aconteceu.
 Se uma ferramenta disser que o resultado é desconhecido ou que passou do tempo, NÃO repita a ação: verifique antes ou avise o Bruno.
 Se o pedido for ambíguo, faça uma pergunta curta em vez de adivinhar. Ações perigosas pedem confirmação do Bruno; isso é automático.
@@ -47,6 +50,20 @@ _SAY_FULL = "A conversa ficou grande demais para continuar. Já resumi o que fiz
 _SAY_CUT = "Minha resposta ficou longa demais e foi cortada; nada foi executado. Peça de forma mais curta."
 _SAY_DB = "Tive um problema com a minha memória de conversas. Vou continuar sem lembrar desta conversa."
 _SAY_PARTIAL = "Parei aqui porque a resposta ficou longa."
+
+# Perguntas inequívocas e sem risco cujo dado só vale se vier da ferramenta: o modelo de 4B inventa a resposta se puder.
+_FORCED = (
+    (re.compile(r"\bque\s+horas?\b|\bhoras?\s+(?:s[aã]o|e)\b|\bqual\s+(?:[ée]\s+)?(?:a\s+)?(?:hora|data)\b|\bque\s+dia\s+[ée]\s+hoje\b|\bdata\s+de\s+hoje\b", re.I), "hora_atual"),
+    (re.compile(r"\b(?:qual|que)\s+(?:[ée]\s+)?(?:a\s+)?janela\b.*\b(?:ativa|aberta|foco|frente)\b|\bjanela\s+ativa\b|\bem\s+que\s+janela\b", re.I), "janela_ativa"),
+)
+
+
+def forced_tool(user_text: str) -> str | None:
+    for pattern, name in _FORCED:
+        if pattern.search(user_text):
+            return name
+    return None
+
 
 _WEEKDAYS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")
 
@@ -75,6 +92,8 @@ class _Round:
     overflow_retried: bool = False
     steps: int = 0
     final: str = ""
+    last_ok: bool = False
+    last_message: str = ""
     done: bool = False
 
     def finish(self, text: str, speak: bool = True) -> None:
@@ -118,6 +137,13 @@ class Agent:
         """(tokens do prompt fixo: sistema + esquemas das ferramentas ligadas, n_ctx real). Para o doctor e a partida."""
         return self._ctx.fixed_tokens(self._system_prompt(), self._registry.openai_tools()), self._llm.n_ctx()
 
+    def warmup(self, cancel: CancelToken) -> float:
+        """Processa o prompt fixo (sistema + ferramentas) uma vez para o cache do servidor; o 1º pedido real não paga ~30 s."""
+        t0 = time.monotonic()
+        self._llm.chat([{"role": "system", "content": self._system_prompt()}, {"role": "user", "content": "Olá"}],
+                       cancel, tools=self._registry.openai_tools(), max_tokens=1)
+        return time.monotonic() - t0
+
     def handle(self, user_text: str, cancel: CancelToken, on_sentence: Callable[[str], None]) -> AgentResult:
         """Processa um pedido. Levanta Cancelled se cancelado; qualquer outra falha vira fala (nunca silêncio)."""
         started = time.monotonic()
@@ -154,8 +180,24 @@ class Agent:
                 rnd.session = sessions.get(session.id) or session
         return rnd
 
+    def _run_direct(self, rnd: _Round, name: str, cancel: CancelToken) -> None:
+        """Pedido inequívoco e sem risco (hora, janela ativa): executa a ferramenta SEM o modelo e fala o resultado dela.
+        O llama-server desta versão ignora tool_choice e o 4B inventa a resposta (e imita as inventadas do histórico)."""
+        log.info("atalho direto: %s (sem passar pelo modelo)", name)
+        rnd.steps += 1
+        self._state.go(State.THINKING)
+        reply = Reply(tool_calls=[ToolCall(f"call_{uuid.uuid4().hex[:12]}", name, "{}")])
+        self._persist_assistant(rnd, reply)
+        self._run_tools(rnd, reply, cancel)
+        if rnd.last_ok and rnd.last_message:
+            self._memory.sessions.append(rnd.session.id, "assistant", rnd.last_message, untrusted=rnd.tainted)
+            rnd.finish(rnd.last_message)
+
     def _run(self, rnd: _Round, cancel: CancelToken) -> None:
         max_steps = self._cfg.safety.max_agent_steps
+        direct = forced_tool(rnd.user_text)
+        if direct and any(t["function"]["name"] == direct for t in rnd.tools):
+            self._run_direct(rnd, direct, cancel)
         while not rnd.done and rnd.steps < max_steps:
             cancel.raise_if_cancelled()
             rnd.steps += 1
@@ -235,6 +277,7 @@ class Agent:
                 return
             rnd.tools_used.append(call.name)
             result = self._registry.execute(call.name, call.arguments, cancel, memory=self._memory, tainted=rnd.tainted)
+            rnd.last_ok, rnd.last_message = result.ok, result.message
             if result.untrusted:
                 rnd.tainted = True                                     # daqui em diante toda ação exige confirmação forte
             # guarda o corpo SEM cerca (a cerca é aplicada na montagem do prompt, depois do corte)
@@ -246,7 +289,9 @@ class Agent:
     # ------------------------------------------------------------------ util
     def _system_prompt(self) -> str:
         t = time.localtime()
-        return f"{SYSTEM_PROMPT}\nAgora: {_WEEKDAYS[t.tm_wday]}, {time.strftime('%d/%m/%Y, %H:%M', t)}."
+        # Só a DATA: o prompt precisa ficar idêntico durante o dia, senão o llama-server refaz o prompt inteiro
+        # (~4000 tokens, ~30 s na RX 580) a cada minuto. A hora exata vem da ferramenta hora_atual.
+        return f"{SYSTEM_PROMPT}\nHoje: {_WEEKDAYS[t.tm_wday]}, {time.strftime('%d/%m/%Y', t)}."
 
     @staticmethod
     def _tool_text(name: str, result: ToolResult) -> str:

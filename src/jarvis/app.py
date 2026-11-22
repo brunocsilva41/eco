@@ -132,7 +132,7 @@ class JarvisApp:
             if failed:
                 log.error("módulos de ferramentas com falha: %s", ", ".join(failed))
 
-            server = LlamaServer(cfg, on_event=lambda kind, text: self.bus.publish("notice", kind=kind, text=text))
+            server = LlamaServer(cfg, on_event=lambda kind, text: self.bus.publish("notice", notice_kind=kind, text=text))
             stack.callback(server.stop)
             llm = LlmClient(cfg, api_key=lambda: server.api_key)
             speaker = Speaker(cfg.audio, cfg.tts, self.bus)
@@ -159,8 +159,16 @@ class JarvisApp:
             if errors:
                 raise StartupError("não consegui iniciar:\n - " + "\n - ".join(errors))
             self._check_prompt_budget(agent, llm)
+            threading.Thread(target=self._warmup, args=(agent,), name="jarvis-warmup", daemon=True).start()
             self._start_hotkeys()
             stack.pop_all()                                             # tudo certo: o shutdown() assume a limpeza
+
+    def _warmup(self, agent: Agent) -> None:
+        """Aquece o cache do servidor com o prompt fixo (o 1º pedido real não espera o processamento dele)."""
+        try:
+            log.info("aquecimento do prompt fixo: %.1f s", agent.warmup(CancelToken()))
+        except Exception:  # noqa: BLE001 - só otimização
+            log.warning("aquecimento do prompt falhou (ignorado)", exc_info=True)
 
     def _check_prompt_budget(self, agent: Agent, llm: LlmClient) -> None:
         """Mede (com o tokenizador do modelo) quanto do contexto o prompt FIXO ocupa: sistema + esquemas das ferramentas."""
@@ -176,7 +184,7 @@ class JarvisApp:
             raise StartupError(f"o prompt fixo (sistema + ferramentas) ocupa {fixed} dos {n_ctx} tokens de contexto, sobrando "
                                f"{max(room, 0)} para a conversa. Aumente llm.ctx (Configurações) ou desligue ferramentas que não usa.")
         if pct > 50:
-            self.bus.publish("notice", kind="context_tight", text=f"As ferramentas ocupam {pct:.0f}% do contexto; "
+            self.bus.publish("notice", notice_kind="context_tight", text=f"As ferramentas ocupam {pct:.0f}% do contexto; "
                              "considere aumentar llm.ctx ou desligar ferramentas.")
 
     def _load_models(self, server: LlamaServer, stt: Transcriber, tts: Synthesizer, mic: Microphone) -> list[str]:
