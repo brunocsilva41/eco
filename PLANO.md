@@ -60,7 +60,20 @@ Projetos prontos para estudar (não adotar às cegas; só lemos resumos): Jarvis
 **Fase 2 — Voz.** faster-whisper + Piper + VAD, com tecla para falar. Pronto = fala->texto->fala em menos de ~5 s para frases curtas; medir WER em 20 frases do Bruno.
 **Fases I0–I5 — Ilha do Jarvis (interface "Dynamic Island").** Entram DEPOIS da Fase 2 (voz). Spec completa e decisões do Bruno em `docs/ILHA-SPEC.md` (v0.2). Itens [P]/[R] precisam de prova na máquina dele.
 - Regras base: janela Qt/PySide6 em processo separado do núcleo (IPC local em 127.0.0.1); por cima de tudo no topo central do monitor principal; sem roubar foco (`WS_EX_NOACTIVATE`); renderização por CPU (QPainter) a 30 fps, timer parado em repouso, para não disputar a VRAM com o LLM; 3 tamanhos (pequeno/médio/grande) com troca automática e manual; avisos e confirmação Sim/Não dentro da ilha; espectro de voz (microfone e áudio do TTS) além do círculo de pontos.
-- **I0** Protótipo visual: janela, 3 tamanhos, pontos + espectro com áudio de teste, tokens de design. Pronto = vídeo/capturas por tamanho e estado + CPU/RAM medidos (meta: <2% em repouso, <8% ativa; a medir).
+- **I0** Protótipo visual: janela, 3 tamanhos, pontos + espectro com áudio de teste, tokens de design. Pronto = vídeo/capturas por tamanho e estado + CPU/RAM medidos (meta: <2% em repouso, <8% ativa).
+  - **I0 FEITA (2026-11-22; commits 89b5776 e seguinte), aguardando revisão visual do Bruno.** Pacote `src/jarvis/ui/island/` (window, tokens, waves, micicon, dsp, bridge, winapi, demo, strings); `Jarvis.cmd island-demo [--capture PASTA | --measure S | --seconds N | --reduce-motion]`. Colada ao topo central do monitor principal (só os cantos de baixo redondos), sem moldura, sempre no topo, sem foco (WS_EX_NOACTIVATE + Tool + DoesNotAcceptFocus); a janela tem o tamanho exato da pílula, então fora dela o clique passa. Crescer/encolher 260 ms (mola leve ao crescer, ease-out ao encolher; instantâneo com 'reduzir movimento'). Esconde com app em tela cheia (decisão do Bruno). Eventos do `EventBus` ligados pela `bridge.py` (contrato pronto; o demo já usa o EventBus real com eventos falsos; ligação ao processo real = I1).
+  - Cor de destaque: âmbar do tema; troca em UMA constante (`ACCENT_ATTR`/`ACCENT_OVERRIDE`, `ui/island/tokens.py`). F9 só como constante (`HOTKEY`); registro global = I3. Cantos grandes são exceção pedida pelo Bruno ao DESIGN.md.
+  - Layouts (px lógicos, grade de 4; detalhe em `tokens.py` e `docs/ILHA-SPEC.md` v0.3):
+
+    | Tamanho | Medida | Conteúdo |
+    |---|---|---|
+    | Compacta (repouso) | 208x36 | mic 20, rótulo do estado em texto, cronômetro só em ACTING, 6 barras, ponto de status |
+    | Média (conversa) | 380x64 | mic 24, rótulo ('Executando: ...'), cronômetro, última frase truncada, 14 barras ao vivo |
+    | Grande (expandida) | 520x200 | cabeçalho (estado, chips Equilíbrio/Mudo/YOLO com contagem, cronômetro), espectro de 49 barras, fala e resposta (3 linhas, rolagem), ação atual (ferramenta, alvo, ok/erro/negado), uso do contexto, botões Sim/Não, Parar, Mudo, Configurações |
+
+  - Ícone de microfone próprio (QPainterPath, traço 2 px, 4 estados: repouso, ouvindo com anel, mudo, erro) e ondas (barras simétricas, ataque 15 ms, queda 75 ms, respiração em silêncio, gradiente sutil, 60 fps só em ouvir/falar). Para falar usa a energia real da saída (`tts_rms`/evento `level`); no demo, áudio sintético.
+  - Custo medido por quadro (tick + pintura, offscreen, camada estática em cache): compacta 0,7 ms; média 0,6 a 1,2 ms; grande 1,0 ms. A 60 fps em voz = 6 a 7% de 1 núcleo (0,3% da máquina de 24 núcleos); estados sem voz rodam a 30 fps (~2 a 3%); repouso sem timer de pintura. A medição por CPU total do processo ficou inflada porque a máquina estava a ~95% de carga por outros processos: ver STATUS.
+
 - **I1** Ligar ao núcleo por IPC: estados reais e transcrição.
 - **I2** Avisos de ação e confirmação Sim/Não por clique e por voz (timeout = NÃO).
 - **I3** Gatilhos personalizáveis: palavra de ativação "Jarvis" (openWakeWord; gravar amostras reais), combinação de teclas (`RegisterHotKey`), API local com token; clique.
@@ -92,3 +105,4 @@ llama.cpp (GitHub), discussão de benchmark RX 580 (ggml-org/llama.cpp #23109), 
 - Núcleo auditado 2×; primeira execução real do `run --text` feita (bugs de partida, cache de prompt e alucinação de hora/janela corrigidos; atalho direto para hora/janela).
 - UI: LevelMeter corrigido; itens baixos da Auditoria-2 (N-17, N-19, clique por coordenadas verificado) tratados.
 - (b) feito: ctx 12288 (prompt fixo 34%, VRAM ~5,8 GB). Próximo:  Ilha I0-I5 com o OK do Bruno; WER real após `Jarvis.cmd record`. Detalhes em Shared\jarvis\STATUS.md.
+- 2026-11-22: fala 0,9x + normalizador pt-BR; visão e mouse (clicar_em com votação, rolar_tela); Ilha I0 pronta, I1 (ao vivo) em andamento.
