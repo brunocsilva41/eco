@@ -36,8 +36,39 @@ def _find_system_exe(name: str, dirs: tuple[Path, ...]) -> Path | None:
     return None
 
 
+def _default_browser_exe() -> str | None:
+    """Executável do navegador padrão do Windows (HKCU UrlAssociations https -> ProgId -> comando). Só aceita .exe existente
+    dentro de Program Files, Program Files (x86) ou %LocalAppData%; qualquer outra coisa vira None (fora da allowlist)."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice") as k:
+            prog_id = str(winreg.QueryValueEx(k, "ProgId")[0])
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, prog_id + r"\shell\open\command") as k:
+            command = str(winreg.QueryValueEx(k, "")[0])
+    except OSError:
+        return None
+    m = re.match(r'\s*"([^"]+)"', command) or re.match(r"\s*(\S+\.exe)", command, re.I)
+    if not m:
+        return None
+    exe = Path(m.group(1))
+    roots = [os.environ.get(v) for v in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData")]
+    allowed = [Path(r).resolve() for r in roots if r]
+    try:
+        resolved = exe.resolve()
+    except OSError:
+        return None
+    if resolved.suffix.lower() != ".exe" or not resolved.is_file() or not any(a in resolved.parents for a in allowed):
+        return None
+    return str(resolved)
+
+
 def _resolve_target(name: str, target: str, dirs: tuple[Path, ...]) -> str | None:
     """Alvo da configuração -> caminho absoluto (ou URI de esquema permitido). None = fora da allowlist."""
+    if target.strip().lower() == "default-browser":
+        found_browser = _default_browser_exe()
+        if found_browser is None:
+            log.warning("apps.launch: %r -> não achei o navegador padrão em Program Files/LocalAppData; ignorado", name)
+        return found_browser
     scheme = _URI.match(target)
     if scheme:
         if scheme.group(1).lower() not in ALLOWED_URI_SCHEMES:

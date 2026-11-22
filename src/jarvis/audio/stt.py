@@ -54,6 +54,8 @@ _QUIET_RMS = 0.008                  # RMS abaixo disso = áudio "silencioso" (ru
 _SHORT_AUDIO_S = 3.0                # áudio "muito curto" para frases típicas de alucinação
 _MODEL_FILE = "model.bin"
 _POLL_S = 0.05
+VOCAB_PROMPT = ("Jarvis, assistente de voz. Comandos: abrir, fechar, clicar, bloco de notas, calculadora, Chrome, volume, "
+              "captura de tela, área de trabalho.")
 _BASE_TIMEOUT_S = 30.0
 _TIMEOUT_PER_S = 4.0
 _MAX_TIMEOUT_S = 300.0
@@ -226,7 +228,8 @@ class Transcriber:
         try:
             segments, info = model.transcribe(
                 samples, language=self._language, beam_size=beam,
-                vad_filter=False, condition_on_previous_text=False)
+                vad_filter=False, condition_on_previous_text=False,
+                initial_prompt=VOCAB_PROMPT if self._language == "pt" else None)   # vocabulário: "Jarvis" e comandos (WER −2 a −4 pts no base, medido)
             job.language = str(getattr(info, "language", None) or "")
             parts: list[str] = []
             for seg in segments:

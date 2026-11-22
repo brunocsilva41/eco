@@ -129,6 +129,8 @@ class AppsCfg:
         "explorador de arquivos": "explorer.exe",
         "paint": "mspaint.exe",
         "configurações": "ms-settings:",
+        "navegador": "default-browser",                  # o navegador padrão do Windows (resolvido na hora, só em Program Files/LocalAppData)
+        "edge": r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     })
     hotkeys: tuple[str, ...] = (                     # atalhos que o agente pode apertar (o resto é recusado)
         "ctrl+c", "ctrl+v", "ctrl+x", "ctrl+z", "ctrl+y", "ctrl+a", "ctrl+s", "ctrl+f",
