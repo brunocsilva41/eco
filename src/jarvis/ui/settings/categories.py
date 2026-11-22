@@ -39,14 +39,14 @@ CATEGORIES: tuple[Category, ...] = (
         _S("limits", ("safety.max_agent_steps", "safety.tool_timeout_s"), 2),
     )),
     Category("voice", "listen", (schema.G_VOICE,), (
-        _S("voice", ("tts.voice_onnx", "tts.voice_json")),
+        _S("voice", ("tts.voice_onnx", "tts.voice_json", "tts.device")),
         _S("speech", ("tts.length_scale", "tts.volume"), 2),
         _S("output", ("audio.output_device",)),
     )),
     Category("my_voice", "mic"),
     Category("listening", "ear", (schema.G_STT,), (
         _S("mic", ("audio.input_device",)),
-        _S("model_stt", ("stt.model_dir", "stt.language", "stt.compute_type")),
+        _S("model_stt", ("stt.device", "stt.gpu_model", "stt.model_dir", "stt.language", "stt.compute_type")),
         _S("detect", ("audio.vad_threshold", "audio.end_silence_ms", "audio.min_speech_ms",
                       "audio.max_utterance_s", "audio.pre_roll_ms")),
         _S("perf", ("stt.cpu_threads", "stt.beam_size"), 2),
@@ -54,7 +54,7 @@ CATEGORIES: tuple[Category, ...] = (
     Category("llm", "brain", (schema.G_LLM,), (
         _S("llm_model", ("llm.model", "llm.mmproj", "llm.reasoning_off")),
         _S("llm_work", ("llm.ctx", "llm.ngl", "llm.temperature", "llm.max_tokens")),
-        _S("llm_power", ("llm.sleep_idle_s", "llm.mmap"), 2),
+        _S("llm_power", ("llm.device", "llm.mmproj_device", "llm.sleep_idle_s", "llm.mmap"), 2),
         _S("llm_net", ("llm.port", "llm.host", "llm.request_timeout_s", "llm.startup_timeout_s"), 2),
         _S("vision", ("vision.max_side_px", "vision.jpeg_quality"), 2),
     )),

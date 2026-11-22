@@ -63,6 +63,8 @@ class SttCfg:
     cpu_threads: int = 6                             # 6 threads: 9% mais lento que 12 mas 45% menos CPU (medido; regra: <10% = menos CPU)
     beam_size: int = 5
     language: str = "pt"
+    device: str = "auto"                             # "auto" (GPU se der, senão CPU) | "gpu" | "cpu". GPU = whisper.cpp Vulkan (0,87 s/frase com o small; CPU faster-whisper base 0,94 s, small 2,5 s)
+    gpu_model: Path = ROOT / "models" / "whisper" / "ggml-small.bin"   # modelo ggml do motor GPU
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,7 @@ class TtsCfg:
     voice_onnx: Path = ROOT / "models" / "piper-faber" / "pt_BR-faber-medium.onnx"
     voice_json: Path = ROOT / "models" / "piper-faber" / "pt_BR-faber-medium.onnx.json"
     volume: float = 1.0
+    device: str = "cpu"                              # "cpu" | "auto" | "gpu". MEDIDO: CPU vence (DirectML 2,7x mais lento em frase curta, 27% em longa); "gpu" cai para a CPU com aviso
     length_scale: float | None = None                # velocidade: <1 mais rápido, >1 mais lento; None = padrão da voz
 
 
@@ -81,6 +84,8 @@ class LlmCfg:
     port: int = 8089
     ctx: int = 8192
     ngl: int = 99
+    device: str = "auto"                             # "auto" (GPU; se o servidor não subir, cai para CPU com aviso) | "gpu" | "cpu" (ngl 0: 6,5 tok/s e 165 CPU-s contra 21,8 tok/s e 5 CPU-s na GPU)
+    mmproj_device: str = "auto"                      # visão: "auto"/"gpu" (7,6 s por imagem) | "cpu" (40,8 s e 72 CPU-s; economiza ~0,77 GB de VRAM)
     sleep_idle_s: int = 600                          # ocioso por este tempo, o servidor DESCARREGA o modelo (libera ~5 GB de VRAM e ~2,5 GB de RAM; volta em ~6 s no próximo pedido). 0 = nunca
     mmap: bool = False                               # False = carrega sem mmap (RAM do servidor cai de ~2,9 GB para ~0,5 GB com tudo na GPU); True = mmap do llama.cpp
     startup_timeout_s: float = 120.0
@@ -324,6 +329,9 @@ def validate(cfg: Config) -> list[str]:
         p.append("llm.ctx fora de 512..32768")
     if not 0 <= l.ngl <= 999:
         p.append("llm.ngl fora de 0..999")
+    for label, value in (("llm.device", l.device), ("llm.mmproj_device", l.mmproj_device), ("stt.device", cfg.stt.device), ("tts.device", cfg.tts.device)):
+        if value not in ("auto", "gpu", "cpu"):
+            p.append(f"{label} deve ser 'auto', 'gpu' ou 'cpu'")
     if l.sleep_idle_s != 0 and not 30 <= l.sleep_idle_s <= 86400:
         p.append("llm.sleep_idle_s deve ser 0 (nunca) ou entre 30 e 86400 segundos")
     if not 0 <= l.temperature <= 2:

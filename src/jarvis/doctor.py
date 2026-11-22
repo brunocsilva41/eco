@@ -109,12 +109,49 @@ def _check_tools(cfg: Config) -> CheckResult:
     return CheckResult("ferramentas", ok, detail)
 
 
+def _check_where(cfg: Config) -> list[CheckResult]:
+    """Onde cada serviço RODA (GPU ou CPU), conforme a configuração e o que está disponível de verdade."""
+    out: list[CheckResult] = []
+    gpu = _check_gpu(cfg)
+    gpu_name = gpu.detail.split(":", 1)[-1].strip() if gpu.ok else ""
+    gpu_ok = gpu.ok
+    llm_dev = "CPU (escolha do usuário)" if cfg.llm.device == "cpu" else (
+        f"GPU: {gpu_name}, {cfg.llm.ngl} camadas" if gpu_ok else "CPU (nenhuma GPU Vulkan encontrada: o modo auto cai para a CPU)")
+    out.append(CheckResult("onde: modelo de linguagem", True, llm_dev))
+    mm = "CPU (escolha do usuário: ~5x mais lento)" if (cfg.llm.mmproj_device == "cpu" or cfg.llm.device == "cpu" or not gpu_ok) else "GPU (junto do modelo)"
+    out.append(CheckResult("onde: visão (mmproj)", cfg.llm.mmproj is not None, mm if cfg.llm.mmproj is not None else "desligada"))
+    # escuta: testa de verdade (carrega o motor GPU e transcreve 1 s de silêncio)
+    from .audio.stt import Transcriber
+    import numpy as np
+    stt_detail, stt_ok = "", True
+    if cfg.stt.device == "cpu":
+        stt_detail = f"CPU (faster-whisper, {cfg.stt.model_dir.name}, {cfg.stt.cpu_threads} threads, escolha do usuário)"
+    else:
+        tr = Transcriber(cfg.stt)
+        try:
+            tr.preload()
+            tr.transcribe(np.zeros(16000, dtype=np.float32))
+            stt_detail = ("GPU (whisper.cpp Vulkan, " + cfg.stt.gpu_model.name + ")") if tr.engine == "gpu" else (
+                f"CPU (faster-whisper {cfg.stt.model_dir.name}); a GPU não carregou, veja os avisos do log")
+        except Exception as exc:  # noqa: BLE001
+            stt_ok, stt_detail = False, f"falhou: {exc}"
+        finally:
+            tr.close()
+    out.append(CheckResult("onde: escuta (STT)", stt_ok, stt_detail))
+    out.append(CheckResult("onde: voz (Piper)", True, "CPU (onnxruntime; medido mais rápido que DirectML)"))
+    out.append(CheckResult("onde: detector de voz (VAD)", True, "CPU, 1 thread (~0,9% de 1 núcleo)"))
+    out.append(CheckResult("onde: captura de tela", True, "CPU (GDI, ~49 ms; DXGI ganha 33 ms mas exige OpenCV)"))
+    out.append(CheckResult("onde: Ilha e janelas (Qt)", True, "CPU, renderização por software; ~0% escondida"))
+    return out
+
+
 def run_doctor(cfg: Config) -> list[CheckResult]:
     results: list[CheckResult] = [_check_python(), _check_disk(cfg), _check_ram(),
                                   _file("llama-server", cfg.paths.llama_bin / "llama-server.exe"),
                                   _file("modelo LLM", cfg.llm.model), _file("mmproj (visão)", cfg.llm.mmproj, required=False),
                                   _check_gpu(cfg), _check_port(cfg)]
     results += check_audio(cfg)
+    results += _check_where(cfg)
     results += _check_hotkeys(cfg)
     results.append(_check_tools(cfg))
     return results

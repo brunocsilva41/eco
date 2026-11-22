@@ -41,6 +41,11 @@ FIELDS: dict[str, tuple[str, str]] = {
     "llm.mmproj": ("Arquivo de visão", "Deixe vazio para o Jarvis não enxergar a tela."),
     "llm.ctx": ("Memória de trabalho", "Quanto texto o modelo considera de uma vez. Mais usa mais memória da placa de vídeo."),
     "llm.ngl": ("Camadas na placa de vídeo", "99 coloca o modelo todo na placa de vídeo. 0 usa só o processador."),
+    "llm.device": ("Onde roda o modelo", "Automático usa a placa de vídeo e cai para o processador se ela falhar. Só no processador fica cerca de 3 vezes mais lento."),
+    "llm.mmproj_device": ("Onde roda a visão", "Na placa de vídeo ver a tela leva uns 8 segundos; no processador uns 40. Mudar para o processador poupa cerca de 0,8 GB de memória de vídeo."),
+    "stt.device": ("Onde roda a escuta", "Automático usa a placa de vídeo (mais preciso e rápido) e cai para o processador se não der."),
+    "stt.gpu_model": ("Modelo de escuta da placa de vídeo", "Arquivo do whisper.cpp (ggml-small.bin). Só vale quando a escuta roda na placa de vídeo."),
+    "tts.device": ("Onde roda a voz", "Medido: para esta voz o processador é mais rápido que a placa de vídeo."),
     "llm.sleep_idle_s": ("Descarregar o modelo quando parado", "Sem uso por este tempo, o modelo sai da placa de vídeo e da memória (libera cerca de 5 GB de VRAM para renderizar vídeo). Volta em uns 6 segundos no próximo pedido. 0 nunca descarrega."),
     "llm.mmap": ("Carregar o modelo com mmap", "Desligado usa cerca de 2,3 GB a menos de memória RAM com o modelo todo na placa de vídeo. Ligue só se tiver problemas ao carregar."),
     "llm.temperature": ("Criatividade", "Menor deixa as respostas mais previsíveis."),
@@ -94,6 +99,10 @@ LOCKED: dict[str, str] = {
 # chave do campo -> (valor -> rotulo) das opcoes
 CHOICES: dict[str, dict[str, str]] = {
     "safety.talk_mode": {"hold": "Segurar para falar", "toggle": "Apertar e falar"},
+    "llm.device": {"auto": "Automático (placa de vídeo)", "gpu": "Placa de vídeo", "cpu": "Processador"},
+    "llm.mmproj_device": {"auto": "Automático (placa de vídeo)", "gpu": "Placa de vídeo", "cpu": "Processador"},
+    "stt.device": {"auto": "Automático (placa de vídeo)", "gpu": "Placa de vídeo", "cpu": "Processador"},
+    "tts.device": {"cpu": "Processador (mais rápido)", "auto": "Automático", "gpu": "Placa de vídeo"},
     "stt.compute_type": {"int8": "Leve (recomendado)", "int8_float32": "Intermediário", "float32": "Máxima precisão"},
     "safety.typing_confirm": {"always": "Sempre", "untrusted_or_multiline": "Texto de fora ou parecido com comando"},
     "logs.level": {"DEBUG": "Detalhado", "INFO": "Normal", "WARNING": "Só avisos", "ERROR": "Só erros"},

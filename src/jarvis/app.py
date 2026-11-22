@@ -191,6 +191,7 @@ class JarvisApp:
             tts = Synthesizer(cfg.tts)
             stack.callback(tts.close)
             stt = Transcriber(cfg.stt)
+            stt.set_idle_unload(cfg.llm.sleep_idle_s)                   # motor GPU: libera a VRAM junto com o modelo de linguagem
             stack.callback(stt.close)
             mic = Microphone(cfg.audio, self.bus, models_dir=cfg.paths.models)
             stack.callback(mic.close)
@@ -224,6 +225,8 @@ class JarvisApp:
 
         def run() -> None:
             try:
+                if self._p is not None:
+                    self._p.stt.preload()                               # a escuta na GPU também pode ter descarregado
                 log.debug("pré-aquecimento do modelo: %.1f s", agent.prewake(CancelToken()))
             except Exception:  # noqa: BLE001 - só otimização
                 log.debug("pré-aquecimento falhou (ignorado)", exc_info=True)

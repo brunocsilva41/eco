@@ -126,10 +126,20 @@ class LlamaServer:
         self._life = CancelToken()                     # cancela partidas em andamento quando o app encerra (N-16)
         self._monitor: threading.Thread | None = None
         self._restarts: list[float] = []
+        self._force_cpu = False                        # a GPU falhou na partida e o modo é "auto": roda na CPU
 
     @property
     def api_key(self) -> str:
         return self._key
+
+    # ------------------------------------------------------------- dispositivo
+    def _ngl(self) -> int:
+        c = self._cfg.llm
+        return 0 if (c.device == "cpu" or self._force_cpu) else c.ngl
+
+    @property
+    def device_in_use(self) -> str:
+        return "cpu" if self._ngl() == 0 else "gpu"
 
     # ------------------------------------------------------------- comando
     def build_command(self) -> list[str]:
@@ -140,11 +150,11 @@ class LlamaServer:
             problems.append(f"não existe: {c.mmproj}")
         if problems:
             raise ServerError("; ".join(problems))
-        cmd = [str(exe), "-m", str(c.model), "-ngl", str(c.ngl), "-c", str(c.ctx),
+        cmd = [str(exe), "-m", str(c.model), "-ngl", str(self._ngl()), "-c", str(c.ctx),
                "--host", c.host, "--port", str(c.port), "--jinja", "--api-key-file", str(self._key_file),
                "-np", "1", "--no-webui", "-cram", "1024"]      # chave por ARQUIVO (a linha de comando é visível a outros processos)
         #                                                       1 slot; sem UI web; cache de prompt limitado (RAM é curta)
-        if c.ngl >= 99:
+        if self._ngl() >= 99:
             cmd += ["-t", "2"]                          # tudo na GPU: 2 threads dão a mesma velocidade e metade do CPU (medido: 56% -> 32%)
         if not c.mmap:
             cmd += ["-lm", "none"]                      # sem mmap: com tudo na GPU a RAM do servidor cai ~2,3 GB (medido)
@@ -152,6 +162,8 @@ class LlamaServer:
             cmd += ["--sleep-idle-seconds", str(c.sleep_idle_s)]   # ocioso: descarrega modelo e KV (VRAM/RAM livres); acorda no 1º pedido
         if c.mmproj is not None:
             cmd += ["--mmproj", str(c.mmproj)]
+            if c.mmproj_device == "cpu" or self._ngl() == 0:
+                cmd += ["--no-mmproj-offload"]          # visão no processador (escolha do usuário ou GPU indisponível)
         if c.reasoning_off:
             cmd += ["--reasoning", "off"]
         return cmd
@@ -171,7 +183,16 @@ class LlamaServer:
                               "Feche-o ou mude llm.port; o Jarvis não usa servidores desconhecidos.")
         self._stopping.clear()
         self._life = CancelToken()                     # o stop() cancela este token e interrompe qualquer partida em curso
-        self._spawn(cancel)
+        try:
+            self._spawn(cancel)
+        except ServerError as exc:
+            if c.device == "auto" and self._ngl() > 0 and not cancel.cancelled and "encerrou na partida" in str(exc):
+                log.warning("o modelo não subiu na GPU (%s); tentando na CPU", str(exc).splitlines()[0][:120])
+                self._force_cpu = True
+                self._on_event("gpu_fallback", "A placa de vídeo falhou; o modelo de linguagem está rodando no processador (bem mais lento).")
+                self._spawn(cancel)
+            else:
+                raise
         if self._monitor is None or not self._monitor.is_alive():
             self._monitor = threading.Thread(target=self._watch, name="llama-watch", daemon=True)
             self._monitor.start()

@@ -180,6 +180,8 @@ class Synthesizer:
                     raise TtsError(f"{label} da voz Piper não encontrado: {path}")
             if cfg.length_scale is not None and not 0.1 <= cfg.length_scale <= 5.0:
                 raise TtsError(f"tts.length_scale fora de 0.1..5.0: {cfg.length_scale}")
+            if cfg.device == "gpu":
+                log.warning("tts.device = gpu: este motor roda só na CPU (DirectML foi medido mais lento); usando a CPU")
             t0 = time.perf_counter()
             try:
                 from piper import PiperVoice

@@ -121,6 +121,14 @@ $llamaDst = Join-Path $App "bin\llama-b12531-vulkan"
 Expand-Archive $llamaZip -DestinationPath $llamaDst -Force
 Get-ChildItem $llamaDst -Filter *.exe | Where-Object { $_.Name -ne "llama-server.exe" } | Remove-Item -Force
 
+# whisper.cpp (Vulkan) + shim jarvis_whisper.dll: motor de escuta na GPU (compilado aqui por native\build_shim.ps1; MIT)
+$wcSrc = Join-Path $Root "bin\whispercpp-vulkan"
+if (-not (Test-Path (Join-Path $wcSrc "jarvis_whisper.dll"))) { & pwsh -NoProfile -File (Join-Path $Root "native\build_shim.ps1") | Out-Host }
+if (-not (Test-Path (Join-Path $wcSrc "jarvis_whisper.dll"))) { Fail "faltam os binarios do whisper.cpp (bin\whispercpp-vulkan): rode src\build_whispercpp.ps1 e native\build_shim.ps1" }
+$wcDst = Join-Path $App "bin\whispercpp-vulkan"
+New-Item -ItemType Directory -Force $wcDst | Out-Null
+Get-ChildItem $wcSrc -File | Where-Object { $_.Extension -in ".dll", ".txt" } | Copy-Item -Destination $wcDst -Force
+
 # runtime Python embutido
 $pyDst = Join-Path $App "runtime\python"
 Expand-Archive $pyZip -DestinationPath $pyDst -Force
@@ -140,7 +148,7 @@ Remove-Item (Join-Path $site "bin") -Recurse -Force -ErrorAction SilentlyContinu
 
 # DLLs do runtime C++ (implantacao app-local permitida pela Microsoft): so as que faltarem, para PCs sem o VC++ Redistributable
 $crt = "msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll", "vcruntime140.dll", "vcruntime140_1.dll", "concrt140.dll"
-foreach ($d in @($pyDst, $llamaDst)) {
+foreach ($d in @($pyDst, $llamaDst, $wcDst)) {
   foreach ($n in $crt) {
     $src = Join-Path $env:SystemRoot "System32\$n"
     if ((Test-Path $src) -and -not (Test-Path (Join-Path $d $n))) { Copy-Item $src $d }

@@ -40,7 +40,12 @@ def stt_dir_for(components: list[str], manifest: Manifest) -> str | None:
 def apply_stt_choice(components: list[str], manifest: Manifest) -> None:
     d = stt_dir_for(components, manifest)
     if d:
-        save_values({"stt.model_dir": d})
+        updates = {"stt.model_dir": d}
+        # sem o modelo ggml (opção "base, leve") a escuta fica na CPU; com o "small" o padrão "auto" usa a placa de vídeo
+        chosen = {pk for key in components for pk in (manifest.components[key].packages if key in manifest.components else ())}
+        if "whisper-small-ggml" not in chosen:
+            updates["stt.device"] = "cpu"
+        save_values(updates)
 
 
 # ---------------------------------------------------------------- Iniciar com o Windows (HKCU\...\Run)

@@ -78,3 +78,21 @@ Corrigidos e baratos: RAM do servidor (−2,35 GB com `-lm none`), VRAM ociosa (
 ## 9. Ajustes finais de CPU (medidos depois do relatório acima)
 - `llama-server` em uso real com `-t 2`: CPU média 59% → **23%** de 1 núcleo (pico 252% → 56%).
 - Whisper base, CPU por frase (regra da política: diferença < 10% = menos CPU-s): 2 threads 1,66 s / 3,3 CPU-s; 4 threads 1,04 s / 4,2; **6 threads 0,94 s / 5,6 (adotado)**; 12 threads 0,86 s / 10,3. Padrão `stt.cpu_threads` 12 → 6.
+
+## 10. Mapa CPU × GPU por serviço (regra da política: GPU por padrão; CPU só onde medir menor tempo; <10% = menos CPU-s; empate = GPU)
+Tabela completa também em `Shared\triade\POLITICA-GPU.md` e `estudio-br\config\recursos.json` (tarefas `jarvis_*`). Chaves em `config.toml`: `llm.device`, `llm.mmproj_device`, `stt.device`, `tts.device` (`auto`|`gpu`|`cpu`). `Jarvis.cmd doctor` mostra onde cada serviço roda.
+| Serviço | Vencedor | GPU | CPU | Padrão |
+|---|---|---|---|---|
+| LLM Qwen3-VL 4B (llama.cpp Vulkan) | **GPU** | 199 tok/s prompt, 21,8 tok/s geração, 5 CPU-s | 146 / 6,5 tok/s, 165 CPU-s (12 thr); 85 CPU-s (6 thr) | `llm.device=auto` (GPU; cai para CPU com aviso se não subir) |
+| LLM: flash-attn / KV q8_0 / lote 1024 | CPU-lado do contexto: desligados | prompt 140 / 129 / 182 tok/s contra 187 | — | desligados |
+| LLM: threads residuais | **2** | 21,9 tok/s, CPU 28–32% | 12 thr: 21,5 tok/s, CPU 56% | `-t 2` |
+| Visão (mmproj) | **GPU** | 7,6 s por imagem, 2,1 CPU-s, +0,77 GB de VRAM | 40,8 s, 72 CPU-s | `llm.mmproj_device=auto` |
+| Escuta (STT, comandos de 1,4–3,4 s) | **GPU** whisper.cpp Vulkan small | 0,98 s, 0,38 CPU-s, WER 11,8% (ruído 8 dB: 17,8%) | faster-whisper base: 0,89 s, 5,3 CPU-s, WER 18,4% (34,9%); small: 2,5 s | `stt.device=auto` (GPU); cai para o faster-whisper |
+| Voz Piper (VITS ONNX) | **CPU** | DirectML 0,164 s (40 fonemas) / 0,153 s (110) | 0,060 s / 0,120 s | `tts.device=cpu` |
+| VAD Silero | **CPU** | DirectML 1,51 ms/janela | 0,30 ms/janela (0,9% de 1 núcleo) | CPU |
+| Captura de tela + JPEG | **CPU** | DXGI 16 ms / 48 ms de CPU | GDI 49 ms / 27 ms de CPU; JPEG 58 ms | CPU (DXGI ganharia 33 ms; exige dxcam+OpenCV; <1% da latência de visão) |
+| UI/Ilha (Qt) | **CPU** | n/m (custaria VRAM e acordadas) | 0% escondida, 3,8% de 1 núcleo falando | CPU |
+| UI Automation | **CPU** | n/a | 0,07–0,6 s | CPU |
+**Orçamento de VRAM (pico medido, tudo ligado):** 6.780 MB de 8.192 MB (modelo+KV ~5,1 GB, visão 0,77 GB, escuta ~1 GB, sistema ~1 GB). Cabe, com ~1,4 GB de folga. Disputa com render de vídeo: depois de `llm.sleep_idle_s` (600 s) o Jarvis descarrega modelo, visão e escuta (~5 GB livres); antes disso, e para liberar na hora, `llm.device = cpu`. Testes na GPU foram feitos sem render ativo (os `ffmpeg` presentes eram downloads parados).
+**Segurança:** se a GPU falha, cai para CPU com aviso, sem travar: LLM (partida sem GPU → `-ngl 0` + visão na CPU, evento `gpu_fallback`), escuta (carga ou execução falha → faster-whisper, avisos no log). Comprovado simulando falhas (modelo ggml inexistente; partida do servidor falhando).
+**Desempenho da escuta na GPU, ponta a ponta:** carregar 2,1–2,5 s (uma vez); a frase leva 0,9–1,0 s; WER nas 20 frases: limpo 11,8%, ruído 15 dB 14,5%, 8 dB 17,8%.

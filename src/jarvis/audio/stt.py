@@ -178,6 +178,11 @@ class Transcriber:
         self._load_lock = threading.Lock()
         self._run_lock = threading.Lock()                  # transcrições vivas, uma por vez (segurado pelo chamador)
         self._cv = threading.Condition()                   # protege _abandoned e os flags de _Job
+        self._engine = "none"                              # "gpu" (whisper.cpp Vulkan) | "cpu" (faster-whisper) | "none" (não carregado)
+        self._gpu_blocked = False                          # a GPU falhou: daqui em diante só CPU
+        self._last_use = time.monotonic()
+        self._idle_unload_s = 0.0
+        self._idle_thread: threading.Thread | None = None
         self._abandoned = 0
         lang = cfg.language.strip().lower()
         self._language: str | None = None if lang in ("", "auto") else lang
@@ -190,10 +195,38 @@ class Transcriber:
         """Carrega o modelo agora (idempotente). Levanta ``TranscribeError`` se falhar."""
         self._ensure_model()
 
+    @property
+    def engine(self) -> str:
+        return self._engine
+
+    def set_idle_unload(self, seconds: float) -> None:
+        """Motor GPU: depois de `seconds` sem uso libera o modelo da VRAM (recarrega em ~2,5 s no próximo uso). 0 = nunca."""
+        self._idle_unload_s = max(0.0, float(seconds))
+        if self._idle_unload_s and (self._idle_thread is None or not self._idle_thread.is_alive()):
+            self._idle_thread = threading.Thread(target=self._idle_loop, name="jarvis-stt-idle", daemon=True)
+            self._idle_thread.start()
+
+    def _idle_loop(self) -> None:
+        while self._idle_unload_s:
+            time.sleep(15.0)
+            if self._engine == "gpu" and self._model is not None and time.monotonic() - self._last_use > self._idle_unload_s:
+                if self._run_lock.acquire(blocking=False):
+                    try:
+                        log.info("escuta na GPU descarregada por inatividade (libera a VRAM)")
+                        self.close()
+                    finally:
+                        self._run_lock.release()
+
     def close(self) -> None:
         """Libera o modelo (será recarregado no próximo uso). Decodificações em curso terminam com a referência antiga."""
         with self._load_lock:
-            self._model = None
+            old, self._model, self._engine = self._model, None, "none"
+        closer = getattr(old, "close", None)
+        if callable(closer):
+            try:
+                closer()
+            except Exception:  # noqa: BLE001
+                log.debug("falha ao liberar o modelo de escuta", exc_info=True)
 
     def _ensure_model(self) -> Any:
         model = self._model
@@ -203,6 +236,11 @@ class Transcriber:
             if self._model is not None:
                 return self._model
             cfg = self._cfg
+            if cfg.device in ("auto", "gpu") and not self._gpu_blocked:
+                gpu = self._load_gpu(cfg)
+                if gpu is not None:
+                    self._model, self._engine = gpu, "gpu"
+                    return gpu
             local = find_local_model(cfg.model_dir)
             if local is None:
                 # o Jarvis roda 100% local: nunca baixa modelo sozinho
@@ -217,10 +255,24 @@ class Transcriber:
                                      cpu_threads=cfg.cpu_threads, num_workers=1)
             except Exception as exc:
                 raise TranscribeError(f"não consegui carregar o modelo Whisper ({source}): {exc}") from exc
-            self._model = model
+            self._model, self._engine = model, "cpu"
             log.info("modelo Whisper carregado em %.1f s (%s, %s, %d threads)",
                      time.perf_counter() - t0, Path(source).name, cfg.compute_type, cfg.cpu_threads)
             return model
+
+    def _load_gpu(self, cfg: Any) -> Any | None:
+        """Tenta o motor whisper.cpp Vulkan. Qualquer falha vira aviso + queda para a CPU (nunca trava a partida)."""
+        t0 = time.perf_counter()
+        try:
+            from .stt_whispercpp import WhisperCppModel
+            root = Path(__file__).resolve().parents[3]
+            model = WhisperCppModel(root / "bin" / "whispercpp-vulkan", Path(cfg.gpu_model), use_gpu=True, threads=2)
+        except Exception as exc:  # noqa: BLE001
+            self._gpu_blocked = True
+            log.warning("escuta na GPU indisponível (%s); usando a CPU (faster-whisper)", exc)
+            return None
+        log.info("modelo Whisper carregado em %.1f s (whisper.cpp Vulkan, GPU, %s)", time.perf_counter() - t0, Path(cfg.gpu_model).name)
+        return model
 
     # ------------------------------------------------------------------ decodificação
     def _decode(self, job: _Job, model: Any, samples: np.ndarray, beam: int, duration: float, rms: float) -> None:
@@ -242,6 +294,10 @@ class Transcriber:
                     parts.append(piece)
             job.text = " ".join(" ".join(parts).split())
         except BaseException as exc:  # noqa: BLE001 - entregue ao chamador
+            if self._engine == "gpu":                       # a GPU falhou rodando: daqui em diante CPU (a próxima fala já usa a CPU)
+                self._gpu_blocked = True
+                self._model, self._engine = None, "none"
+                log.warning("escuta na GPU falhou (%s); passando para a CPU", exc)
             job.error = exc
         finally:
             with self._cv:
@@ -282,6 +338,7 @@ class Transcriber:
         ("sim"/"não"), onde a latência importa mais que a precisão.
         """
         cancel = cancel or CancelToken()
+        self._last_use = time.monotonic()
         if beam_size is not None and not 1 <= beam_size <= MAX_BEAM_SIZE:
             raise ValueError(f"beam_size deve estar em 1..{MAX_BEAM_SIZE}")
         beam = beam_size if beam_size is not None else max(1, int(self._cfg.beam_size))

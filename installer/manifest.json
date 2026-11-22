@@ -5,23 +5,34 @@
     "vision": {
       "title": "Modelo de visão e linguagem",
       "description": "Qwen3-VL 4B: entende o pedido, escolhe as ferramentas e enxerga a tela.",
-      "packages": ["qwen3vl-4b"]
+      "packages": [
+        "qwen3vl-4b"
+      ]
     },
     "voice": {
       "title": "Voz do Jarvis",
       "description": "Voz Piper em português do Brasil (faber).",
-      "packages": ["piper-faber"]
+      "packages": [
+        "piper-faber"
+      ]
     },
     "stt_small": {
       "title": "Reconhecimento de fala: Whisper small (recomendado)",
-      "description": "Entende melhor o português; usa mais processador.",
-      "packages": ["whisper-small", "silero-vad"],
+      "description": "Entende melhor o português e roda na placa de vídeo (GPU), quase sem usar o processador; cai para o processador se a placa falhar.",
+      "packages": [
+        "whisper-small",
+        "whisper-small-ggml",
+        "silero-vad"
+      ],
       "stt_dir": "models/whisper/hf_small"
     },
     "stt_base": {
       "title": "Reconhecimento de fala: Whisper base (leve)",
       "description": "Mais rápido e leve; erra mais em frases longas.",
-      "packages": ["whisper-base", "silero-vad"],
+      "packages": [
+        "whisper-base",
+        "silero-vad"
+      ],
       "stt_dir": "models/whisper/hf_base"
     }
   },
@@ -107,25 +118,33 @@
           "path": "models/whisper/hf_small/model.bin",
           "size": 483546902,
           "sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671",
-          "urls": ["https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/model.bin"]
+          "urls": [
+            "https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/model.bin"
+          ]
         },
         {
           "path": "models/whisper/hf_small/config.json",
           "size": 2370,
           "sha256": "b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828",
-          "urls": ["https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/config.json"]
+          "urls": [
+            "https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/config.json"
+          ]
         },
         {
           "path": "models/whisper/hf_small/tokenizer.json",
           "size": 2203239,
           "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab",
-          "urls": ["https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/tokenizer.json"]
+          "urls": [
+            "https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/tokenizer.json"
+          ]
         },
         {
           "path": "models/whisper/hf_small/vocabulary.txt",
           "size": 459861,
           "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913",
-          "urls": ["https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/vocabulary.txt"]
+          "urls": [
+            "https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/vocabulary.txt"
+          ]
         }
       ]
     },
@@ -140,25 +159,50 @@
           "path": "models/whisper/hf_base/model.bin",
           "size": 145217532,
           "sha256": "d01c3014881c9c6f3133c182f3d2887eb6ca1c789a7538c5c007196857a0a6a9",
-          "urls": ["https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/model.bin"]
+          "urls": [
+            "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/model.bin"
+          ]
         },
         {
           "path": "models/whisper/hf_base/config.json",
           "size": 2309,
           "sha256": "56a6d8110d311f19c8f0471e562832c7527f146b567275bfca59fcf7c184da9a",
-          "urls": ["https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/config.json"]
+          "urls": [
+            "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/config.json"
+          ]
         },
         {
           "path": "models/whisper/hf_base/tokenizer.json",
           "size": 2203239,
           "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab",
-          "urls": ["https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/tokenizer.json"]
+          "urls": [
+            "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/tokenizer.json"
+          ]
         },
         {
           "path": "models/whisper/hf_base/vocabulary.txt",
           "size": 459861,
           "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913",
-          "urls": ["https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/vocabulary.txt"]
+          "urls": [
+            "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/vocabulary.txt"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "whisper-small-ggml",
+      "name": "whisper.cpp ggml small (escuta na placa de vídeo)",
+      "homepage": "https://huggingface.co/ggerganov/whisper.cpp",
+      "license": "MIT",
+      "license_url": "https://huggingface.co/ggerganov/whisper.cpp",
+      "files": [
+        {
+          "path": "models/whisper/ggml-small.bin",
+          "size": 487601967,
+          "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+          "urls": [
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin"
+          ]
         }
       ]
     }
@@ -181,6 +225,13 @@
       "url": "https://www.python.org/ftp/python/3.14.3/python-3.14.3-embed-amd64.zip",
       "size": 12023245,
       "sha256": "ad4961a479dedbeb7c7d113253f8db1b1935586b73c27488712beec4f2c894e6"
+    },
+    {
+      "id": "whisper.cpp",
+      "name": "whisper.cpp v1.9.5 (backend Vulkan) + jarvis_whisper.dll",
+      "license": "MIT",
+      "license_url": "https://github.com/ggml-org/whisper.cpp/blob/master/LICENSE",
+      "built_by": "native/build_shim.ps1 (compilado localmente)"
     }
   ]
 }
