@@ -1,0 +1,25 @@
+JARVIS - AVISO DE USO E LICENÇAS
+
+Este instalador coloca o Jarvis, um assistente de voz em português do Brasil que roda inteiramente no seu computador, na pasta que você escolher.
+
+[Privacidade]
+O Jarvis não envia sua voz, suas conversas nem sua tela para a internet. A internet só é usada para baixar os modelos de IA (uma vez, por HTTPS, com conferência de SHA-256). O servidor do modelo escuta só em 127.0.0.1. O instalador não abre portas nem altera o firewall, não atualiza drivers e não grava nada fora da pasta de instalação, dos atalhos que você escolher e (opcionalmente) da entrada "Iniciar com o Windows".
+
+[Sem garantia]
+O Jarvis é fornecido "como está", sem garantia de qualquer tipo. Ele pode controlar o seu computador por meio de ferramentas permitidas; leia as explicações de permissões na configuração e use a tecla de emergência (Ctrl+Alt+F12) se algo sair do esperado.
+
+[Termos do Jarvis]
+SUBSTITUA ESTE BLOCO pelos termos de uso do Jarvis definidos pelo autor antes de distribuir o instalador a terceiros. Enquanto isso, o uso é restrito ao proprietário do projeto.
+
+[Componentes de terceiros e suas licenças]
+- llama.cpp (backend Vulkan): MIT - https://github.com/ggml-org/llama.cpp
+- Python 3.14 (embutido): PSF License - https://docs.python.org/3.14/license.html
+- Qt para Python / PySide6 (interface): LGPL-3.0 - https://doc.qt.io/qtforpython-6/
+- faster-whisper e CTranslate2 (reconhecimento de fala): MIT
+- ONNX Runtime: MIT
+- Piper (síntese de voz, pacote piper-tts): GPL-3.0 - https://github.com/OHF-Voice/piper1-gpl
+- Modelo Qwen3-VL 4B (baixado depois): Apache-2.0 - https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF
+- Voz Piper pt_BR faber (baixada depois): conjunto de dados CC0-1.0 - https://huggingface.co/rhasspy/piper-voices
+- Whisper small/base (Systran, baixados depois): MIT - https://huggingface.co/Systran
+- Silero VAD (baixado depois): MIT - https://github.com/snakers4/silero-vad
+A lista completa dos pacotes Python, com versão e licença, está em THIRD-PARTY.txt na pasta de instalação.

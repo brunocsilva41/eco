@@ -1,0 +1,7 @@
+# artefatos de build (reproduzíveis por build.ps1)
+cache/
+wheels/
+staging/
+dist/
+tools/
+work/

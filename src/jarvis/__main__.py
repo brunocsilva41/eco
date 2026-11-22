@@ -141,6 +141,11 @@ def _cmd_doctor(_: argparse.Namespace) -> int:
 _RISK = {0: "leitura", 1: "controla", 2: "ARRISCADA"}
 
 
+def _cmd_setup(ns: argparse.Namespace) -> int:
+    from .setup.cli import run_setup
+    return run_setup(ns)
+
+
 def _cmd_tools(_: argparse.Namespace) -> int:
     from .tools.catalog import describe_tools
     for t in describe_tools(load()):
@@ -184,6 +189,10 @@ def main(argv: list[str] | None = None) -> int:
     ic.add_argument("--child", action="store_true", help="modo filho (protocolo JSON em stdin/stdout)")
     ic.set_defaults(fn=_cmd_island)
     sub.add_parser("doctor", help="confere o ambiente").set_defaults(fn=_cmd_doctor)
+    su = sub.add_parser("setup", help="assistente de configuração (--repair, --fetch, --offline, --status)")
+    from .setup.cli import add_arguments as _setup_args
+    _setup_args(su)
+    su.set_defaults(fn=_cmd_setup)
     sub.add_parser("tools", help="lista as ferramentas").set_defaults(fn=_cmd_tools)
     sub.add_parser("config", help="mostra a configuração efetiva").set_defaults(fn=_cmd_config)
     args = parser.parse_args(argv)
