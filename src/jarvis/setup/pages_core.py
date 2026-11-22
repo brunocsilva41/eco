@@ -201,12 +201,15 @@ class ModelsPage(Page):
         self.btn_use = Button(S.M_FOUND_USE, variant="primary", icon_name="check")
         self.btn_use.clicked.connect(self.use_found)
         self.btn_use.setVisible(False)
+        self.btn_folder = Button(S.M_FOLDER, icon_name="folder")
+        self.btn_folder.clicked.connect(self.pick_folder)
         self.btn_deep = Button(S.M_SCAN_DEEP, icon_name="folder")
         self.btn_deep.clicked.connect(lambda: self._start_scan(deep=True))
         self._scan = _Scan()
         self._scan.done.connect(self._on_scan_done)
         self._scanning = False
         self._found: dict[str, list[Path]] = {}
+        self._trusted: dict[Path, tuple[int, int]] = {}
         self._scan_cancel = threading.Event()
         self._scanned_once = False
         for b in (self.btn_use, self.btn_dl, self.btn_pause):
@@ -214,7 +217,7 @@ class ModelsPage(Page):
         btns.addStretch(1)
         self.col.addLayout(btns)
         btns2 = QHBoxLayout()                              # ações secundárias em outra linha: nenhum rótulo fica cortado
-        for b in (self.btn_off, self.btn_deep, self.btn_ver):
+        for b in (self.btn_folder, self.btn_off, self.btn_deep, self.btn_ver):
             btns2.addWidget(b)
         btns2.addStretch(1)
         self.col.addLayout(btns2)
@@ -301,6 +304,7 @@ class ModelsPage(Page):
         self.btn_dl.setVisible(bool(miss) and not self._running())
         self.btn_off.setVisible(bool(miss) and not self._running())
         self.btn_deep.setVisible(bool(miss) and not self._running() and not self._scanning)
+        self.btn_folder.setVisible(bool(miss) and not self._running() and not self._scanning)
         self.btn_use.setVisible(bool(miss) and bool(self._found) and not self._running() and not self._scanning)
         self.changed.emit()
 
@@ -325,6 +329,7 @@ class ModelsPage(Page):
         self._banner("ok", S.M_SCANNING)
         self.btn_dl.setEnabled(False)
         self.btn_deep.setVisible(False)
+        self.btn_folder.setVisible(False)
         root, cancel = self.ctx.root, self._scan_cancel
 
         def target() -> None:
@@ -349,6 +354,41 @@ class ModelsPage(Page):
             self._banner("warn", S.M_FOUND_NONE, "", S.M_FOUND_NONE_TODO if not deep else "")
         self.refresh()
 
+    def pick_folder(self) -> None:
+        """O usuário escolhe uma pasta: o assistente examina, confere o SHA-256 e mostra o que dá para usar."""
+        if self._running() or self._scanning:
+            return
+        d = QFileDialog.getExistingDirectory(self, S.M_FOLDER_PICK, str(Path.home()))
+        if not d:
+            return
+        self.inspect_path(Path(d))
+
+    def inspect_path(self, folder: Path) -> None:
+        if self._running() or self._scanning:
+            return
+        from . import discover
+        entries = self.entries()
+        self._begin()
+        self.phase.setText(S.M_INSPECTING)
+        self.btn_folder.setVisible(False)
+        root, cancel = self.ctx.root, self.cancel
+        self._run(lambda cb: ("inspect", folder, *discover.inspect_folder(folder, entries, cancel, cb, root)))
+
+    def _show_report(self, folder: Path, report) -> None:
+        ok = [f for f in report if f.status == "ok"]
+        lines: list[str] = []
+        for f in report:
+            if f.status == "ok":
+                lines.append(S.M_REPORT_OK.format(name=f.name, size=human_bytes(f.size)))
+            elif f.status == "hash":
+                lines.append(S.M_REPORT_HASH.format(name=f.name))
+            else:
+                lines.append(S.M_REPORT_MISS.format(name=f.name))
+        if ok:
+            self._banner("ok", S.M_REPORT_SUMMARY.format(ok=len(ok), total=len(report)), "\n".join(lines), "")
+        else:
+            self._banner("warn", S.M_REPORT_NONE, "\n".join(lines), S.M_FOUND_NONE_TODO)
+
     def use_found(self) -> None:
         if self._running() or not self._found:
             return
@@ -357,7 +397,8 @@ class ModelsPage(Page):
         found = dict(self._found)
         self._begin()
         root, cancel = self.ctx.root, self.cancel
-        self._run(lambda cb: ("found", *discover.import_found(found, entries, root, cb, cancel)))
+        trusted = dict(self._trusted)
+        self._run(lambda cb: ("found", *discover.import_found(found, entries, root, cb, cancel, trusted)))
 
     def can_advance(self) -> bool:
         return not self._running()
@@ -498,6 +539,13 @@ class ModelsPage(Page):
                 self._banner("ok", S.M_OFFLINE_DONE.format(n=len(imported)))
             else:
                 self._banner("warn", S.M_OFFLINE_NONE)
+            return
+        if isinstance(res, tuple) and res and res[0] == "inspect":
+            _tag, folder, report, valid, sigs = res
+            self.prog_card.setVisible(False)
+            self._found, self._trusted = valid, sigs
+            self._show_report(folder, report)
+            self.refresh()
             return
         if isinstance(res, tuple) and res and res[0] == "found":
             _tag, imported, missing, copied = res

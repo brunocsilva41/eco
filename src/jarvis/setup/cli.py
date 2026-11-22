@@ -82,6 +82,35 @@ def _adopt_existing(entries, root: Path, deep: bool = False, use: bool = True) -
     return len(still)
 
 
+def cmd_scan_folder(components: list[str], root: Path, folder: Path, use: bool) -> int:
+    from . import discover
+    from .config_io import apply_stt_choice
+    man = load_manifest(root)
+    entries = man.files_for(components)
+    if not folder.is_dir():
+        _out(f"ERRO: a pasta não existe: {folder}")
+        return 2
+    _out(f"Examinando {folder} e conferindo o SHA-256 dos candidatos...")
+    report, valid, sigs = discover.inspect_folder(folder, entries, None, _progress_printer(), root)
+    ok = 0
+    for f in report:
+        if f.status == "ok":
+            ok += 1
+            _out(f"  [UTILIZÁVEL] {f.name} ({human_bytes(f.size)}) -> {f.path}")
+        elif f.status == "hash":
+            _out(f"  [DIFERENTE ] {f.name}: mesmo tamanho, conteúdo diferente ({f.path}); não serve")
+        else:
+            _out(f"  [AUSENTE   ] {f.name}")
+    _out(f"{ok} de {len(report)} arquivo(s) dessa pasta podem ser usados.")
+    if use and valid:
+        imported, still, copied = discover.import_found(valid, entries, root, _progress_printer(), None, sigs)
+        for p in imported:
+            _out(f"  usado: {p}" + (" (copiado)" if p in copied else " (ligado, sem espaço extra)"))
+        if not still and root == ROOT:
+            apply_stt_choice(components, man)
+    return 0 if ok else 4
+
+
 def cmd_scan(components: list[str], root: Path, deep: bool, use: bool) -> int:
     from .config_io import apply_stt_choice
     man = load_manifest(root)
@@ -148,6 +177,7 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--make-pack", metavar="PASTA", help="cria um pacote offline com os modelos instalados")
     ap.add_argument("--scan", action="store_true", help="procura modelos que você já tem no PC")
     ap.add_argument("--deep", action="store_true", help="com --scan: procura nos discos inteiros")
+    ap.add_argument("--folder", metavar="PASTA", help="com --scan: examina só esta pasta e diz o que dá para usar")
     ap.add_argument("--use-found", action="store_true", help="com --scan: confere e traz os modelos achados")
     ap.add_argument("--status", action="store_true", help="mostra o estado dos modelos")
     ap.add_argument("--capture", metavar="PASTA", help="(dev) grava PNG de todas as telas, offscreen")
@@ -166,6 +196,8 @@ def run_setup(ns: argparse.Namespace) -> int:
         done = make_offline_pack(Path(ns.make_pack), man.files_for(list(man.components)), root)
         _out(f"Pacote offline com {len(done)} arquivo(s) em {ns.make_pack}")
         return 0 if done else 2
+    if ns.scan and ns.folder:
+        return cmd_scan_folder(_components(ns.components, root), root, Path(ns.folder), ns.use_found)
     if ns.scan:
         return cmd_scan(_components(ns.components, root), root, ns.deep, ns.use_found)
     if ns.status:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from dataclasses import dataclass
 import os
 import threading
 import time
@@ -139,7 +140,7 @@ def _walk(root: Path, wanted_sizes: set[int], hits: dict[int, list[Path]], count
 
 def scan(entries: Iterable[FileEntry], roots: Iterable[Path] | None = None, *, deep: bool = False,
          cancel: threading.Event | None = None, cb: ScanCb | None = None,
-         install_root: Path | None = None) -> dict[str, list[Path]]:
+         install_root: Path | None = None, exhaustive: bool = False) -> dict[str, list[Path]]:
     """{caminho do manifesto: [candidatos]} (candidatos de mesmo tamanho, o mais provável primeiro). Não confere hash."""
     cancel = cancel or threading.Event()
     entries = list(entries)
@@ -150,7 +151,10 @@ def scan(entries: Iterable[FileEntry], roots: Iterable[Path] | None = None, *, d
     hits: dict[int, list[Path]] = {}
     counter = [0]
     inst = str(install_root).lower() if install_root else None
-    if deep:
+    if exhaustive:                                  # pasta escolhida pelo usuário: varre tudo dentro dela
+        roots = list(roots or [])
+        deadline, max_files, depth = time.monotonic() + DEEP_MAX_SECONDS, 50_000_000, 40
+    elif deep:
         roots = _fixed_drives()
         deadline, max_files, depth = time.monotonic() + DEEP_MAX_SECONDS, 50_000_000, 40
     else:
@@ -159,7 +163,7 @@ def scan(entries: Iterable[FileEntry], roots: Iterable[Path] | None = None, *, d
     for r in roots:
         if cancel.is_set() or time.monotonic() > deadline:
             break
-        per = deadline if deep else min(deadline, time.monotonic() + PER_ROOT_SECONDS)
+        per = deadline if (deep or exhaustive) else min(deadline, time.monotonic() + PER_ROOT_SECONDS)
         _walk(Path(r), sizes, hits, counter, per, max_files, depth, cancel, cb)
     out: dict[str, list[Path]] = {}
     for size, es in wanted.items():
@@ -171,6 +175,57 @@ def scan(entries: Iterable[FileEntry], roots: Iterable[Path] | None = None, *, d
             if cands:
                 out[e.path] = cands[:6]
     return out
+
+
+@dataclass(frozen=True)
+class Finding:
+    entry: str                      # caminho no manifesto (ex.: models/silero/silero_vad.onnx)
+    name: str
+    size: int
+    status: str                     # "ok" (conferido, pode usar) | "hash" (mesmo tamanho, conteúdo diferente) | "missing"
+    path: Path | None = None
+
+
+def inspect_folder(folder: Path, entries: Iterable[FileEntry], cancel: threading.Event | None = None,
+                   progress: ProgressCb | None = None, install_root: Path | None = None
+                   ) -> tuple[list[Finding], dict[str, list[Path]], dict[Path, tuple[int, int]]]:
+    """Examina `folder` (e subpastas) à procura dos arquivos do manifesto e CONFERE o SHA-256 de cada candidato.
+
+    Devolve (relatório por arquivo, {manifesto: [arquivo válido]}, assinatura (tamanho, mtime) dos válidos para não conferir de novo)."""
+    cancel = cancel or threading.Event()
+    entries = list(entries)
+    found = scan(entries, [folder], exhaustive=True, cancel=cancel, install_root=install_root)
+    total = sum(e.size for e in entries if e.path in found)
+    done = 0
+    report: list[Finding] = []
+    valid: dict[str, list[Path]] = {}
+    sigs: dict[Path, tuple[int, int]] = {}
+    for e in entries:
+        name = Path(e.path).name
+        cands = found.get(e.path, [])
+        if not cands:
+            report.append(Finding(e.path, name, e.size, "missing"))
+            continue
+        good: Path | None = None
+        for cand in cands:
+            try:
+                st = cand.stat()
+                digest = sha256_of(cand, cancel, lambda n, e=e, base=done: progress and progress(
+                    Progress(name, n, e.size, base + n, total, 0.0, "conferindo")))
+            except OSError as exc:
+                log.warning("não consegui ler %s: %s", cand, exc)
+                continue
+            if digest == e.sha256:
+                good = cand
+                sigs[cand] = (st.st_size, st.st_mtime_ns)
+                break
+        done += e.size
+        if good is not None:
+            valid[e.path] = [good]
+            report.append(Finding(e.path, name, e.size, "ok", good))
+        else:
+            report.append(Finding(e.path, name, e.size, "hash", cands[0]))
+    return report, valid, sigs
 
 
 def sha256_of(path: Path, cancel: threading.Event, cb: Callable[[int], None] | None = None) -> str:
@@ -191,7 +246,8 @@ def sha256_of(path: Path, cancel: threading.Event, cb: Callable[[int], None] | N
 
 
 def import_found(found: dict[str, list[Path]], entries: Iterable[FileEntry], root: Path, progress: ProgressCb | None = None,
-                 cancel: threading.Event | None = None) -> tuple[list[str], list[str], list[str]]:
+                 cancel: threading.Event | None = None,
+                 trusted: dict[Path, tuple[int, int]] | None = None) -> tuple[list[str], list[str], list[str]]:
     """Traz para `root` os arquivos achados. Devolve (ligados/copiados, não encontrados, usaram cópia).
 
     Só entra arquivo cujo SHA-256 confere. Preferência: link físico (instantâneo, sem espaço extra); senão cópia."""
@@ -211,10 +267,14 @@ def import_found(found: dict[str, list[Path]], entries: Iterable[FileEntry], roo
         ok = False
         for cand in found.get(e.path, []):
             try:
-                if progress:
-                    progress(Progress(name, 0, e.size, done_overall, total, 0.0, "conferindo"))
-                digest = sha256_of(cand, cancel, lambda n, e=e, base=done_overall: progress and progress(
-                    Progress(name, n, e.size, base + n, total, 0.0, "conferindo")))
+                st = cand.stat()
+                if trusted and trusted.get(cand) == (st.st_size, st.st_mtime_ns):      # já conferido e não mudou desde então
+                    digest = e.sha256
+                else:
+                    if progress:
+                        progress(Progress(name, 0, e.size, done_overall, total, 0.0, "conferindo"))
+                    digest = sha256_of(cand, cancel, lambda n, e=e, base=done_overall: progress and progress(
+                        Progress(name, n, e.size, base + n, total, 0.0, "conferindo")))
             except OSError as exc:
                 log.warning("não consegui ler %s: %s", cand, exc)
                 continue
