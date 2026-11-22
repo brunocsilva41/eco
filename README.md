@@ -21,7 +21,7 @@ Versão atual: **0.1.0** (primeira versão; veja [CHANGELOG.md](CHANGELOG.md) e 
 ## Requisitos
 - Windows 10 (build 19044 ou superior) ou Windows 11, 64 bits.
 - 16 GB de RAM recomendados.
-- GPU com suporte a Vulkan. Testado em uma AMD Radeon RX 580 de 8 GB; outras GPUs (NVIDIA, Intel) **não foram testadas**.
+- GPU com suporte a Vulkan e 8 GB de VRAM recomendados (pico medido de 6,8 GB com modelo, visão e escuta). Testado em uma AMD Radeon RX 580 de 8 GB; outras GPUs (NVIDIA, Intel) **não foram testadas**.
 - Cerca de 3,5 GB de disco para os modelos, mais o programa.
 
 ## Instalação
@@ -106,7 +106,7 @@ Regra medida: GPU por padrão; CPU só onde medi menor tempo (diferença < 10% =
 ## Estado e desempenho (medido)
 Medido na máquina de desenvolvimento (RX 580 8 GB, Xeon E5-2650 v4, 16 GB): modelo ~19,8 tok/s de geração e ~187 tok/s de
 prompt; VRAM total ~6,1 GB de 8 GB com o modelo carregado; RAM do servidor ~500 MB; partida a frio ~42 s. Latência da voz
-ponta a ponta e WER com gravações reais: **não medidos**. Limitações e itens não verificados em
+do fim da fala ao primeiro som ~3 a 4 s com o modelo em cache; WER em frases sintetizadas 11,8% (ruído de 8 dB: 17,8%) com a escuta na GPU; WER com gravações reais de pessoas: **não medido**. Limitações e itens não verificados em
 [docs/RELEASE-v0.1.0.md](docs/RELEASE-v0.1.0.md).
 
 ## LICENÇA
