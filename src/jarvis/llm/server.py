@@ -144,6 +144,8 @@ class LlamaServer:
                "--host", c.host, "--port", str(c.port), "--jinja", "--api-key-file", str(self._key_file),
                "-np", "1", "--no-webui", "-cram", "1024"]      # chave por ARQUIVO (a linha de comando é visível a outros processos)
         #                                                       1 slot; sem UI web; cache de prompt limitado (RAM é curta)
+        if c.ngl >= 99:
+            cmd += ["-t", "2"]                          # tudo na GPU: 2 threads dão a mesma velocidade e metade do CPU (medido: 56% -> 32%)
         if not c.mmap:
             cmd += ["-lm", "none"]                      # sem mmap: com tudo na GPU a RAM do servidor cai ~2,3 GB (medido)
         if c.sleep_idle_s > 0:

@@ -6,6 +6,7 @@ from typing import Callable
 
 # fim de frase: . ! ? … seguido de espaço/fim; não corta decimais ("3.5") nem "1." de listas
 _BOUNDARY = re.compile(r"(?<=[.!?…])(?<!\d\.)\s+|\n{1,}")
+_CLAUSE = re.compile(r"[,;:]\s+")
 
 
 class SentenceSplitter:
@@ -19,6 +20,7 @@ class SentenceSplitter:
         self._min = min_chars
         self._buf = ""
         self._carry = ""
+        self._emitted = False                    # já soltou algo? (a PRIMEIRA fala sai na 1ª oração, sem esperar o ponto final)
 
     def feed(self, chunk: str) -> None:
         self._buf += chunk
@@ -26,6 +28,11 @@ class SentenceSplitter:
         self._buf = parts[-1]
         for sentence in parts[:-1]:
             self._push(sentence)
+        if not self._emitted and not self._carry and len(self._buf) >= 40:
+            m = _CLAUSE.search(self._buf, 24)    # vírgula/dois-pontos/ponto e vírgula seguido de espaço, depois de ~24 letras
+            if m:
+                head, self._buf = self._buf[:m.start() + 1], self._buf[m.end():]
+                self._push(head)
 
     def flush(self) -> None:
         if self._buf.strip():
@@ -36,6 +43,7 @@ class SentenceSplitter:
         self._carry = ""
 
     def _push(self, sentence: str) -> None:
+        self._emitted = True
         s = (self._carry + " " + sentence).strip() if self._carry else sentence.strip()
         if not s:
             return

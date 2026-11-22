@@ -49,6 +49,7 @@ def _control_name_at(px: int, py: int) -> str:
 
 # --- localização visual: o PRÓPRIO modelo de visão acha o alvo na imagem (ligado em app.py via set_grounder)
 _ground: Callable[[bytes, str], str] | None = None
+_FULL_SIDE = 1024                                       # 768 foi testado: mais rápido (5 s) mas só 3 de 5 acertos; 1024 mantém a precisão
 _AGREE_PX = 70                                          # as duas leituras (janela e tela inteira) precisam cair a esta distância
 
 
@@ -88,7 +89,7 @@ def _locate(description: str, target_hwnd: int = 0) -> tuple[tuple[int, int] | N
         return None, "Não consegui capturar a tela."
     left, top, width, height = geom
     max_side = max(64, cfg_vision_side())
-    full_jpeg, _ = screen._encode(img.copy(), max_side, 80)
+    full_jpeg, _ = screen._encode(img.copy(), min(max_side, _FULL_SIDE), 80)
     points: list[tuple[float, float]] = []
     rect = win.window_rect(target_hwnd) if target_hwnd else None
     if rect is not None:
