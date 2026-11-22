@@ -9,6 +9,8 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 Primeira versão. Desenvolvida entre 2026-11-19 e 2026-11-22 (33 commits).
 
 ### Adicionado
+- **CPU × GPU por serviço (medido):** LLM, visão e escuta de comandos na GPU; voz Piper, detector de voz, captura de tela, Ilha e UI Automation na CPU. Escuta com whisper.cpp Vulkan (small): 0,98 s e 0,38 CPU-s por frase, WER 11,8% contra 18,4% do base na CPU. Chaves `llm.device`, `llm.mmproj_device`, `stt.device`, `tts.device` (`auto`/`gpu`/`cpu`); queda segura para a CPU com aviso; `Jarvis.cmd doctor` mostra onde cada serviço roda.
+- **Leveza:** modelo sem mmap (−2,35 GB de RAM), descarga do modelo e da escuta por inatividade (`llm.sleep_idle_s`, libera ~5 GB de VRAM), servidor com 2 threads (CPU −43%), núcleo fixo de ferramentas em cache (1º token 0,8–1,4 s), Ilha leve (34–48 MB, ~0% escondida).
 - **Base e medições (F0/F1):** estrutura do projeto; build do llama.cpp com Vulkan; varreduras de modelos (Gemma 4 E4B,
   Qwen3.5 4B/9B, MoE), KV cache, flash-attention e RAM; benchmark e validação de STT (whisper.cpp x faster-whisper).
 - **Núcleo:** configuração tipada e validada (`config.toml`), agente com chamada de ferramentas, cliente e servidor

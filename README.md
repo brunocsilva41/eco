@@ -100,6 +100,9 @@ A versão vem de `installer\VERSION`. Saída em `installer\dist\` (`.exe`, `.sha
 
 A lista completa gerada no build fica em `THIRD-PARTY.txt` dentro do instalador.
 
+## Onde cada serviço roda (CPU × GPU)
+Regra medida: GPU por padrão; CPU só onde medi menor tempo (diferença < 10% = menos CPU-s). Modelo de linguagem, visão e escuta rodam na placa de vídeo (Vulkan); voz, detector de voz, captura de tela e interface na CPU. Cada escolha tem chave em `config.toml` (`llm.device`, `llm.mmproj_device`, `stt.device`, `tts.device`: `auto`, `gpu` ou `cpu`); se a GPU falhar, o Jarvis cai para a CPU com aviso. `Jarvis.cmd doctor` mostra onde cada serviço roda e `docs/medicoes-release.md` traz os números.
+
 ## Estado e desempenho (medido)
 Medido na máquina de desenvolvimento (RX 580 8 GB, Xeon E5-2650 v4, 16 GB): modelo ~19,8 tok/s de geração e ~187 tok/s de
 prompt; VRAM total ~6,1 GB de 8 GB com o modelo carregado; RAM do servidor ~500 MB; partida a frio ~42 s. Latência da voz

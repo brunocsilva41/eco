@@ -9,8 +9,10 @@ sys.path.insert(0, r"F:\Jarvis\src\f2")
 from stt_bench import load_audio, load_refs, model_path, norm, wer_counts
 from faster_whisper import WhisperModel
 
-CLI = r"C:\Users\Bruno Silva\OpenBot\Shared\triade\estudio-br\bin\whispercpp-vulkan\whisper-cli.exe"
-MODEL = r"C:\Users\Bruno Silva\OpenBot\Shared\triade\estudio-br\bin\whispercpp-vulkan\ggml-small.bin"
+import os
+BIN = os.environ.get("WHISPERCPP_BIN", r"bin\whispercpp-vulkan")     # pasta com whisper-cli.exe e ggml-small.bin
+CLI = os.path.join(BIN, "whisper-cli.exe")
+MODEL = os.path.join(BIN, "ggml-small.bin")
 OUT = Path(r"F:\Jarvis\work\bench"); OUT.mkdir(parents=True, exist_ok=True)
 
 

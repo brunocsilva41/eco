@@ -1,5 +1,5 @@
 """Grava as 20 frases de F:\\Jarvis\\tests\\frases_pt.txt com a voz do Bruno (para o WER real).
-Usa o dispositivo de entrada padrao (Microfone Fuxi-H7). Salva 16 kHz mono em tests\\audio_bruno\\NN.wav.
+Usa o dispositivo de entrada padrao (o microfone padrão do Windows). Salva 16 kHz mono em tests\\audio_bruno\\NN.wav.
 Uso: venv\\Scripts\\python.exe -I src\\f2\\record_bruno.py [--device N] [--seconds 12] [--from 1]
 Por frase: ENTER inicia; ENTER de novo para; depois ENTER aceita ou 'r' regrava; 'q' sai.
 """
