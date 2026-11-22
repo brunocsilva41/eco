@@ -58,6 +58,7 @@ class ToolResult:
     image_mime: str = "image/jpeg"
     untrusted: bool = False              # conteúdo vindo da tela/web/notas: nunca é instrução
     effect_unknown: bool = False         # a ação pode ter ocorrido mesmo sem sucesso confirmado
+    grant: dict[str, str] | None = None  # recusa por LISTA DE PERMISSÃO que o usuário pode liberar: {"kind","value","text"}
 
 
 @dataclass(frozen=True)
@@ -166,7 +167,11 @@ def _check_schema(name: str, schema: dict[str, Any]) -> None:
 class ToolRegistry:
     """Contrato de threads: `register` só na partida; `execute`/`openai_tools`/`reconfigure` são seguros entre threads."""
 
+    _grant_appliers: dict[str, Callable[[str], None]]
+    _grant_persist: Callable[[dict[str, str]], None] | None = None
+
     def __init__(self, cfg: Config, bus: EventBus, confirmer: Confirmer | None = None) -> None:
+        self._grant_appliers = {}
         self._cfg = cfg
         self._bus = bus
         self._confirmer = confirmer
@@ -177,6 +182,38 @@ class ToolRegistry:
 
     def set_confirmer(self, confirmer: Confirmer) -> None:
         self._confirmer = confirmer
+
+    # ------------------------------------------------------------- permissões por lista (liberar na hora)
+    def add_grant_applier(self, kind: str, fn: Callable[[str], None]) -> None:
+        """A ferramenta registra como aplicar, na hora, uma liberação do tipo `kind` (ex.: 'typing_process')."""
+        self._grant_appliers[kind] = fn
+
+    def set_grant_persist(self, fn: Callable[[dict[str, str]], None]) -> None:
+        """Quem guarda a liberação no config.toml (o app)."""
+        self._grant_persist = fn
+
+    def _grant_flow(self, grant: dict[str, str], parent: CancelToken, origin: str, tool: str) -> bool:
+        """Recusa por lista de permissão: PERGUNTA (Ilha, voz ou tecla). Sim = libera, lembra e a ação segue. True se liberou."""
+        applier = self._grant_appliers.get(grant.get("kind", ""))
+        if applier is None or self._blocked:
+            return False
+        text = grant.get("text", "Permitir esta ação?")
+        if YOLO.active():                                               # YOLO: libera só para a sessão, sem lembrar e sem perguntar
+            applier(grant["value"])
+            audit.info(json.dumps({"origin": origin, "tool": tool, "grant": grant.get("kind"), "via": "yolo"}, ensure_ascii=False))
+            return True
+        decision = self._confirm(text, Risk.CONTROL, parent)
+        audit.info(json.dumps({"origin": origin, "tool": tool, "grant": grant.get("kind"),
+                               "confirmation": {"allowed": decision.allowed, "via": decision.via}}, ensure_ascii=False))
+        if not decision.allowed:
+            return False
+        applier(grant["value"])
+        if self._grant_persist is not None:
+            try:
+                self._grant_persist(grant)
+            except Exception:  # noqa: BLE001 - liberou para a sessão mesmo que não consiga gravar
+                log.exception("não consegui gravar a liberação %s", grant.get("kind"))
+        return True
 
     def block_actions(self, reason: str) -> None:
         """Só ferramentas de leitura passam a rodar (usado quando a tecla de emergência deixa de funcionar)."""
@@ -274,9 +311,13 @@ class ToolRegistry:
             step = spec.description
         if spec.prepare is not None:                                    # 3. resolver o alvo REAL antes de perguntar
             outcome = self._call(spec.prepare, ctx, args, PREPARE_TIMEOUT_S, parent, name + ".prepare")
+            if isinstance(outcome, ToolResult) and outcome.grant and self._grant_flow(outcome.grant, parent, origin, name):
+                outcome = self._call(spec.prepare, ctx, args, PREPARE_TIMEOUT_S, parent, name + ".prepare")   # liberado: tenta de novo
             if isinstance(outcome, ToolResult):
                 why = "[conteúdo omitido]" if (outcome.untrusted or spec.audit_args is not None) else outcome.message[:120]
                 audit.info(_line(origin, name, shown, f"preparo falhou: {why}"))   # nunca grava títulos/nomes de fora
+                self._bus.publish("action_step", tool=name, text=step, status="error", risk=int(spec.risk),
+                                  result=("" if outcome.untrusted else outcome.message[:200]))      # a Ilha mostra POR QUE foi recusada
                 return outcome
             ctx.prepared = outcome.state
             step = outcome.text

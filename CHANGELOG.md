@@ -5,6 +5,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 ## [Não lançado]
 - Licença do projeto ainda pendente de definição.
 
+## [0.1.3] - 2026-11-22
+### Corrigido
+- **Ações recusadas por falta de permissão não apareciam na Ilha.** Agora toda recusa aparece na Ilha com o motivo, e as recusas por LISTA de permissão (digitar em outro programa, atalho não liberado) viram um **pedido de permissão**: a Ilha mostra «Permitir e lembrar?» com Sim/Não (também por voz ou atalho). Sim libera na hora e grava no config.toml; Não mantém a recusa. Programas bloqueados por segurança (terminais, gerenciadores de senha) nunca são oferecidos. No modo YOLO libera só para a sessão.
+
 ## [0.1.2] - 2026-11-22
 ### Corrigido
 - **Parava de responder (ouvia e voltava ao repouso):** o áudio podia chegar sem sinal (microfone preso depois de a máquina travar). Agora o Jarvis detecta fala sem som, reabre o microfone sozinho depois de 2 ocorrências e avisa; o log registra o pico do áudio.

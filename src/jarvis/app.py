@@ -185,6 +185,22 @@ class JarvisApp:
                 self._settings_opened_at = now
                 self.bus.publish("open_settings", section="permissions" if msg.get("section") == "permissions" else "general")
 
+    def _persist_grant(self, grant: dict) -> None:
+        """Liberação aprovada pelo usuário (Ilha/voz/tecla): acrescenta ao config.toml para valer nas próximas vezes."""
+        kind, value = grant.get("kind"), grant.get("value", "")
+        lists = self.__dict__.setdefault("_grant_lists", {})
+        keys = {"typing_process": ("safety.typing_allowed_processes", lambda c: list(c.safety.typing_allowed_processes)),
+                "typing_title": ("safety.typing_allowed_titles", lambda c: list(c.safety.typing_allowed_titles)),
+                "hotkey": ("apps.hotkeys", lambda c: list(c.apps.hotkeys))}
+        if kind not in keys or not value:
+            return
+        key, base = keys[kind]
+        cur = lists.setdefault(key, base(self.cfg))
+        if value not in cur:
+            cur.append(value)
+        log.info("liberação gravada: %s += %s", key, value)
+        self._persist({key: list(cur)})
+
     def _persist(self, updates: dict) -> None:
         """Grava uma preferência da Ilha/bandeja no config.toml (em segundo plano; falha só vira aviso no log)."""
         def run() -> None:
@@ -279,6 +295,7 @@ class JarvisApp:
             stack.callback(memory.close)
             confirmer = ConfirmationBroker(self.bus, cfg.safety.confirm_timeout_s)
             registry = ToolRegistry(cfg, self.bus, confirmer)
+            registry.set_grant_persist(self._persist_grant)
             failed = catalog.register_everything(registry, cfg)
             if failed:
                 log.error("módulos de ferramentas com falha: %s", ", ".join(failed))

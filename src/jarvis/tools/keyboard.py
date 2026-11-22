@@ -101,8 +101,10 @@ def _typed_preview(text: str) -> str:
 def register(registry: ToolRegistry, cfg: Config) -> None:
     max_chars = max(1, cfg.safety.max_typed_chars)
     typing_confirm = cfg.safety.typing_confirm
-    allowed_procs = _lower_set(cfg.safety.typing_allowed_processes)
-    allowed_titles = tuple(fold(t) for t in cfg.safety.typing_allowed_titles if t.strip())
+    allowed_procs = set(_lower_set(cfg.safety.typing_allowed_processes))            # mutáveis: liberações valem na hora
+    allowed_titles = [fold(t) for t in cfg.safety.typing_allowed_titles if t.strip()]
+    registry.add_grant_applier("typing_process", lambda v: allowed_procs.add(v.strip().lower()))
+    registry.add_grant_applier("typing_title", lambda v: allowed_titles.append(fold(v)))
 
     def _focus_requested(args: dict[str, Any]) -> ToolResult | None:
         """Parâmetro opcional `janela`: traz essa janela para frente ANTES de preparar (app recém-aberto não vem sozinho)."""
@@ -121,7 +123,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         time.sleep(0.25)
         return None
     denied_procs = HARD_DENIED_TYPING | _lower_set(cfg.safety.typing_denied_extra)
-    allowed = _norm_combos(cfg.apps.hotkeys, "apps.hotkeys")
+    allowed = set(_norm_combos(cfg.apps.hotkeys, "apps.hotkeys"))
+    registry.add_grant_applier("hotkey", lambda v: allowed.add(v))
     confirm_combos = _norm_combos(cfg.apps.hotkeys_confirm, "apps.hotkeys_confirm")
     reserved = _norm_combos((cfg.safety.emergency_hotkey, cfg.safety.mute_hotkey, cfg.safety.confirm_yes_hotkey,
                              cfg.safety.confirm_no_hotkey, cfg.safety.talk_key, cfg.safety.open_listen_hotkey or cfg.safety.talk_key,
@@ -150,6 +153,14 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         uwp_ok = target.process == "applicationframehost.exe" and any(t in fold(target.title) for t in allowed_titles)
         if target.process not in allowed_procs and not uwp_ok:
             log.info("digitar_texto recusado: %s fora da lista permitida", target.process)
+            if target.process == "applicationframehost.exe" and fold(target.title).split():       # app da loja: libera pelo TÍTULO
+                word = fold(target.title).split()[0][:30]
+                grant = {"kind": "typing_title", "value": word,
+                         "text": f"Permissão: digitar no app «{clip(target.title, 40)}». Permitir e lembrar?"}
+            else:
+                grant = {"kind": "typing_process", "value": target.process,
+                         "text": f"Permissão: digitar em {target.process} («{clip(target.title, 40)}»). Permitir e lembrar?"}
+            return ToolResult(False, f"Ainda não tenho permissão para digitar em {target.process}; pedi a sua autorização.", grant=grant)
             return ToolResult(False, f"A janela em foco é {target.process}, e só digito em: {allowed_txt}.")
         if target.dialog:
             log.warning("digitar_texto recusado: %s está num diálogo (%r)", target.process, target.title[:40])
@@ -206,8 +217,9 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             log.warning("apertar_atalho recusado: %s é tecla de segurança do Jarvis", combo.norm)
             return ToolResult(False, f"O atalho {combo.norm} é uma tecla de segurança do Jarvis; não posso apertá-lo.")
         if combo.norm not in allowed:
-            return ToolResult(False, f"O atalho {combo.norm} não está liberado. "
-                                     f"Liberados: {', '.join(sorted(allowed))}.")
+            return ToolResult(False, f"O atalho {combo.norm} ainda não está liberado; pedi a sua autorização.",
+                              grant={"kind": "hotkey", "value": combo.norm,
+                                     "text": f"Permissão: apertar o atalho {combo.norm}. Permitir e lembrar?"})
         target = _focused_target()
         if isinstance(target, ToolResult):
             return target
