@@ -178,6 +178,11 @@ class LogsCfg:
 
 
 @dataclass(frozen=True)
+class UiCfg:
+    island_enabled: bool = True                      # mostra a Ilha (janela no topo da tela) enquanto o Jarvis roda
+
+
+@dataclass(frozen=True)
 class Config:
     paths: PathsCfg = field(default_factory=PathsCfg)
     audio: AudioCfg = field(default_factory=AudioCfg)
@@ -192,6 +197,7 @@ class Config:
     context: ContextCfg = field(default_factory=ContextCfg)
     files: FilesCfg = field(default_factory=FilesCfg)
     logs: LogsCfg = field(default_factory=LogsCfg)
+    ui: UiCfg = field(default_factory=UiCfg)
 
 
 def assert_loopback(host: str) -> None:

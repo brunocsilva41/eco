@@ -34,6 +34,7 @@ CATEGORIES: tuple[Category, ...] = (
         _S("appearance", custom="theme"),
         _S("talk", ("safety.talk_key", "safety.talk_mode", "safety.mute_hotkey")),
         _S("confirm", ("safety.confirm_yes_hotkey", "safety.confirm_no_hotkey", "safety.confirm_timeout_s")),
+        _S("island", ("ui.island_enabled",)),
         _S("limits", ("safety.max_agent_steps", "safety.tool_timeout_s"), 2),
     )),
     Category("voice", "listen", (schema.G_VOICE,), (

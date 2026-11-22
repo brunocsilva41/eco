@@ -76,6 +76,8 @@ class IslandWindow(QWidget):
     mute_toggled = Signal(bool)
     settings_requested = Signal()
     size_changed = Signal(str)
+    _fs_hits = 0
+    _fs_miss = 0
 
     def __init__(self, levels: LevelSource | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -416,11 +418,15 @@ class IslandWindow(QWidget):
     def _poll_fullscreen(self) -> None:
         if not T.HIDE_ON_FULLSCREEN:
             return
-        full = winapi.fullscreen_app_active(int(self.winId()))
-        if full and self.isVisible():
+        # histerese: esconde depois de 2 leituras seguidas em tela cheia, volta depois de 3 sem (evita piscar em alt-tab/transicoes)
+        if winapi.fullscreen_app_active(int(self.winId())):
+            self._fs_hits, self._fs_miss = self._fs_hits + 1, 0
+        else:
+            self._fs_hits, self._fs_miss = 0, self._fs_miss + 1
+        if self._fs_hits >= T.FULLSCREEN_HIDE_HITS and self.isVisible():
             self._guard_hid = True
             self.hide()
-        elif not full and self._guard_hid:
+        elif self._fs_miss >= T.FULLSCREEN_SHOW_MISSES and self._guard_hid:
             self._guard_hid = False
             self.show()
 
@@ -575,6 +581,21 @@ class IslandWindow(QWidget):
         phase = pulse_phase(self._t) if (self._motion and self._state is IslandState.LISTENING and not self._muted) else 0.0
         draw_mic(p, rect, self._mic_kind(), color, bg=T.PALETTE.bg, phase=phase)
 
+    def _draw_yolo_chip(self, p: QPainter, right: float, cy: float) -> float:
+        """Chip 'YOLO' (vermelho, com borda e texto: nao depende so da cor) encostado em ``right``; devolve a largura."""
+        pal = T.PALETTE
+        cf = make_font(TYPE.caption, TYPE.semibold)
+        tw = QFontMetrics(cf).horizontalAdvance(S.yolo_short)
+        cw, ch = tw + 12.0, 16.0
+        rect = QRectF(right - cw, cy - ch / 2, cw, ch)
+        p.setPen(QPen(QColor(pal.error), 1.0))
+        p.setBrush(QColor(pal.error_bg))
+        p.drawRoundedRect(rect, ch / 2, ch / 2)
+        p.setFont(cf)
+        p.setPen(QColor(pal.error))
+        p.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), S.yolo_short)
+        return cw
+
     def _paint_compact(self, p: QPainter, w: int, h: int, dpr: float, dyn: bool) -> None:
         pal = T.PALETTE
         pad = T.C_PAD
@@ -594,6 +615,8 @@ class IslandWindow(QWidget):
         wave = self._waves[IslandSize.COMPACT]
         wave_x = dot_x - SPACE.sm - wave.width
         right = wave_x - SPACE.sm
+        if self._yolo_left() is not None:                       # YOLO visivel em TODOS os tamanhos
+            right -= self._draw_yolo_chip(p, right, cy) + SPACE.sm
         f = make_font(TYPE.small, TYPE.semibold)
         if self._state is IslandState.ACTING:                   # tempo da acao em curso
             tf = make_font(TYPE.small, tabular=True)
@@ -626,7 +649,10 @@ class IslandWindow(QWidget):
         tf = make_font(TYPE.small, tabular=True)
         timer_w = QFontMetrics(tf).horizontalAdvance("00:00") + 2
         show_timer = self._state is not IslandState.IDLE
-        title_w = max(0, int(right - x - (timer_w + SPACE.sm if show_timer else 0)))
+        chip_w = 0.0
+        if self._yolo_left() is not None:                       # YOLO visivel em TODOS os tamanhos
+            chip_w = self._draw_yolo_chip(p, right - (timer_w + SPACE.sm if show_timer else 0), 20.0) + SPACE.sm
+        title_w = max(0, int(right - x - (timer_w + SPACE.sm if show_timer else 0) - chip_w))
         f = make_font(TYPE.body, TYPE.semibold)
         p.setFont(f)
         p.setPen(QColor(pal.text))

@@ -24,6 +24,7 @@ class IslandStrings:
     context: str = "Contexto {pct}%"
     acting_prefix: str = "Executando: {what}"
     yolo: str = "YOLO {t}"
+    yolo_short: str = "YOLO"
     action_running: str = "em andamento"
     action_ok: str = "ok"
     action_error: str = "erro"

@@ -25,7 +25,9 @@ ACCENT_OVERRIDE: Final[str | None] = None  # ex.: "#22D3EE" para ciano; None = u
 
 HOTKEY: Final = "F9"                       # mesmo atalho de falar (decisao do Bruno); registro global = fase I3
 HIDE_ON_FULLSCREEN: Final = True           # decisao do Bruno: esconder com jogo/video em tela cheia
-FULLSCREEN_POLL_MS: Final = 1500
+FULLSCREEN_POLL_MS: Final = 700
+FULLSCREEN_HIDE_HITS: Final = 2            # leituras seguidas em tela cheia para esconder (histerese)
+FULLSCREEN_SHOW_MISSES: Final = 3          # leituras seguidas sem tela cheia para voltar
 
 PALETTE: Final[Palette] = DARK
 

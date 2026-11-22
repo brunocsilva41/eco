@@ -112,6 +112,7 @@ class IslandBridge(QObject):
                 return                                         # a confirmacao so termina por resposta/confirm_done
             w.set_state(st)
         elif k == "transcript":
+            w.set_reply("")                                    # fala nova: some a resposta anterior (tambem no modo texto)
             w.set_transcript(str(d.get("text", "")))
         elif k == "reply_text":
             w.append_reply(str(d.get("text", "")))
@@ -125,8 +126,12 @@ class IslandBridge(QObject):
         elif k == "context_usage":
             w.set_context_pct(float(d.get("pct", 0)))
         elif k == "yolo":
-            remaining = self._yolo_remaining() if (d.get("on") and self._yolo_remaining) else None
-            w.set_yolo(remaining if d.get("on") and remaining is not None else (3600.0 if d.get("on") else None))
+            remaining = d.get("remaining_s")                  # o nucleo (processo pai) manda os segundos restantes
+            if remaining is None and d.get("on") and self._yolo_remaining:
+                remaining = self._yolo_remaining()
+            w.set_yolo(float(remaining) if d.get("on") and remaining is not None else (3600.0 if d.get("on") else None))
+        elif k == "mode":
+            w.set_permission_mode(str(d.get("mode", "")))
         elif k == "mute":
             w.set_mute(bool(d.get("muted")))
         elif k == "emergency":

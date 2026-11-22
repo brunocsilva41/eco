@@ -94,6 +94,9 @@ class JarvisApp:
         self._settings = SettingsStore()
         self._boot_cfg = cfg                                             # configuração da partida (base do "requer reinício")
         self._emergency_norm = parse_combo(cfg.safety.emergency_hotkey).norm
+        self._estop: EmergencyStop | None = None
+        self._island = None                                              # IslandLink (processo filho da Ilha); None = desligada
+        self._settings_opened_at = 0.0
 
     # ================================================================ ciclo de vida
     def start(self) -> None:
@@ -122,6 +125,43 @@ class JarvisApp:
                                                               control.config_mtime(cfgmod.CONFIG_FILE), self._pending_restart))
         log.info("Jarvis pronto. %s para falar; %s para parar tudo.",
                  cfg.safety.talk_key.upper(), cfg.safety.emergency_hotkey.upper())
+        if cfg.ui.island_enabled:
+            self._start_island()
+
+    def _start_island(self) -> None:
+        """Lança a Ilha como processo filho (pipes JSON). Qualquer falha aqui só tira a Ilha; o Jarvis segue."""
+        p = self._p
+        if p is None:
+            return
+        try:
+            from .ui.island.link import IslandLink                      # sem Qt: o núcleo não importa PySide6
+            link = IslandLink(self.bus, root=cfgmod.ROOT, log_dir=self.cfg.paths.logs, on_command=self._on_island_command,
+                              tts_rms=lambda: getattr(getattr(p.speaker, "_session", None), "_last_rms", 0.0),
+                              speaking=lambda: self.state.speaking, yolo_remaining=YOLO.remaining_s,
+                              permission_mode=lambda: self.cfg.safety.permission_mode)
+            link.start()
+            self._island = link
+        except Exception:  # noqa: BLE001
+            log.exception("não consegui iniciar a Ilha (o Jarvis continua sem ela)")
+
+    def _on_island_command(self, cmd: str, msg: dict) -> None:
+        """Botões da Ilha (thread de leitura do pipe). Mesmas rotas das teclas; a Ilha só pede, o núcleo decide."""
+        p = self._p
+        if p is None:
+            return
+        if cmd == "confirm":
+            p.confirmer.answer(bool(msg.get("yes")), request_id=str(msg.get("id") or "") or None, via="island")
+        elif cmd == "mute":
+            if bool(msg.get("on")) != self._muted:
+                self.toggle_mute()
+        elif cmd == "stop":
+            if self._estop is not None:
+                self._estop.trigger("botão Parar da Ilha")
+        elif cmd == "settings":
+            now = time.monotonic()
+            if now - self._settings_opened_at > 3.0:                    # cliques repetidos não abrem várias janelas
+                self._settings_opened_at = now
+                self.bus.publish("open_settings", section="general")
 
     def _build(self, cfg: Config) -> None:
         with ExitStack() as stack:                                      # se um construtor falhar, o que já abriu é fechado
@@ -233,13 +273,14 @@ class JarvisApp:
         assert p is not None
         p.hotkeys.start()
         stop = EmergencyStop(self._emergency, win_input.release_all)
+        self._estop = stop
         try:
             p.hotkeys.add(s.emergency_hotkey, lambda: stop.trigger("tecla de emergência"))
         except HotkeyError as exc:
             raise StartupError(f"tecla de emergência indisponível: {exc}") from exc    # sem ela o Jarvis NÃO controla o PC
         self.bus.subscribe(lambda ev: self._open_settings(ev.data.get("section", "permissions")), kind="open_settings")
+        YOLO.on_change(lambda on, why: self.bus.publish("yolo", on=on, text=f"Modo YOLO {why}"))   # só reflete (Ilha, terminal)
         if s.yolo_hotkey.strip():
-            YOLO.on_change(lambda on, why: self.bus.publish("yolo", on=on, text=f"Modo YOLO {why}"))
             try:
                 p.hotkeys.add(s.yolo_hotkey, self._toggle_yolo)
             except HotkeyError as exc:
@@ -255,6 +296,12 @@ class JarvisApp:
     def shutdown(self) -> None:
         """Encerra tudo e libera áudio, atalhos, servidor e banco. Idempotente. Ordem: parar o trabalho, esperar, fechar."""
         self._stop.set()
+        island, self._island = self._island, None
+        if island is not None:
+            try:
+                island.stop()
+            except Exception:  # noqa: BLE001
+                log.exception("erro ao encerrar a Ilha")
         self._session.cancel("encerrando")
         t = self._req_thread
         if t is not None and t.is_alive():
@@ -364,6 +411,7 @@ class JarvisApp:
             p.confirmer.answer_text(text)
             return True
         self._interrupt_request()
+        self.bus.publish("user_text", text=text)                # a Ilha mostra o que foi digitado (como a fala reconhecida)
         self._start_request(text, self._current_session())
         return True
 

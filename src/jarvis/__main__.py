@@ -42,6 +42,8 @@ def _console_sink(app) -> None:
             _out(f"  [{d['status']}] {d.get('tool')}: {detail}")
         elif ev.kind == "confirm_request":
             _out(f"  ? CONFIRMAR: {d['text']}  (diga sim/não, Ctrl+Alt+Y / Ctrl+Alt+N, ou digite)")
+        elif ev.kind == "yolo":
+            _out(f"  !! {d.get('text')} (confirmações {'DESLIGADAS' if d.get('on') else 'de volta'})")
         elif ev.kind == "emergency":
             _out("  !! PARADA DE EMERGÊNCIA")
         elif ev.kind == "notice":
@@ -93,8 +95,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return code
 
 
-def _cmd_settings(_: argparse.Namespace) -> int:
+def _cmd_settings(ns: argparse.Namespace) -> int:
     from .ui.settings_window import main_settings
+    if ns.open_section:
+        return main_settings(open_section=ns.open_section)
     return main_settings()
 
 
@@ -112,6 +116,15 @@ def _cmd_island_demo(args: argparse.Namespace) -> int:
     from .ui.island.demo import main_island_demo
     return main_island_demo(capture=args.capture, seconds=args.seconds, measure_s=args.measure,
                             reduce_motion=args.reduce_motion)
+
+
+def _cmd_island(args: argparse.Namespace) -> int:
+    """Subcomando INTERNO: o Jarvis lança `island --child` como processo filho (pipes JSON; ver ui/island/link.py)."""
+    if not args.child:
+        _out("A Ilha roda sozinha junto com `Jarvis.cmd run`. Para ver a demonstração: `Jarvis.cmd island-demo`.")
+        return 2
+    from .ui.island.child import main_island_child
+    return main_island_child()
 
 
 def _cmd_doctor(_: argparse.Namespace) -> int:
@@ -156,7 +169,9 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="roda o assistente")
     run.add_argument("--text", action="store_true", help="aceita também comandos digitados")
     run.set_defaults(fn=_cmd_run)
-    sub.add_parser("settings", help="tela de Configurações").set_defaults(fn=_cmd_settings)
+    sp = sub.add_parser("settings", help="tela de Configurações")
+    sp.add_argument("--open", dest="open_section", default=None, help="abre já numa seção (ex.: permissions)")
+    sp.set_defaults(fn=_cmd_settings)
     sub.add_parser("record", help="gravador de voz (Minha voz)").set_defaults(fn=_cmd_record)
     sub.add_parser("memory", help="o que o Jarvis sabe de mim (memórias e conversas)").set_defaults(fn=_cmd_memory)
     isl = sub.add_parser("island-demo", help="Ilha do Jarvis: demonstração visual com áudio de teste")
@@ -165,6 +180,9 @@ def main(argv: list[str] | None = None) -> int:
     isl.add_argument("--measure", type=float, default=0.0, metavar="S", help="mede CPU/RAM, S segundos por fase")
     isl.add_argument("--reduce-motion", action="store_true", help="simula 'reduzir animações'")
     isl.set_defaults(fn=_cmd_island_demo)
+    ic = sub.add_parser("island", help="interno: processo filho da Ilha (lançado pelo Jarvis)")
+    ic.add_argument("--child", action="store_true", help="modo filho (protocolo JSON em stdin/stdout)")
+    ic.set_defaults(fn=_cmd_island)
     sub.add_parser("doctor", help="confere o ambiente").set_defaults(fn=_cmd_doctor)
     sub.add_parser("tools", help="lista as ferramentas").set_defaults(fn=_cmd_tools)
     sub.add_parser("config", help="mostra a configuração efetiva").set_defaults(fn=_cmd_config)

@@ -16,7 +16,8 @@ WS_EX_LAYERED = 0x00080000
 WS_EX_NOACTIVATE = 0x08000000
 WS_EX_TOOLWINDOW = 0x00000080
 WS_CAPTION = 0x00C00000
-_SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
+_SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd",
+                  "MultitaskingViewFrame", "XamlExplorerHostIslandWindow"}
 
 if _WIN:
     _u32 = ctypes.WinDLL("user32", use_last_error=True)

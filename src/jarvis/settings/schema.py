@@ -60,6 +60,7 @@ FIELDS: tuple[FieldSpec, ...] = (
     _S("safety.confirm_yes_hotkey", G_RUN, "Atalho: confirmar SIM", HOTKEY, "Responde SIM a uma confirmação pendente.", RESTART),
     _S("safety.confirm_no_hotkey", G_RUN, "Atalho: confirmar NÃO", HOTKEY, "Responde NÃO a uma confirmação pendente.", RESTART),
     _S("safety.confirm_timeout_s", G_RUN, "Tempo para confirmar", FLOAT, "Sem resposta nesse tempo, a ação é NEGADA.", LIVE, minimum=3, maximum=120, step=1, unit="s"),
+    _S("ui.island_enabled", G_RUN, "Mostrar a Ilha", BOOL, "Janela no topo da tela com o estado do Jarvis (some com app em tela cheia).", RESTART),
     _S("safety.max_agent_steps", G_RUN, "Passos máximos por pedido", INT, "Limite de ferramentas encadeadas antes de desistir.", LIVE, minimum=1, maximum=20),
     _S("safety.tool_timeout_s", G_RUN, "Tempo máximo por ferramenta", FLOAT, "", LIVE, minimum=1, maximum=120, step=1, unit="s"),
     # ---- voz
