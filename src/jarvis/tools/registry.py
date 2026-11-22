@@ -224,6 +224,9 @@ class ToolRegistry:
         with self._lock:
             off = set(self._cfg.tools.disabled)
             specs = [s for n, s in self._tools.items() if n not in off and (only is None or n in only)]
+            if isinstance(only, (list, tuple)):                           # ordem pedida (prefixo do prompt idêntico entre pedidos)
+                order = {n: i for i, n in enumerate(only)}
+                specs.sort(key=lambda s: order[s.name])
         return [{"type": "function", "function": {
             "name": s.name, "description": s.description, "parameters": s.parameters}} for s in specs]
 

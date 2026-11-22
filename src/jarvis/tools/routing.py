@@ -20,6 +20,7 @@ BUNDLES: dict[str, tuple[str, ...]] = {
     "memoria": ("lembrar", "esquecer", "editar_memoria", "listar_memorias", "buscar_memoria", "buscar_conversas",
                 "abrir_conversa", "listar_conversas", "nova_conversa", "resumir_conversa"),
 }
+CORE_BUNDLES = ("apps", "controle", "arquivos")                          # sempre oferecidos, sempre nesta ordem
 HIDDEN = frozenset({"clicar_em", "clicar_na_tela"})          # registradas, mas nunca oferecidas ao modelo
 
 _KEYWORDS: dict[str, re.Pattern[str]] = {name: re.compile(p) for name, p in {
@@ -54,8 +55,10 @@ def route(user_text: str) -> tuple[list[str], frozenset[str]]:
         hits = _last[1]
     if hits:
         _last = (time.monotonic(), hits)
+    # NÚCLEO FIXO e ORDENADO (base + apps + controle) em TODO pedido; extras (arquivos, memória) só ACRESCENTADOS no fim.
+    # Assim todos os pedidos compartilham o mesmo prefixo longo no cache do servidor (medido: 1º token 0,7-0,9 s em cache
+    # contra 5-9 s ao trocar o miolo da lista de ferramentas).
     names: list[str] = list(BASE)
-    for bundle in BUNDLES:                                    # ordem fixa dos conjuntos: prefixo do prompt estável
-        if bundle in hits:
-            names.extend(n for n in BUNDLES[bundle] if n not in names)
+    for bundle in CORE_BUNDLES + tuple(b for b in BUNDLES if b not in CORE_BUNDLES and b in hits):
+        names.extend(n for n in BUNDLES[bundle] if n not in names)
     return names, hits
