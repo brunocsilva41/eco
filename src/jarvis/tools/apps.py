@@ -4,11 +4,13 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from pathlib import Path, PureWindowsPath
 from typing import Any, Final
 
 from ..config import Config
 from ..core.textutil import fold
+from ..win import windows as win
 from ._matching import best_matches
 from .registry import Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
 
@@ -96,6 +98,27 @@ def _resolve_target(name: str, target: str, dirs: tuple[Path, ...]) -> str | Non
     return str(found)
 
 
+_UWP_HOSTS: Final = frozenset({"applicationframehost.exe", "systemsettings.exe", "calculatorapp.exe", "windowsterminal.exe"})
+
+
+def _bring_to_front(name: str, target: str, before: set[int], ctx: ToolContext, timeout: float = 6.0):
+    """Espera a janela do app aparecer (ou acha a que já existia) e a coloca em foco. Devolve a janela ou None."""
+    exe = "" if _URI.match(target) else Path(target).name.lower()
+    key = fold(name)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and not ctx.cancel.cancelled:
+        for w in win.list_windows():
+            proc = (w.process or "").lower()
+            title = fold(w.title)
+            same_exe = bool(exe) and proc == exe
+            uwp_match = proc in _UWP_HOSTS and (key in title or (title and title in key))
+            if (same_exe or uwp_match) and not win.is_own_process_window(w, ctx.cfg):
+                if win.focus_window(w.hwnd):
+                    return w
+        time.sleep(0.25)
+    return None
+
+
 def _allowlist(cfg: Config) -> dict[str, str]:
     """Nome falado -> alvo ABSOLUTO resolvido agora. Nomes repetidos após a normalização: vale o primeiro."""
     dirs = _system_dirs()
@@ -133,13 +156,17 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if ctx.cancel.cancelled:
             return ToolResult(False, "Cancelado.")
         name = matches[0]
+        before = {w.hwnd for w in win.list_windows()}
         try:
             # Alvo = caminho absoluto resolvido na partida; nenhum argumento do modelo é repassado ao programa.
             os.startfile(apps[name])  # noqa: S606 - allowlist, sem shell
         except OSError as exc:
             log.warning("falha ao abrir %r: %s", name, exc)
             return ToolResult(False, f"Não consegui abrir {name}.")
-        return ToolResult(True, f"Abri {name}.")
+        found = _bring_to_front(name, apps[name], before, ctx)
+        if found is None:
+            return ToolResult(True, f"Abri {name}, mas não consegui colocar a janela em foco. Use focar_janela.")
+        return ToolResult(True, f"Abri {name}; a janela «{found.title[:40]}» está em foco.")
 
     def listar_apps_permitidos(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         if not names:

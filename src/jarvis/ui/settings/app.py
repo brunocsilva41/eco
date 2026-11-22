@@ -54,8 +54,32 @@ def open_settings(cfg: Config | None = None, parent: QWidget | None = None,
     return window
 
 
+_mutex_handle = None
+
+
+def _another_instance_running() -> bool:
+    """Trava entre processos: se já há uma tela de Configurações aberta, traz ela para a frente e devolve True."""
+    global _mutex_handle
+    import ctypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    u32 = ctypes.WinDLL("user32", use_last_error=True)
+    k32.CreateMutexW.restype = ctypes.c_void_p
+    handle = k32.CreateMutexW(None, False, "Local\\JarvisSettingsSingleton")
+    if ctypes.get_last_error() == 183 or ctypes.GetLastError() == 183:      # ERROR_ALREADY_EXISTS
+        from .texts import T
+        hwnd = u32.FindWindowW(None, T.window.title)
+        if hwnd:
+            u32.ShowWindow(ctypes.c_void_p(hwnd), 9)                       # SW_RESTORE
+            u32.SetForegroundWindow(ctypes.c_void_p(hwnd))
+        return True
+    _mutex_handle = handle                                                   # fica aberto até o processo sair
+    return False
+
+
 def main_settings(open_section: str | None = None) -> int:
     """Executa a tela como programa proprio (cria o QApplication se preciso). Devolve o codigo de saida."""
+    if QApplication.instance() is None and _another_instance_running():
+        return 0
     app = QApplication.instance()
     owns_app = app is None
     if app is None:

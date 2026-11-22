@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
@@ -45,6 +45,60 @@ DEFAULT_HEIGHT = SIZE.target * 24
 _EMERGENCY_KEY = "safety.emergency_hotkey"
 
 
+class _LazyPages(dict):
+    """dict de páginas montadas na primeira vez que são pedidas. Iterar/`items()`/`values()` monta as que faltam."""
+
+    def __init__(self, make, stack, keys) -> None:  # type: ignore[no-untyped-def]
+        super().__init__()
+        self._make, self._stack, self._keys = make, stack, list(keys)
+
+    def _build_one(self, key: str):  # type: ignore[no-untyped-def]
+        page = self._make(key)
+        dict.__setitem__(self, key, page)
+        self._stack.addWidget(page)
+        return page
+
+    def __missing__(self, key: str):  # type: ignore[no-untyped-def]
+        if key in self._keys:
+            return self._build_one(key)
+        raise KeyError(key)
+
+    def get(self, key, default=None):  # type: ignore[no-untyped-def]
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def build_next(self) -> bool:
+        """Monta UMA página pendente; True se ainda restam."""
+        for k in self._keys:
+            if not dict.__contains__(self, k):
+                self._build_one(k)
+                break
+        return any(not dict.__contains__(self, k) for k in self._keys)
+
+    def _all(self) -> None:
+        while self.build_next():
+            pass
+
+    def items(self):  # type: ignore[no-untyped-def]
+        self._all()
+        return dict.items(self)
+
+    def values(self):  # type: ignore[no-untyped-def]
+        self._all()
+        return dict.values(self)
+
+    def keys(self):  # type: ignore[no-untyped-def]
+        return list(self._keys)
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        return iter(self._keys)
+
+    def __len__(self) -> int:
+        return len(self._keys)
+
+
 class SettingsWindow(QWidget):
     """Sinal ``saved(SaveOutcome)`` depois de gravar (ou restaurar o padrao) com sucesso."""
 
@@ -59,8 +113,8 @@ class SettingsWindow(QWidget):
         self.prefs = prefs or UiPrefs()
         self.controller = SettingsController(store, cfg, self)
         self.binder = FieldBinder(self.controller, self)
-        self.pages: dict[str, PageLike] = {}
         self._keys: list[str] = [c.key for c in CATEGORIES]
+        self.pages: dict[str, PageLike] = {}                 # trocado por _LazyPages em _build (páginas montadas sob demanda)
         self._search_empty: QWidget | None = None
 
         self._build()
@@ -88,11 +142,17 @@ class SettingsWindow(QWidget):
         right.addWidget(self.stack, 1)
         right.addWidget(self.bar)
         root.addLayout(right, 1)
-        for cat in CATEGORIES:
-            page = self._make_page(cat.key)
-            self.pages[cat.key] = page
-            self.stack.addWidget(page)  # type: ignore[arg-type]
+        self.pages = _LazyPages(self._make_page, self.stack, self._keys)    # só a página aberta é montada já; o resto em segundo plano
         self.nav.setFocus()
+        QTimer.singleShot(150, self._build_rest)
+
+    def _build_rest(self) -> None:
+        """Monta as páginas que faltam, uma por volta do laço de eventos (a janela já está usável)."""
+        try:
+            if self.pages.build_next():
+                QTimer.singleShot(0, self._build_rest)
+        except RuntimeError:                                  # janela já destruída
+            pass
 
     def _make_page(self, key: str) -> PageLike:
         if key == "my_voice":
@@ -317,7 +377,7 @@ class SettingsWindow(QWidget):
             return
         self.prefs.save_geometry(self)
         self.controller.shutdown()
-        for page in self.pages.values():
+        for page in dict.values(self.pages):                  # só as já montadas (não monta páginas só para fechar)
             page.shutdown()
         super().closeEvent(event)
 

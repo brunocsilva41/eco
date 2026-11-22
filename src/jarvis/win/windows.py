@@ -351,6 +351,30 @@ def focus_window(hwnd: int) -> bool:
     return ok
 
 
+SW_MINIMIZE: Final = 6
+SW_MAXIMIZE: Final = 3
+
+
+def show_window(hwnd: int, cmd: int) -> bool:
+    """ShowWindow (SW_MINIMIZE=6, SW_MAXIMIZE=3, SW_RESTORE=9)."""
+    return bool(is_window(hwnd) and _user32.ShowWindow(ctypes.c_void_p(hwnd), cmd) is not None)
+
+
+def work_area() -> tuple[int, int, int, int]:
+    """Área útil do monitor principal (sem a barra de tarefas): (esquerda, topo, direita, base) em pixels físicos."""
+    rect = wintypes.RECT()
+    _user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0)      # SPI_GETWORKAREA
+    return rect.left, rect.top, rect.right, rect.bottom
+
+
+def move_window(hwnd: int, x: int, y: int, w: int, h: int) -> bool:
+    """Restaura (se maximizada/minimizada) e posiciona a janela. Sem mudar a ordem nem roubar foco."""
+    if not is_window(hwnd):
+        return False
+    _user32.ShowWindow(ctypes.c_void_p(hwnd), SW_RESTORE)
+    return bool(_user32.SetWindowPos(ctypes.c_void_p(hwnd), None, int(x), int(y), int(w), int(h), 0x0014))   # NOZORDER|NOACTIVATE
+
+
 def close_window(hwnd: int) -> bool:
     """Pede o fechamento educado (WM_CLOSE): o programa pode perguntar se quer salvar.
 

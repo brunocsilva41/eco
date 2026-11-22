@@ -99,6 +99,8 @@ class LlmCfg:
 class SafetyCfg:
     emergency_hotkey: str = "ctrl+alt+f12"           # OBRIGATÓRIA: não pode ser desativada
     talk_key: str = "f9"                             # tecla de falar (sem modificadores)
+    listen_mode: str = "push"                        # "push" = fala apertando a tecla | "open" = ESCUTA ABERTA (ouve sozinho, sem apertar nada; alterna na Ilha/bandeja/atalho)
+    open_listen_hotkey: str = "ctrl+alt+l"           # liga/desliga a escuta aberta
     talk_mode: str = "hold"                          # "hold" = segurar para falar; "toggle" = aperta, fala, para no silêncio
     mute_hotkey: str = "ctrl+alt+m"
     confirm_yes_hotkey: str = "ctrl+alt+y"           # responde SIM a uma confirmação pendente
@@ -113,6 +115,7 @@ class SafetyCfg:
         "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "outlook.exe", "olk.exe", "thunderbird.exe",
         "whatsapp.exe", "telegram.exe", "discord.exe", "slack.exe", "obsidian.exe")
     typing_denied_extra: tuple[str, ...] = ()        # acrescenta à lista fixa de bloqueio
+    typing_allowed_titles: tuple[str, ...] = ("calculadora", "calculator")   # apps UWP (rodam em ApplicationFrameHost): só digita se o TÍTULO da janela contém um destes
     typing_confirm: str = "untrusted_or_multiline"   # "always" | "untrusted_or_multiline" (só conteúdo de fora ou parecido com comando)
     permission_mode: str = "balanced"                # "balanced": só ações nocivas confirmam | "strict": também confirma tudo que age depois de ler conteúdo de fora
     yolo_hotkey: str = "ctrl+alt+shift+y"            # LIGA/DESLIGA o modo YOLO (sem confirmações). Só por tecla física; nunca por voz. Vazio = desativado
@@ -188,8 +191,12 @@ class LogsCfg:
 
 @dataclass(frozen=True)
 class UiCfg:
+    tray_enabled: bool = True                        # ícone na bandeja do sistema com menu (vive no processo da Ilha)
     island_enabled: bool = True                      # mostra a Ilha (janela no topo da tela) enquanto o Jarvis roda
-    island_mode: str = "docked"                      # "docked" (colada ao topo) | "floating" (pílula afastada do topo, com sombra)
+    island_mode: str = "docked"                      # "docked" (topo) | "floating" (pílula afastada do topo) | "dock_right" | "dock_left" (trilho lateral)
+    island_pinned: bool = False                      # alfinete: fixada = nunca esconde sozinha (a Ilha devolve o estado ao núcleo)
+    island_opacity: float = 0.92                     # 0.35..1.0: opacidade do fundo (vidro); o contraste do texto é garantido pela Ilha
+    island_side_y_pct: int = 50                      # dock lateral: altura do trilho na tela, 0 (topo) .. 100 (base)
     island_float_gap_px: int = 10                    # afastamento do topo no modo flutuante (0..64)
     island_autohide: bool = True                     # escondida por padrão: aparece com o mouse no topo, F9/ouvindo, confirmação, erro
     island_hide_delay_s: float = 3.0                 # some sozinha depois deste tempo em repouso
@@ -390,13 +397,19 @@ def validate(cfg: Config) -> list[str]:
         p.append("safety.max_typed_chars fora de 1..2000")
     if s.talk_mode not in ("hold", "toggle"):
         p.append("safety.talk_mode deve ser 'hold' ou 'toggle'")
+    if s.listen_mode not in ("push", "open"):
+        p.append("safety.listen_mode deve ser 'push' ou 'open'")
     if s.permission_mode not in ("balanced", "strict"):
         p.append("safety.permission_mode deve ser 'balanced' ou 'strict'")
     if not 1 <= s.yolo_minutes <= 240:
         p.append("safety.yolo_minutes fora de 1..240")
     u = cfg.ui
-    if u.island_mode not in ("docked", "floating"):
-        p.append("ui.island_mode deve ser 'docked' ou 'floating'")
+    if u.island_mode not in ("docked", "floating", "dock_right", "dock_left"):
+        p.append("ui.island_mode deve ser 'docked', 'floating', 'dock_right' ou 'dock_left'")
+    if not 0.35 <= u.island_opacity <= 1.0:
+        p.append("ui.island_opacity fora de 0.35..1.0")
+    if not 0 <= u.island_side_y_pct <= 100:
+        p.append("ui.island_side_y_pct fora de 0..100")
     if not 0 <= u.island_float_gap_px <= 64:
         p.append("ui.island_float_gap_px fora de 0..64")
     if not 0.5 <= u.island_hide_delay_s <= 60:
@@ -411,7 +424,8 @@ def validate(cfg: Config) -> list[str]:
     sec: dict[str, str | None] = {}
     for label, text in (("emergency_hotkey", s.emergency_hotkey), ("talk_key", s.talk_key), ("mute_hotkey", s.mute_hotkey),
                         ("confirm_yes_hotkey", s.confirm_yes_hotkey), ("confirm_no_hotkey", s.confirm_no_hotkey),
-                        *((("yolo_hotkey", s.yolo_hotkey),) if s.yolo_hotkey.strip() else ())):
+                        *((("yolo_hotkey", s.yolo_hotkey),) if s.yolo_hotkey.strip() else ()),
+                        *((("open_listen_hotkey", s.open_listen_hotkey),) if s.open_listen_hotkey.strip() else ())):
         sec[label] = _norm_combo(text, f"safety.{label}", p)
     norms = [v for v in sec.values() if v]
     if len(set(norms)) < len(norms):

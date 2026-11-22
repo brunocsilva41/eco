@@ -32,9 +32,10 @@ _S = SectionSpec
 CATEGORIES: tuple[Category, ...] = (
     Category("general", "settings", (schema.G_RUN,), (
         _S("appearance", custom="theme"),
-        _S("talk", ("safety.talk_key", "safety.talk_mode", "safety.mute_hotkey")),
+        _S("talk", ("safety.listen_mode", "safety.talk_key", "safety.talk_mode", "safety.open_listen_hotkey", "safety.mute_hotkey")),
         _S("confirm", ("safety.confirm_yes_hotkey", "safety.confirm_no_hotkey", "safety.confirm_timeout_s")),
-        _S("island", ("ui.island_enabled", "ui.island_mode", "ui.island_float_gap_px", "ui.island_autohide",
+        _S("island", ("ui.tray_enabled", "ui.island_enabled","ui.island_mode", "ui.island_float_gap_px", "ui.island_side_y_pct",
+                      "ui.island_opacity", "ui.island_pinned", "ui.island_autohide",
                       "ui.island_hide_delay_s", "ui.island_hover_reveal")),
         _S("limits", ("safety.max_agent_steps", "safety.tool_timeout_s"), 2),
     )),
@@ -64,7 +65,7 @@ CATEGORIES: tuple[Category, ...] = (
         _S("tools", ("tools.disabled", "tools.confirm"), custom="tools"),
         _S("apps", ("apps.launch", "apps.hotkeys", "apps.hotkeys_confirm")),
         _S("typing", ("safety.max_typed_chars", "safety.typing_allowed_processes",
-                      "safety.typing_denied_extra", "safety.typing_confirm"), 2),
+                      "safety.typing_denied_extra", "safety.typing_allowed_titles", "safety.typing_confirm"), 2),
     )),
     Category("memory", "memory", (schema.G_MEM,), (
         _S("mem_basic", ("memory.enabled", "memory.model_can_remember", "memory.recall_top_k", "memory.idle_minutes")),

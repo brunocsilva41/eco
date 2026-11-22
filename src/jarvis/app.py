@@ -97,6 +97,7 @@ class JarvisApp:
         self._estop: EmergencyStop | None = None
         self._island = None                                              # IslandLink (processo filho da Ilha); None = desligada
         self._settings_opened_at = 0.0
+        self._listen_open = cfg.safety.listen_mode == "open"
 
     # ================================================================ ciclo de vida
     def start(self) -> None:
@@ -149,7 +150,8 @@ class JarvisApp:
         u, s = self.cfg.ui, self.cfg.safety
         return {"mode": u.island_mode, "float_gap_px": u.island_float_gap_px, "autohide": u.island_autohide,
                 "hide_delay_s": u.island_hide_delay_s, "hover_reveal": u.island_hover_reveal,
-                "hotkeys": {"yes": s.confirm_yes_hotkey, "no": s.confirm_no_hotkey, "stop": s.emergency_hotkey,
+                "listen_mode": "open" if self._listen_open else "push", "pinned": getattr(u, "island_pinned", False),
+                "hotkeys": {"open_listen": s.open_listen_hotkey, "yes": s.confirm_yes_hotkey, "no": s.confirm_no_hotkey, "stop": s.emergency_hotkey,
                             "mute": s.mute_hotkey, "talk": s.talk_key, "yolo": s.yolo_hotkey}}
 
     def _on_island_command(self, cmd: str, msg: dict) -> None:
@@ -165,11 +167,109 @@ class JarvisApp:
         elif cmd == "stop":
             if self._estop is not None:
                 self._estop.trigger("botão Parar da Ilha")
+        elif cmd == "listen_mode":
+            self.set_listen_mode("open" if msg.get("mode") == "open" else "push")
+        elif cmd == "quit":
+            log.info("encerrar pedido pela bandeja/Ilha")
+            self.request_stop()
+        elif cmd == "pin":
+            self._persist({"ui.island_pinned": bool(msg.get("on"))})
+        elif cmd == "ui_mode":
+            if msg.get("mode") in ("docked", "floating", "dock_right", "dock_left"):
+                self._persist({"ui.island_mode": msg["mode"]})
         elif cmd == "settings":
             now = time.monotonic()
             if now - self._settings_opened_at > 3.0:                    # cliques repetidos não abrem várias janelas
                 self._settings_opened_at = now
                 self.bus.publish("open_settings", section="permissions" if msg.get("section") == "permissions" else "general")
+
+    def _persist(self, updates: dict) -> None:
+        """Grava uma preferência da Ilha/bandeja no config.toml (em segundo plano; falha só vira aviso no log)."""
+        def run() -> None:
+            try:
+                from .setup.config_io import save_values
+                save_values(updates)
+            except Exception:  # noqa: BLE001
+                log.warning("não consegui salvar %s", ", ".join(updates), exc_info=True)
+        threading.Thread(target=run, name="jarvis-persist", daemon=True).start()
+
+    # ------------------------------------------------------------ escuta aberta
+    @property
+    def listen_open(self) -> bool:
+        return self._listen_open
+
+    def set_listen_mode(self, mode: str, persist: bool = True) -> None:
+        """'open' = escuta aberta (ouve sozinho); 'push' = só pela tecla de falar. Vale na hora."""
+        on = mode == "open"
+        if on == self._listen_open:
+            return
+        self._listen_open = on
+        log.info("escuta %s", "ABERTA" if on else "pela tecla")
+        self.bus.publish("listen_mode", mode="open" if on else "push")
+        if persist:
+            self._persist({"safety.listen_mode": "open" if on else "push"})
+        p = self._p
+        if p is not None and not self._muted:
+            p.voice.say("Escuta contínua ligada." if on else "Escuta contínua desligada.")
+
+    def toggle_listen_mode(self) -> None:
+        self.set_listen_mode("push" if self._listen_open else "open")
+
+    def _open_listen_ready(self) -> bool:
+        p = self._p
+        if p is None or self._muted:
+            return False
+        if self.state.agent_state != State.IDLE or self.state.speaking or p.confirmer.has_pending():
+            return False
+        t = self._req_thread
+        return not (t is not None and t.is_alive())
+
+    def _on_open_listen(self) -> None:
+        """Um passo da escuta aberta: espera até 1 s por uma fala (sem prender o laço principal) e, se vier, trata como o F9."""
+        p = self._p
+        assert p is not None
+        idle_at = p.speaker.idle_since()
+        if idle_at is None:
+            return
+        session = self._current_session()
+        t_listen = time.monotonic()
+        try:
+            audio = p.mic.listen_utterance(session, max_wait_s=1.0, flush_backlog=False, not_before=idle_at + 0.7)   # 0,7 s: não ouve o eco da própria voz
+        except Cancelled:
+            return
+        except Exception as exc:  # noqa: BLE001
+            log.exception("falha na escuta aberta")
+            self.bus.publish("error", where="audio", text=str(exc))
+            self._stop.wait(1.0)
+            return
+        if audio is None or session.cancelled:
+            return
+        if not self.state.go(State.LISTENING):
+            return
+        self._after_audio(audio, session, t_listen)
+
+    def _after_audio(self, audio, session, t_listen) -> None:  # type: ignore[no-untyped-def]
+        p = self._p
+        assert p is not None
+        try:
+            self.state.go(State.TRANSCRIBING)
+            heard = p.stt.transcribe(audio, session)
+        except Cancelled:
+            self.state.reset()
+            return
+        except Exception as exc:  # noqa: BLE001
+            log.exception("falha ao transcrever")
+            self.bus.publish("error", where="audio", text=str(exc))
+            self.state.reset()
+            return
+        text = heard.text.strip()
+        log.info("fala %.1fs -> texto em %.2fs (escuta aberta)", heard.duration_s, heard.elapsed_s)
+        self._watch_mic_signal(heard)
+        self.bus.publish("transcript", text=text, final=True)
+        if not text or session.cancelled:
+            self.state.reset()
+            return
+        self._start_request(text, session, t_listen)
 
     def _build(self, cfg: Config) -> None:
         with ExitStack() as stack:                                      # se um construtor falhar, o que já abriu é fechado
@@ -312,6 +412,7 @@ class JarvisApp:
             except HotkeyError as exc:
                 log.warning("atalho do YOLO indisponível: %s", exc)
         for combo, cb, label in ((s.mute_hotkey, self.toggle_mute, "mudo"),
+                                 *(((s.open_listen_hotkey, self.toggle_listen_mode, "escuta contínua"),) if s.open_listen_hotkey.strip() else ()),
                                  (s.confirm_yes_hotkey, lambda: p.confirmer.answer(True, via="key"), "confirmar SIM"),
                                  (s.confirm_no_hotkey, lambda: p.confirmer.answer(False, via="key"), "confirmar NÃO")):
             try:
@@ -361,11 +462,18 @@ class JarvisApp:
         """Abre a tela de Configurações (outro processo) já na seção pedida."""
         import subprocess
         import sys
+        now = time.monotonic()
+        proc = getattr(self, "_settings_proc", None)
+        if proc is not None and proc.poll() is None and now - getattr(self, "_settings_started", 0.0) < 20.0:
+            return                                              # ainda abrindo (ou aberta): cliques repetidos não criam outra janela
+        if now - getattr(self, "_settings_started", 0.0) < 1.5:
+            return
+        self._settings_started = now
         code = ("import sys; sys.path.insert(0, r'%s'); from jarvis.__main__ import main; raise SystemExit(main(sys.argv[1:]))"
                 % str(cfgmod.ROOT / "src"))
         try:
-            subprocess.Popen([sys.executable, "-I", "-X", "utf8", "-c", code, "settings", "--open", section],
-                             cwd=str(cfgmod.ROOT), creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | 0x08000000)
+            self._settings_proc = subprocess.Popen([sys.executable, "-I", "-X", "utf8", "-c", code, "settings", "--open", section],
+                                                   cwd=str(cfgmod.ROOT), creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | 0x08000000)
         except OSError:
             log.exception("não consegui abrir as Configurações")
 
@@ -411,6 +519,9 @@ class JarvisApp:
                         continue
                     if not self._muted and talk():
                         self._on_talk_key(talk)
+                        continue
+                    if self._listen_open and self._open_listen_ready():
+                        self._on_open_listen()
                         continue
                     self._stop.wait(0.02)
                 except Exception as exc:  # noqa: BLE001 - uma falha numa tarefa periódica nunca derruba o Jarvis
@@ -477,12 +588,36 @@ class JarvisApp:
             return
         text = heard.text.strip()
         log.info("fala %.1fs -> texto em %.2fs", heard.duration_s, heard.elapsed_s)
+        self._watch_mic_signal(heard)
         log.debug("transcrição: %s", text)
         self.bus.publish("transcript", text=text, final=True)
         if not text or session.cancelled:                       # emergência no meio: o pedido NÃO nasce
             self.state.reset()
             return
         self._start_request(text, session, t_listen)
+
+    def _watch_mic_signal(self, heard) -> None:  # type: ignore[no-untyped-def]
+        """Fala detectada mas áudio sem sinal, várias vezes seguidas: reabre o microfone e avisa (o stream pode ter ficado preso
+        depois de a máquina travar, ou outro app pegou o microfone em modo exclusivo)."""
+        if not getattr(heard, "silent", False):
+            self._silent_streak = 0
+            return
+        self._silent_streak = getattr(self, "_silent_streak", 0) + 1
+        p = self._p
+        if p is None:
+            return
+        if self._silent_streak == 2:
+            log.warning("microfone sem sinal 2 vezes seguidas: reabrindo")
+            self.bus.publish("notice", notice_kind="mic_reopen", text="O microfone parou de enviar som; estou reabrindo.")
+            try:
+                p.mic.close()
+                p.mic.open()
+            except Exception:  # noqa: BLE001
+                log.exception("não consegui reabrir o microfone")
+        elif self._silent_streak == 4:
+            self.bus.publish("error", where="audio", text="O microfone continua sem sinal. Veja se ele está mudo no Windows, "
+                                                        "desconectado ou em uso exclusivo por outro programa.")
+            p.voice.say("Meu microfone está sem sinal. Veja se está mudo ou em uso por outro programa.")
 
     # ================================================================ pedido (agente)
     def _current_session(self) -> CancelToken:

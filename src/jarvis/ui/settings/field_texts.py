@@ -8,13 +8,19 @@ from __future__ import annotations
 # chave do campo -> (rotulo, ajuda de uma linha)
 FIELDS: dict[str, tuple[str, str]] = {
     "safety.talk_key": ("Tecla para falar", "Uma tecla simples, sem Ctrl nem Alt. Exemplo: F9."),
+    "safety.listen_mode": ("Como o Jarvis escuta", "Pela tecla, ele só ouve enquanto você aperta. Na escuta aberta ele ouve sozinho, sem apertar nada; é prático, mas reage a qualquer fala perto do microfone."),
+    "safety.open_listen_hotkey": ("Atalho da escuta aberta", "Liga e desliga a escuta aberta de qualquer lugar."),
     "safety.talk_mode": ("Como usar a tecla", "Segurar enquanto fala, ou apertar uma vez e parar sozinho no silêncio."),
     "safety.mute_hotkey": ("Tecla do modo mudo", "Liga e desliga o microfone do Jarvis."),
     "safety.confirm_yes_hotkey": ("Tecla para responder Sim", "Aceita uma ação que o Jarvis pediu para confirmar."),
     "safety.confirm_no_hotkey": ("Tecla para responder Não", "Recusa uma ação que o Jarvis pediu para confirmar."),
     "safety.confirm_timeout_s": ("Tempo para confirmar", "Sem resposta nesse tempo, a ação é recusada."),
+    "ui.tray_enabled": ("Ícone na bandeja do sistema", "Mostra o Jarvis perto do relógio do Windows. Botão direito abre o menu. Vale na próxima vez que o Jarvis abrir."),
     "ui.island_enabled": ("Mostrar a Ilha", "Some sozinha com jogo ou vídeo em tela cheia. Vale na próxima vez que o Jarvis abrir."),
-    "ui.island_mode": ("Posição da Ilha", "Colada ao topo da tela, ou flutuante: uma pílula afastada do topo, com sombra suave."),
+    "ui.island_mode": ("Posição da Ilha", "No topo da tela (colada ou flutuante) ou como um trilho vertical na borda direita ou esquerda, com os botões empilhados."),
+    "ui.island_pinned": ("Fixar a Ilha na tela", "Fixada, a Ilha nunca se esconde sozinha. Só some com jogo ou vídeo em tela cheia. Também liga pelo alfinete da própria Ilha."),
+    "ui.island_opacity": ("Transparência do fundo", "1 deixa o fundo sólido; valores menores dão efeito de vidro. Textos e ícones continuam legíveis, então abaixo de uns 0,55 o fundo não fica mais claro."),
+    "ui.island_side_y_pct": ("Altura do trilho lateral", "Onde o trilho fica na borda: 0 no topo da tela, 50 no meio, 100 embaixo. Só vale nos modos de trilho lateral."),
     "ui.island_float_gap_px": ("Afastamento do topo", "Quantos pixels a Ilha flutuante fica longe da borda de cima."),
     "ui.island_autohide": ("Esconder a Ilha sozinha", "Fica invisível e só aparece quando importa: mouse no topo, tecla de falar, confirmação ou erro."),
     "ui.island_hide_delay_s": ("Esconder depois de", "Segundos em repouso antes de a Ilha sumir. Nunca some com o mouse em cima, durante uma confirmação ou se estiver fixada."),
@@ -64,6 +70,7 @@ FIELDS: dict[str, tuple[str, str]] = {
     "apps.hotkeys_confirm": ("Atalhos que pedem confirmação", "Precisam estar na lista de atalhos permitidos."),
     "safety.max_typed_chars": ("Limite de digitação", "Máximo de caracteres que o Jarvis digita de uma vez."),
     "safety.typing_allowed_processes": ("Programas em que ele pode digitar", "Em qualquer outro, o Jarvis não digita."),
+    "safety.typing_allowed_titles": ("Apps da Microsoft Store onde digitar", "Calculadora e outros apps da loja rodam dentro de outro programa; o Jarvis só digita neles se o título da janela tiver uma destas palavras."),
     "safety.typing_denied_extra": ("Também nunca digitar em", "Soma-se à lista fixa de bloqueio (terminais, Explorer e similares)."),
     "safety.typing_confirm": ("Quando confirmar a digitação", "Sempre, ou só quando o texto veio de fora ou parece um comando."),
     "memory.enabled": ("Guardar histórico e memória", "Desligado, nada das conversas é gravado no computador."),
@@ -98,6 +105,7 @@ LOCKED: dict[str, str] = {
 
 # chave do campo -> (valor -> rotulo) das opcoes
 CHOICES: dict[str, dict[str, str]] = {
+    "safety.listen_mode": {"push": "Pela tecla de falar", "open": "Escuta aberta"},
     "safety.talk_mode": {"hold": "Segurar para falar", "toggle": "Apertar e falar"},
     "llm.device": {"auto": "Automático (placa de vídeo)", "gpu": "Placa de vídeo", "cpu": "Processador"},
     "llm.mmproj_device": {"auto": "Automático (placa de vídeo)", "gpu": "Placa de vídeo", "cpu": "Processador"},

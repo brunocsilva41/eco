@@ -94,6 +94,38 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return ToolResult(True, f"Trouxe para frente: {_describe(target)}.", untrusted=True)
         return ToolResult(False, "O Windows não deixou trazer essa janela para frente.", untrusted=True)
 
+    def janela_acao(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        query = str(args.get("titulo", "") or "").strip()
+        if query:
+            target, problem = _resolve(query)
+            if problem is not None:
+                return problem
+        else:
+            target = win.foreground_window()
+        if target is None:
+            return ToolResult(False, "Não há janela em foco.")
+        if win.is_own_process_window(target, ctx.cfg):
+            return ToolResult(False, win.OWN_WINDOW_MESSAGE)
+        action = str(args["acao"])
+        left, top, right, bottom = win.work_area()
+        width, height = right - left, bottom - top
+        if action == "minimizar":
+            ok = win.show_window(target.hwnd, win.SW_MINIMIZE)
+        elif action == "maximizar":
+            ok = win.show_window(target.hwnd, win.SW_MAXIMIZE)
+        elif action == "restaurar":
+            ok = win.show_window(target.hwnd, 9)
+        elif action == "esquerda":
+            ok = win.move_window(target.hwnd, left, top, width // 2, height)
+        elif action == "direita":
+            ok = win.move_window(target.hwnd, left + width // 2, top, width // 2, height)
+        else:                                                    # centralizar
+            w, h = int(width * 0.7), int(height * 0.7)
+            ok = win.move_window(target.hwnd, left + (width - w) // 2, top + (height - h) // 2, w, h)
+        if not ok:
+            return ToolResult(False, "O Windows não deixou mexer nessa janela.", untrusted=True)
+        return ToolResult(True, f"Fiz '{action}' na janela {_describe(target)}.", untrusted=True)
+
     def prepare_fechar(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:
         """Resolve UMA janela agora; ambígua ou inexistente nem chega à confirmação."""
         target, problem = _resolve(str(args["titulo"]))
@@ -142,6 +174,18 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         parameters={"type": "object", "properties": {}, "additionalProperties": False},
         risk=Risk.READ,
         handler=listar_janelas,
+    ))
+    registry.register(ToolSpec(
+        name="janela_acao",
+        description=("Controla uma janela aberta: minimizar, maximizar, restaurar, colocar na metade esquerda ou direita da tela "
+                     "ou centralizar. Sem 'titulo' age na janela em foco."),
+        parameters={"type": "object", "properties": {
+            "acao": {"type": "string", "enum": ["minimizar", "maximizar", "restaurar", "esquerda", "direita", "centralizar"]},
+            "titulo": {"type": "string", "maxLength": 80, "description": "Opcional: parte do título da janela."}},
+            "required": ["acao"], "additionalProperties": False},
+        risk=Risk.CONTROL,
+        handler=janela_acao,
+        audit_args=lambda a: {"acao": a.get("acao")},
     ))
     registry.register(ToolSpec(
         name="janela_ativa",

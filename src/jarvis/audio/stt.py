@@ -87,6 +87,8 @@ class Transcript:
     language: str
     duration_s: float               # duração do áudio entregue
     elapsed_s: float                # tempo gasto transcrevendo
+    silent: bool = False            # o áudio chegou SEM sinal (pico ~0): microfone mudo, em uso por outro app ou parado
+    peak: float = 0.0
 
 
 def find_local_model(model_dir: Path) -> Path | None:
@@ -348,8 +350,12 @@ class Transcriber:
         cancel.raise_if_cancelled()
         peak = float(np.max(np.abs(samples), initial=0.0))
         if duration < MIN_AUDIO_S or peak < _SILENCE_PEAK:
-            log.debug("áudio curto ou silencioso (%.2f s); sem transcrição", duration)
-            return Transcript("", language, duration, 0.0)
+            dead = peak < _SILENCE_PEAK and duration >= 0.5
+            if dead:
+                log.warning("áudio de %.1f s SEM SINAL (pico %.1e): o microfone não está entregando som", duration, peak)
+            else:
+                log.debug("áudio curto ou silencioso (%.2f s); sem transcrição", duration)
+            return Transcript("", language, duration, 0.0, silent=dead, peak=peak)
         rms = float(np.sqrt(np.dot(samples, samples) / samples.size))
 
         model = self._ensure_model()

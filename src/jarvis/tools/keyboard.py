@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -17,6 +18,7 @@ from ..core.auditkey import digest
 from ..win import input as win_input
 from ..win import windows as win
 from ..win.keys import Combo, KeyError_, parse_combo
+from ..core.textutil import fold
 from ._matching import clip
 from .registry import Prepared, Risk, ToolContext, ToolRegistry, ToolResult, ToolSpec
 
@@ -100,15 +102,36 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
     max_chars = max(1, cfg.safety.max_typed_chars)
     typing_confirm = cfg.safety.typing_confirm
     allowed_procs = _lower_set(cfg.safety.typing_allowed_processes)
+    allowed_titles = tuple(fold(t) for t in cfg.safety.typing_allowed_titles if t.strip())
+
+    def _focus_requested(args: dict[str, Any]) -> ToolResult | None:
+        """Parâmetro opcional `janela`: traz essa janela para frente ANTES de preparar (app recém-aberto não vem sozinho)."""
+        query = str(args.get("janela", "") or "").strip()
+        if not query:
+            return None
+        from .windows_tools import _resolve
+        info, problem = _resolve(query)
+        if problem is not None:
+            return problem
+        assert info is not None
+        if win.is_own_process_window(info, cfg):
+            return ToolResult(False, win.OWN_WINDOW_MESSAGE)
+        if not win.focus_window(info.hwnd):
+            return ToolResult(False, "O Windows não deixou trazer essa janela para frente; clique nela e peça de novo.")
+        time.sleep(0.25)
+        return None
     denied_procs = HARD_DENIED_TYPING | _lower_set(cfg.safety.typing_denied_extra)
     allowed = _norm_combos(cfg.apps.hotkeys, "apps.hotkeys")
     confirm_combos = _norm_combos(cfg.apps.hotkeys_confirm, "apps.hotkeys_confirm")
     reserved = _norm_combos((cfg.safety.emergency_hotkey, cfg.safety.mute_hotkey, cfg.safety.confirm_yes_hotkey,
-                             cfg.safety.confirm_no_hotkey, cfg.safety.talk_key,
+                             cfg.safety.confirm_no_hotkey, cfg.safety.talk_key, cfg.safety.open_listen_hotkey or cfg.safety.talk_key,
                              *((cfg.safety.yolo_hotkey,) if cfg.safety.yolo_hotkey.strip() else ())), "safety")
 
     # ------------------------------------------------------------- digitar_texto
     def prepare_digitar(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:
+        failed = _focus_requested(args)
+        if failed is not None:
+            return failed
         text = str(args["texto"])
         if not text.strip():
             return ToolResult(False, "Não há texto para digitar.")
@@ -124,7 +147,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if target.process in denied_procs:
             log.warning("digitar_texto recusado: programa bloqueado %s", target.process)
             return ToolResult(False, f"Não digito em {target.process} por segurança. Só em: {allowed_txt}.")
-        if target.process not in allowed_procs:
+        uwp_ok = target.process == "applicationframehost.exe" and any(t in fold(target.title) for t in allowed_titles)
+        if target.process not in allowed_procs and not uwp_ok:
             log.info("digitar_texto recusado: %s fora da lista permitida", target.process)
             return ToolResult(False, f"A janela em foco é {target.process}, e só digito em: {allowed_txt}.")
         if target.dialog:
@@ -170,6 +194,9 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
 
     # ------------------------------------------------------------- apertar_atalho
     def prepare_atalho(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:
+        failed = _focus_requested(args)
+        if failed is not None:
+            return failed
         raw = str(args["atalho"])
         try:
             combo = parse_combo(raw)
@@ -230,7 +257,9 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         parameters={
             "type": "object",
             "properties": {"texto": {"type": "string", "minLength": 1, "maxLength": max_chars,
-                                     "description": "Texto de uma linha a digitar."}},
+                                     "description": "Texto de uma linha a digitar. Na Calculadora, digite a conta ('12+7=')."},
+                           "janela": {"type": "string", "maxLength": 80,
+                                      "description": "Opcional: título (ou parte) da janela onde digitar; o Jarvis a traz para frente antes."}},
             "required": ["texto"],
             "additionalProperties": False,
         },
@@ -248,7 +277,9 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         parameters={
             "type": "object",
             "properties": {"atalho": {"type": "string", "minLength": 1, "maxLength": 40,
-                                      "description": "Atalho no formato ctrl+c, alt+tab, enter."}},
+                                      "description": "Atalho no formato ctrl+c, alt+tab, enter."},
+                           "janela": {"type": "string", "maxLength": 80,
+                                      "description": "Opcional: título (ou parte) da janela onde apertar; o Jarvis a traz para frente antes."}},
             "required": ["atalho"],
             "additionalProperties": False,
         },
