@@ -27,6 +27,7 @@ import numpy as np
 
 from ..config import TtsCfg
 from ..core.cancel import CancelToken
+from .speech_text import normalize
 from .devices import AudioError
 from .playback import AudioChunk
 
@@ -101,7 +102,7 @@ def clean_for_speech(text: str) -> str:
     for pattern, repl in _ABBREVIATIONS:
         s = pattern.sub(repl, s)
     lines = (" ".join(line.split()).strip(" ,;") for line in s.split("\n"))
-    return "\n".join(line for line in lines if line)
+    return normalize("\n".join(line for line in lines if line))
 
 
 def _break_long(sentence: str, limit: int) -> Iterator[str]:
