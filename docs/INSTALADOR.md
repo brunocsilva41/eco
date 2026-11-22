@@ -86,3 +86,7 @@ Nada de segredo no instalador. O servidor do modelo continua só em `127.0.0.1` 
 - `ToggleSwitch` do kit guarda uma animação já apagada e falha ao esconder; o assistente usa uma subclasse protegida (`widgets.make_toggle`). Vale corrigir no kit.
 - `Jarvis.cmd` (dev e instalado) não aceita argumentos com espaço entre aspas (a expansão de `%ARGS%` quebra); no assistente, `--capture` deve receber caminho sem espaço pelo `.cmd`.
 - Sem assinatura de código, o Windows SmartScreen avisa na primeira execução.
+
+## Verificação do pacote (build de 2026-11-22, HEAD 24a397a)
+- `build.ps1` reprova o staging se tiver `work`, `logs`, `data`, `models`, `venv`, `.git`, `tests`, `config.toml` (o pacote usa o PADRÃO, sem `input_device`/`output_device` fixos) ou, no código empacotado, caminhos de usuário (`C:\Users\<nome>`), e-mails e "Fuxi". O nome "Bruno" aparece em 19 arquivos de `src\jarvis` como nome do dono em prompts e comentários (ex.: `memory\search.py:162`, `tools\memory_tools.py:207`, `context\manager.py:38`): o build só AVISA; para um pacote de terceiros convém trocar por texto neutro (fora do escopo do instalador). Os `.pyc` são compilados com caminho neutro (`-s/-p`), sem o caminho da máquina de build.
+- Teste de modelos sem copiar 3,5 GB: junção (`mklink /J`) de `models\` da instalação de teste para a pasta existente; **remova a junção com `rmdir` antes de desinstalar** (nunca com `/PURGEDATA` por cima dela).

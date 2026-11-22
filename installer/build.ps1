@@ -148,7 +148,7 @@ foreach ($d in @($pyDst, $llamaDst)) {
 }
 
 # pyc do projeto (primeira partida rapida mesmo em Program Files, onde o usuario nao grava)
-& $pyExe -I -X utf8 -m compileall -q (Join-Path $App "src\jarvis") | Out-Null
+& $pyExe -I -X utf8 -m compileall -q -s $App -p "<jarvis>" (Join-Path $App "src\jarvis") | Out-Null
 
 # arquivos da raiz
 foreach ($f in "Jarvis.cmd", "Jarvis.pyw", "jarvis_boot.py") { Copy-Item (Join-Path $Installer "payload\$f") $App }
@@ -165,6 +165,15 @@ $bad = Get-ChildItem $App -Recurse -Force -ErrorAction SilentlyContinue | Where-
   ($_.FullName -like "*\src\jarvis\*" -and $_.FullName -like "*\tests\*")
 }
 if ($bad) { Fail "staging contem itens proibidos: $($bad[0].FullName)" }
+if (Test-Path (Join-Path $App "config.toml")) { Fail "staging contem config.toml (o pacote deve usar o padrao)" }
+# varredura de privacidade: nada pessoal no codigo/arquivos empacotados (fora de site-packages e binarios)
+# 'Bruno' como NOME DO DONO em comentarios/prompts do codigo e so aviso (nao e dado pessoal); caminhos de usuario, e-mails e 'Fuxi' reprovam
+$warn = @(Get-ChildItem (Join-Path $App "src") -Recurse -File -Include *.py | Select-String -Pattern 'Bruno' -List)
+if ($warn.Count -gt 0) { Write-Host ("AVISO: 'Bruno' aparece em {0} arquivo(s) do codigo (nome do dono em prompts/comentarios); nao e caminho nem dado pessoal." -f $warn.Count) -ForegroundColor Yellow }
+$pat = 'C:\\Users\\[A-Za-z]|Fuxi|[A-Za-z0-9._-]+@[A-Za-z0-9-]+\.(com|br|org|net)'
+$hits = @(Get-ChildItem (Join-Path $App "src") -Recurse -File -Include *.py,*.json,*.txt,*.md,*.toml | Select-String -Pattern $pat -List)
+$hits += @(Get-ChildItem $App -File -Include *.cmd,*.pyw,*.py,*.json,*.txt | Select-String -Pattern $pat -List)
+if ($hits.Count -gt 0) { $hits | ForEach-Object { Write-Host ("PESSOAL? {0}:{1}: {2}" -f $_.Path, $_.LineNumber, $_.Line.Trim()) -ForegroundColor Yellow }; Fail "varredura de privacidade encontrou termos pessoais no staging (veja acima)" }
 $sizeMB = [math]::Round(((Get-ChildItem $App -Recurse -File | Measure-Object Length -Sum).Sum) / 1MB)
 Write-Host "staging pronto: $sizeMB MB em $App"
 
