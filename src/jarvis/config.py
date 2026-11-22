@@ -60,7 +60,7 @@ class AudioCfg:
 class SttCfg:
     model_dir: Path = ROOT / "models" / "whisper" / "hf_base"
     compute_type: str = "int8"
-    cpu_threads: int = 12
+    cpu_threads: int = 6                             # 6 threads: 9% mais lento que 12 mas 45% menos CPU (medido; regra: <10% = menos CPU)
     beam_size: int = 5
     language: str = "pt"
 
