@@ -5,6 +5,7 @@
     python -m jarvis settings       # tela de Configurações
     python -m jarvis record         # gravador de voz ("Minha voz")
     python -m jarvis memory         # o que o Jarvis sabe de mim (memórias e conversas)
+    python -m jarvis island-demo    # Ilha do Jarvis (prototipo visual, estados automaticos)
     python -m jarvis doctor         # confere o ambiente
     python -m jarvis tools          # lista as ferramentas que o agente pode usar
     python -m jarvis config         # mostra a configuração efetiva
@@ -107,6 +108,12 @@ def _cmd_record(_: argparse.Namespace) -> int:
     return main_recorder(load())
 
 
+def _cmd_island_demo(args: argparse.Namespace) -> int:
+    from .ui.island.demo import main_island_demo
+    return main_island_demo(capture=args.capture, seconds=args.seconds, measure_s=args.measure,
+                            reduce_motion=args.reduce_motion)
+
+
 def _cmd_doctor(_: argparse.Namespace) -> int:
     from .doctor import run_doctor
     cfg = load()
@@ -152,6 +159,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("settings", help="tela de Configurações").set_defaults(fn=_cmd_settings)
     sub.add_parser("record", help="gravador de voz (Minha voz)").set_defaults(fn=_cmd_record)
     sub.add_parser("memory", help="o que o Jarvis sabe de mim (memórias e conversas)").set_defaults(fn=_cmd_memory)
+    isl = sub.add_parser("island-demo", help="Ilha do Jarvis: demonstração visual com áudio de teste")
+    isl.add_argument("--seconds", type=float, default=0.0, help="fecha sozinha depois de N segundos")
+    isl.add_argument("--capture", metavar="PASTA", help="grava PNG por tamanho e estado (offscreen)")
+    isl.add_argument("--measure", type=float, default=0.0, metavar="S", help="mede CPU/RAM, S segundos por fase")
+    isl.add_argument("--reduce-motion", action="store_true", help="simula 'reduzir animações'")
+    isl.set_defaults(fn=_cmd_island_demo)
     sub.add_parser("doctor", help="confere o ambiente").set_defaults(fn=_cmd_doctor)
     sub.add_parser("tools", help="lista as ferramentas").set_defaults(fn=_cmd_tools)
     sub.add_parser("config", help="mostra a configuração efetiva").set_defaults(fn=_cmd_config)
