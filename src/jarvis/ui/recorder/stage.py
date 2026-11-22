@@ -40,7 +40,7 @@ class StageWidget(QWidget):
         self._recorded = Label("", "caption")
         root.addWidget(self._recorded)
 
-        root.addSpacing(SPACE.xl)
+        root.addSpacing(SPACE.lg)
         self._instruction = Label("", "help", wrap=True)
         root.addWidget(self._instruction)
         root.addSpacing(SPACE.sm)
@@ -49,7 +49,7 @@ class StageWidget(QWidget):
         self._phrase.setMinimumHeight(QFontMetrics(make_font(TYPE.display, TYPE.semibold)).lineSpacing() * 2)
         root.addWidget(self._phrase)
 
-        root.addSpacing(SPACE.xxl)
+        root.addSpacing(SPACE.xl)
         live = QHBoxLayout()
         live.setSpacing(SPACE.xl)
         self._ring = CountdownRing(20.0, diameter=SIZE.target * 4)

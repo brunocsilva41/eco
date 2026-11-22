@@ -23,6 +23,7 @@ from ..kit.layout import FieldRow
 from ..kit.status import StatusChip
 from ..theme import SPACE, ThemeManager
 from .controller import SettingsController
+from .yolo_card import YoloCard
 from .prefs import UiPrefs
 from .texts import T
 
@@ -52,6 +53,11 @@ def theme_block(prefs: UiPrefs) -> list[Block]:
     combo.valueChanged.connect(changed)
     row = FieldRow(g.theme_label, combo, help=g.theme_help)
     return [Block(row, f"{g.theme_label} {g.theme_help} {g.theme_dark} {g.theme_light} {g.theme_system}")]
+
+
+def permissions_block(controller: SettingsController) -> list[Block]:
+    y = T.yolo
+    return [Block(YoloCard(controller), f"{y.title} {y.badge} {y.on_button} {y.off_button} YOLO confirmações")]
 
 
 def _folder_row(label: str, path: Path, help_text: str | None = None) -> Block:

@@ -17,7 +17,7 @@ from .view import RecorderView
 log = logging.getLogger(__name__)
 
 MIN_SIZE = (900, 620)          # menor tamanho sem corte (pedido do dono, DESIGN.md)
-DEFAULT_SIZE = (1080, 720)
+DEFAULT_SIZE = (1120, 800)
 _SETTINGS_ORG, _SETTINGS_APP, _GEOMETRY_KEY = "Jarvis", "Gravador", "geometry"
 
 

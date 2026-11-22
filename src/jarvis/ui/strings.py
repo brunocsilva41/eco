@@ -79,7 +79,7 @@ class Status:
     seconds: str = "s"
 
     def db(self, v: float) -> str:
-        return f"{v:.0f} dB".replace("-", "−")
+        return f"{round(v):d} dB".replace("-", "−")   # round() devolve int: nunca "-0"
 
 
 @dataclass(frozen=True)

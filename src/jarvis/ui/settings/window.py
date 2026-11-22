@@ -208,6 +208,19 @@ class SettingsWindow(QWidget):
             self._search_empty.deleteLater()
             self._search_empty = None
 
+    def open_section(self, name: str | None) -> bool:
+        """Abre a pagina que tem a secao ``name`` (ex.: "permissions"). Nome desconhecido e ignorado."""
+        if not name:
+            return False
+        for cat in CATEGORIES:
+            if any(sec.id == name for sec in cat.sections):
+                if self.search.text():
+                    self.search.clear()
+                self.nav.set_current(cat.key)
+                page = self.pages[cat.key]
+                return bool(getattr(page, "focus_section", lambda _n: False)(name))
+        return False
+
     def go_to_field(self, key: str) -> None:
         """Abre a pagina do campo e leva o foco ate ele (usado quando salvar e bloqueado por erro)."""
         spec = schema.BY_KEY.get(key)

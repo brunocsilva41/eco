@@ -57,6 +57,7 @@ CATEGORIES: tuple[Category, ...] = (
     )),
     Category("tools", "shield", (schema.G_SEC, schema.G_TOOLS), (
         _S("emergency", ("safety.emergency_hotkey",)),
+        _S("permissions", ("safety.permission_mode", "safety.yolo_hotkey", "safety.yolo_minutes"), custom="permissions"),
         _S("tools", ("tools.disabled", "tools.confirm"), custom="tools"),
         _S("apps", ("apps.launch", "apps.hotkeys", "apps.hotkeys_confirm")),
         _S("typing", ("safety.max_typed_chars", "safety.typing_allowed_processes",

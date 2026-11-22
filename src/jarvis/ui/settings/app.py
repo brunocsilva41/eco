@@ -5,7 +5,7 @@ import logging
 import sys
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QWidget
 
 from jarvis.config import Config
@@ -28,7 +28,8 @@ def apply_values(window: SettingsWindow, values: dict[str, Any]) -> None:
     window.apply_values(values)
 
 
-def open_settings(cfg: Config | None = None, parent: QWidget | None = None) -> SettingsWindow:
+def open_settings(cfg: Config | None = None, parent: QWidget | None = None,
+                  open_section: str | None = None) -> SettingsWindow:
     """Abre (ou traz a frente) a tela de Configuracoes. Exige um ``QApplication`` ativo."""
     global _instance
     if QApplication.instance() is None:
@@ -39,6 +40,7 @@ def open_settings(cfg: Config | None = None, parent: QWidget | None = None) -> S
             if existing.isVisible():
                 existing.raise_()
                 existing.activateWindow()
+                existing.open_section(open_section)
                 return existing
         except RuntimeError:               # objeto Qt ja destruido
             _instance = None
@@ -48,10 +50,11 @@ def open_settings(cfg: Config | None = None, parent: QWidget | None = None) -> S
     window.show()
     window.raise_()
     window.activateWindow()
+    QTimer.singleShot(0, lambda: window.open_section(open_section))   # depois do primeiro layout
     return window
 
 
-def main_settings() -> int:
+def main_settings(open_section: str | None = None) -> int:
     """Executa a tela como programa proprio (cria o QApplication se preciso). Devolve o codigo de saida."""
     app = QApplication.instance()
     owns_app = app is None
@@ -61,7 +64,7 @@ def main_settings() -> int:
         UiPrefs().apply_saved_theme()
         ThemeManager.instance().apply(app)  # type: ignore[arg-type]
     try:
-        window = open_settings()
+        window = open_settings(open_section=open_section)
     except Exception:  # noqa: BLE001
         log.exception("nao consegui abrir as configuracoes")
         return 1

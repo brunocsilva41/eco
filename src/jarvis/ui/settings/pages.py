@@ -15,8 +15,9 @@ from jarvis.settings import schema
 
 from ..kit.base import Label
 from ..kit.layout import FieldRow, Section
+from ..theme import SPACE
 from .binder import FieldBinder
-from .blocks import (Block, config_file_block, details_block, paths_block, reset_block, status_block, theme_block)
+from .blocks import (Block, config_file_block, details_block, permissions_block, paths_block, reset_block, status_block, theme_block)
 from .categories import Category, SectionSpec, sections_for
 from .controller import SettingsController
 from .controls import DeviceCombo
@@ -46,6 +47,8 @@ class SettingsPage(PageBase):
         self._sections: list[Section] = []
         self._rows: dict[str, FieldRow] = {}
         self._lazy: list[Callable[[], None]] = []
+        self._yolo: QWidget | None = None
+        self._section_by_id: dict[str, Section] = {}
         for spec in sections_for(cat):
             self._add_section(spec)
         self.finish()
@@ -55,16 +58,24 @@ class SettingsPage(PageBase):
         title, desc = T.section(sec.id)
         section = Section(title, desc, level=sec.level)  # type: ignore[arg-type]
         self._sections.append(section)
+        self._section_by_id[sec.id] = section
         self.col.addWidget(section)
-        for block in self._custom(sec):
-            section.add(block.widget)
-            self._items.append(_Item(block.widget, section, f"{self.title} {title} {block.text}"))
+        after = sec.custom == "permissions"            # campos primeiro, depois o cartao do YOLO
+        if not after:
+            self._add_blocks(sec, section, title)
         for key in sec.keys:
             if sec.custom == "tools" and key in (KEY_DISABLED, KEY_CONFIRM):
                 continue
             self._add_field(section, title, schema.BY_KEY[key])
+        if after:
+            self._add_blocks(sec, section, title)
         if sec.custom == "tools":
             self._add_tools(section, title)
+
+    def _add_blocks(self, sec: SectionSpec, section: Section, title: str) -> None:
+        for block in self._custom(sec):
+            section.add(block.widget)
+            self._items.append(_Item(block.widget, section, f"{self.title} {title} {block.text}"))
 
     def _add_field(self, section: Section, section_title: str, spec: schema.FieldSpec) -> None:
         control = build_control(spec, self._ctl.model.current.get(spec.key))
@@ -99,9 +110,16 @@ class SettingsPage(PageBase):
         text = f"{self.title} {section_title} {T.label_for(KEY_DISABLED)} {T.label_for(KEY_CONFIRM)} {T.tools.intro}"
         self._items.append(_Item(box, section, text))
 
+    def _permissions(self) -> list[Block]:
+        blocks = permissions_block(self._ctl)
+        self._yolo = blocks[0].widget
+        return blocks
+
     def _custom(self, sec: SectionSpec) -> list[Block]:
         if sec.custom == "theme":
             return theme_block(self._prefs)
+        if sec.custom == "permissions":
+            return self._permissions()
         if sec.custom == "config_file":
             return config_file_block(self._ctl)
         if sec.custom == "reset":
@@ -138,3 +156,13 @@ class SettingsPage(PageBase):
             return
         self.ensureWidgetVisible(row)
         row.control.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def focus_section(self, section_id: str) -> bool:
+        """Rola ate a secao e, na de permissoes, poe o foco no botao de ativar o YOLO (sem aciona-lo)."""
+        section = self._section_by_id.get(section_id)
+        if section is None:
+            return False
+        self.ensureWidgetVisible(section, 0, SPACE.xl)
+        if section_id == "permissions" and self._yolo is not None:
+            self._yolo.focus_primary()                       # type: ignore[attr-defined]
+        return True

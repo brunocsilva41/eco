@@ -115,6 +115,34 @@ class Dialogs:
 
 
 @dataclass(frozen=True)
+class Yolo:
+    title: str = "Modo YOLO"
+    badge: str = "Sem confirmações"
+    intro: str = "Desliga TODAS as confirmações por {minutes} minutos. Depois o Jarvis volta ao normal sozinho."
+    facts: tuple[str, ...] = (
+        "As travas duras continuam: pastas protegidas, Lixeira em vez de apagar de vez e terminais bloqueados.",
+        "Só liga por clique aqui ou pelo atalho do teclado. Nunca por voz, nem por pedido do modelo.",
+        "Desligar é sempre possível: por aqui, pelo atalho ou dizendo \"desligar YOLO\".",
+    )
+    on_button: str = "Ativar modo YOLO"
+    off_button: str = "Desativar YOLO"
+    on_tip: str = "Pede ao Jarvis para entrar no modo YOLO (você confirma antes)."
+    off_tip: str = "Pede ao Jarvis para sair do modo YOLO agora."
+    running: str = "Jarvis em execução"
+    not_running: str = "Jarvis não está rodando"
+    not_running_why: str = "Abra o Jarvis para ligar ou desligar o modo YOLO por aqui."
+    sent_on: str = "Pedido enviado. O Jarvis avisa quando o modo YOLO ligar."
+    sent_off: str = "Pedido enviado. O Jarvis avisa quando o modo YOLO desligar."
+    failed: str = "Não consegui enviar o pedido ao Jarvis. Confira se a pasta de dados está acessível e tente de novo."
+    dialog_title: str = "Ativar o modo YOLO?"
+    dialog_message: str = ("Por {minutes} minutos o Jarvis vai agir sem pedir NENHUMA confirmação: abrir, digitar, "
+                           "mover e fechar coisas. As travas duras continuam valendo.")
+    dialog_target: str = "Modo YOLO por {minutes} minutos"
+    dialog_confirm: str = "Ativar YOLO"
+    card_name: str = "Modo YOLO: desliga todas as confirmações por um tempo"
+
+
+@dataclass(frozen=True)
 class Tools:
     intro: str = "Ligue ou desligue cada ferramenta. As arriscadas sempre pedem confirmação e isso não pode ser desligado."
     col_on: str = "Ligada"
@@ -244,6 +272,7 @@ class Texts:
     banner: Banner = field(default_factory=Banner)
     dialogs: Dialogs = field(default_factory=Dialogs)
     tools: Tools = field(default_factory=Tools)
+    yolo: Yolo = field(default_factory=Yolo)
     devices: Devices = field(default_factory=Devices)
     dictionary: Dictionary = field(default_factory=Dictionary)
     optional: OptionalField = field(default_factory=OptionalField)
