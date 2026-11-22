@@ -306,6 +306,41 @@ def click(x: int, y: int, button: str = "left") -> None:
                 _held_buttons.discard(button)
 
 
+def move_to(x: int, y: int) -> None:
+    """Move o cursor (sem clicar) para o pixel físico (x, y) sobre a tela virtual."""
+    left = _user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    top = _user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    width = _user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    height = _user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    if width <= 0 or height <= 0 or not (left <= x < left + width and top <= y < top + height):
+        raise ValueError(f"ponto ({x}, {y}) fora da tela")
+    _send([_mouse_event(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+                        _normalize_abs(x, left, width), _normalize_abs(y, top, height))])
+
+
+def drag(x1: int, y1: int, x2: int, y2: int, button: str = "left", steps: int = 14) -> None:
+    """Arrasta com o botão pressionado de (x1, y1) até (x2, y2) em passos (o botão é SEMPRE solto, mesmo em erro/emergência)."""
+    if button not in _BUTTONS:
+        raise ValueError(f"botão inválido: {button!r}")
+    move_to(x1, y1)
+    time.sleep(_KEY_GAP_S)
+    down, up = _BUTTONS[button]
+    _send([_mouse_event(down)])
+    with _state_lock:
+        _held_buttons.add(button)
+    try:
+        for i in range(1, max(2, steps) + 1):
+            move_to(round(x1 + (x2 - x1) * i / steps), round(y1 + (y2 - y1) * i / steps))
+            time.sleep(0.02)
+        time.sleep(_CLICK_HOLD_S)
+    finally:
+        try:
+            _send([_mouse_event(up)])
+        finally:
+            with _state_lock:
+                _held_buttons.discard(button)
+
+
 MOUSEEVENTF_WHEEL: Final = 0x0800
 MOUSEEVENTF_HWHEEL: Final = 0x1000
 _WHEEL_NOTCH: Final = 120

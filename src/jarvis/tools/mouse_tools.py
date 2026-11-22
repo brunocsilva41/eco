@@ -180,6 +180,86 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         log.info("clicar_em %r: (%d,%d) em %s controle=%r", desc[:40], px, py, info.process, name[:30])
         return ToolResult(True, f"Cliquei em {desc[:40]}" + (f" (controle «{name[:40]}»)" if name else "") + ". Use ver_tela para conferir.")
 
+    def _find(ctx: ToolContext, desc: str, want_hwnd: int) -> tuple[tuple[int, int] | None, str, Any]:
+        """Localiza `desc` na janela em foco e valida o ponto (mesmas travas do clique). (ponto, motivo da recusa, janela)."""
+        point, why = _locate(desc, want_hwnd)
+        if point is None:
+            return None, why, None
+        if win.foreground_hwnd() != want_hwnd:
+            return None, "A janela em foco mudou durante a busca; não mexi.", None
+        info = win.window_at(*point)
+        if info is None or info.hwnd != want_hwnd:
+            return None, "O ponto achado está fora da janela em foco; não mexi.", None
+        if win.is_own_process_window(info, cfg):
+            return None, "O ponto achado é uma janela do próprio Jarvis; não mexi.", None
+        if (info.process or "").lower() in _NEVER_CLICK:
+            return None, f"O ponto achado é {info.process}, uma janela de segurança ou de senhas; não mexo ali.", None
+        if win.is_dialog_window(info):
+            return None, "O ponto achado está num diálogo (Salvar, Abrir, Permitir...); não mexo por posição.", None
+        return point, "", info
+
+    def _focused(ctx: ToolContext) -> tuple[int, str] | ToolResult:
+        if _ground is None:
+            return ToolResult(False, "A visão ainda não está pronta.")
+        fg = win.foreground_window()
+        if fg is None:
+            return ToolResult(False, "Nenhuma janela em foco.")
+        return fg.hwnd, (f" (na janela «{fg.title[:40]}»)" if fg.title else "")
+
+    def localizar_na_tela(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        got = _focused(ctx)
+        if isinstance(got, ToolResult):
+            return got
+        hwnd, where = got
+        desc = str(args["descricao"]).strip()
+        point, why, info = _find(ctx, f"{desc}{where}", hwnd)
+        if point is None:
+            return ToolResult(False, why)
+        name = _control_name_at(*point)
+        left, top, w, h = screen.last_capture() or (0, 0, 1, 1)
+        rel = (round((point[0] - left) / max(1, w) * 1000), round((point[1] - top) / max(1, h) * 1000))
+        return ToolResult(True, f"Achei «{desc[:40]}» na janela {info.process}" + (f" (controle «{name[:40]}»)" if name else "")
+                          + f", na posição x={rel[0]}, y={rel[1]} (0 a 1000).", data={"x": rel[0], "y": rel[1], "controle": name}, untrusted=True)
+
+    def mover_mouse(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        got = _focused(ctx)
+        if isinstance(got, ToolResult):
+            return got
+        hwnd, where = got
+        desc = str(args["alvo"]).strip()
+        point, why, info = _find(ctx, f"{desc}{where}", hwnd)
+        if point is None:
+            return ToolResult(False, why)
+        try:
+            win_input.move_to(*point)
+        except (win_input.InputBlockedError, ValueError) as exc:
+            return ToolResult(False, f"Não consegui mover o mouse: {exc}")
+        return ToolResult(True, f"Mouse sobre «{desc[:40]}» (sem clicar). Use ver_tela para ver o que apareceu (dica, menu).")
+
+    def arrastar(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+        got = _focused(ctx)
+        if isinstance(got, ToolResult):
+            return got
+        hwnd, where = got
+        a = str(args["origem"]).strip()
+        b = str(args["destino"]).strip()
+        p1, why, _ = _find(ctx, f"{a}{where}", hwnd)
+        if p1 is None:
+            return ToolResult(False, f"Origem: {why}")
+        p2, why, _ = _find(ctx, f"{b}{where}", hwnd)
+        if p2 is None:
+            return ToolResult(False, f"Destino: {why}")
+        if ctx.cancel.cancelled:
+            return ToolResult(False, "Cancelado.")
+        try:
+            win_input.drag(p1[0], p1[1], p2[0], p2[1])
+        except win_input.InputBlockedError as exc:
+            return ToolResult(False, str(exc), effect_unknown=True)
+        except ValueError as exc:
+            return ToolResult(False, f"Ponto inválido: {exc}")
+        log.info("arrastar %r -> %r: (%d,%d) -> (%d,%d)", a[:30], b[:30], *p1, *p2)
+        return ToolResult(True, f"Arrastei «{a[:30]}» até «{b[:30]}». Use ver_tela para conferir.")
+
     def prepare_clique(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:
         pt = _to_pixels(int(args["x"]), int(args["y"]))
         if pt is None:
@@ -261,6 +341,30 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             "duplo": {"type": "boolean", "description": "Duplo clique. Padrão: falso."}},
             "required": ["descricao"], "additionalProperties": False},
         risk=Risk.CONTROL, handler=clicar_em, timeout_s=60.0,
+    ))
+    registry.register(ToolSpec(
+        name="localizar_na_tela",
+        description=("Diz ONDE está algo na janela em foco (por descrição curta) sem tocar em nada: devolve a posição (0 a 1000) "
+                     "e o nome do controle sob o ponto. Use para conferir antes de agir ou para responder 'onde fica X'."),
+        parameters={"type": "object", "properties": {"descricao": {"type": "string", "minLength": 2, "maxLength": 120}},
+                    "required": ["descricao"], "additionalProperties": False},
+        risk=Risk.READ, handler=localizar_na_tela, timeout_s=60.0,
+    ))
+    registry.register(ToolSpec(
+        name="mover_mouse",
+        description=("Move o mouse para cima de algo da janela em foco (descrição curta), sem clicar: abre dicas e menus de passar o mouse."),
+        parameters={"type": "object", "properties": {"alvo": {"type": "string", "minLength": 2, "maxLength": 120}},
+                    "required": ["alvo"], "additionalProperties": False},
+        risk=Risk.CONTROL, handler=mover_mouse, timeout_s=60.0,
+    ))
+    registry.register(ToolSpec(
+        name="arrastar",
+        description=("Arrasta com o mouse de um item até outro da janela em foco (ambos por descrição curta): mover arquivo, "
+                     "reordenar, soltar numa pasta, ajustar controle deslizante."),
+        parameters={"type": "object", "properties": {"origem": {"type": "string", "minLength": 2, "maxLength": 120},
+                                                     "destino": {"type": "string", "minLength": 2, "maxLength": 120}},
+                    "required": ["origem", "destino"], "additionalProperties": False},
+        risk=Risk.CONTROL, handler=arrastar, timeout_s=120.0,
     ))
     registry.register(ToolSpec(
         name="clicar_na_tela",

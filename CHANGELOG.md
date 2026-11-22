@@ -5,6 +5,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 ## [Não lançado]
 - Licença do projeto ainda pendente de definição.
 
+## [0.1.4] - 2026-11-22
+### Corrigido
+- **Pedido de permissão:** depois de responder na Ilha, o foco podia estar em outra janela e a ação era recusada de novo. Agora o Jarvis devolve o foco à janela que originou o pedido antes de tentar. Provado com clique real em «Sim» na Ilha: a liberação foi gravada e a ação rodou.
+### Adicionado
+- **Mouse e visão:** `mover_mouse` (passar o mouse por descrição), `arrastar` (de um item até outro, por descrição; o botão é sempre solto, mesmo em erro) e `localizar_na_tela` (diz onde está algo, sem tocar). Mesmas travas do clique: só dentro da janela em foco, nunca janelas do Jarvis, de senhas ou diálogos. Provado: mover (±1 px), arrastar selecionou texto no Bloco de Notas, ponto fora da janela é recusado. A precisão da localização por imagem não foi remedida nesta versão.
+
 ## [0.1.3] - 2026-11-22
 ### Corrigido
 - **Ações recusadas por falta de permissão não apareciam na Ilha.** Agora toda recusa aparece na Ilha com o motivo, e as recusas por LISTA de permissão (digitar em outro programa, atalho não liberado) viram um **pedido de permissão**: a Ilha mostra «Permitir e lembrar?» com Sim/Não (também por voz ou atalho). Sim libera na hora e grava no config.toml; Não mantém a recusa. Programas bloqueados por segurança (terminais, gerenciadores de senha) nunca são oferecidos. No modo YOLO libera só para a sessão.

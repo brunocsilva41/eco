@@ -14,7 +14,7 @@ from ..core.textutil import fold
 BASE = ("hora_atual", "janela_ativa", "ver_tela")
 BUNDLES: dict[str, tuple[str, ...]] = {
     "apps": ("abrir_app", "listar_apps_permitidos", "abrir_pasta", "focar_janela", "janela_acao", "fechar_janela", "listar_janelas", "ajustar_volume"),
-    "controle": ("clicar_controle", "digitar_texto", "apertar_atalho", "rolar_tela", "focar_janela"),
+    "controle": ("clicar_controle", "digitar_texto", "apertar_atalho", "rolar_tela", "mover_mouse", "arrastar", "localizar_na_tela", "focar_janela"),
     "arquivos": ("listar_pasta", "ler_arquivo", "criar_arquivo", "editar_arquivo", "copiar_arquivo", "mover_arquivo",
                  "apagar_arquivo", "desfazer", "abrir_pasta"),
     "memoria": ("lembrar", "esquecer", "editar_memoria", "listar_memorias", "buscar_memoria", "buscar_conversas",

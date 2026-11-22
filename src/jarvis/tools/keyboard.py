@@ -155,10 +155,10 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             log.info("digitar_texto recusado: %s fora da lista permitida", target.process)
             if target.process == "applicationframehost.exe" and fold(target.title).split():       # app da loja: libera pelo TÍTULO
                 word = fold(target.title).split()[0][:30]
-                grant = {"kind": "typing_title", "value": word,
+                grant = {"kind": "typing_title", "value": word, "hwnd": str(target.hwnd),
                          "text": f"Permissão: digitar no app «{clip(target.title, 40)}». Permitir e lembrar?"}
             else:
-                grant = {"kind": "typing_process", "value": target.process,
+                grant = {"kind": "typing_process", "value": target.process, "hwnd": str(target.hwnd),
                          "text": f"Permissão: digitar em {target.process} («{clip(target.title, 40)}»). Permitir e lembrar?"}
             return ToolResult(False, f"Ainda não tenho permissão para digitar em {target.process}; pedi a sua autorização.", grant=grant)
             return ToolResult(False, f"A janela em foco é {target.process}, e só digito em: {allowed_txt}.")

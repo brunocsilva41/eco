@@ -200,6 +200,7 @@ class ToolRegistry:
         text = grant.get("text", "Permitir esta ação?")
         if YOLO.active():                                               # YOLO: libera só para a sessão, sem lembrar e sem perguntar
             applier(grant["value"])
+            self._refocus(grant)
             audit.info(json.dumps({"origin": origin, "tool": tool, "grant": grant.get("kind"), "via": "yolo"}, ensure_ascii=False))
             return True
         decision = self._confirm(text, Risk.CONTROL, parent)
@@ -208,12 +209,26 @@ class ToolRegistry:
         if not decision.allowed:
             return False
         applier(grant["value"])
+        self._refocus(grant)
         if self._grant_persist is not None:
             try:
                 self._grant_persist(grant)
             except Exception:  # noqa: BLE001 - liberou para a sessão mesmo que não consiga gravar
                 log.exception("não consegui gravar a liberação %s", grant.get("kind"))
         return True
+
+    @staticmethod
+    def _refocus(grant: dict[str, str]) -> None:
+        """Depois de o usuário responder (clicando na Ilha, por exemplo) o foco pode ter mudado: volta à janela que originou o pedido."""
+        hwnd = grant.get("hwnd")
+        if hwnd and hwnd.isdigit():
+            try:
+                from ..win import windows as win
+                if win.is_window(int(hwnd)):
+                    win.focus_window(int(hwnd))
+                    time.sleep(0.25)
+            except Exception:  # noqa: BLE001
+                log.debug("não consegui devolver o foco", exc_info=True)
 
     def block_actions(self, reason: str) -> None:
         """Só ferramentas de leitura passam a rodar (usado quando a tecla de emergência deixa de funcionar)."""
