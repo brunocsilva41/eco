@@ -17,7 +17,7 @@ F_MIN, F_MAX = 80.0, 8000.0
 
 class SpectrumAnalyzer:
     def __init__(self, bands: int = 28, sr: int = SR, n_fft: int = N_FFT,
-                 attack_s: float = 0.02, release_s: float = 0.10) -> None:
+                 attack_s: float = 0.02, release_s: float = 0.05) -> None:
         self.bands, self.sr, self.n_fft = bands, sr, n_fft
         self._win = np.hanning(n_fft).astype(np.float32)
         self._norm = float(self._win.sum() / 2.0)

@@ -1,8 +1,17 @@
 """Tokens da Ilha. Cores vem SEMPRE de ``jarvis.ui.theme`` (paleta escura: a Ilha e preta em
-qualquer tema do Windows); aqui ficam so a escolha da cor de destaque e as medidas proprias.
+qualquer tema do Windows); aqui ficam so a escolha da cor de destaque, as medidas e o layout dos
+tres tamanhos (grade de 4 px).
 
 COR DE DESTAQUE (ainda nao decidida pelo Bruno): troque em UM lugar, ``ACCENT_ATTR`` (outro campo
 da paleta, ex. "ok") ou ``ACCENT_OVERRIDE`` (uma cor fixa, ex. ciano). Todo o resto segue.
+
+Tabela de layout (px logicos; x/y a partir do canto superior esquerdo da Ilha):
+
+  COMPACTA 208x36 (repouso)   mic 20 @x12 | rotulo do estado @x40 | [cronometro so em ACTING] | 6 barras | ponto de status
+  MEDIA    380x64 (conversa)  mic 24 @x16 | rotulo (13 semibold) + cronometro | ultima frase (12) | 14 barras @x280
+  GRANDE   520x200 (expandida) cabecalho y12 (mic 24, estado, chips modo) | espectro 49 barras y44..72 |
+                               fala/resposta 3 linhas y78..129 (rolagem) | acao atual y134..150 |
+                               contexto + botoes y156..188 (Sim/Nao, Mudo, Parar, Configuracoes)
 """
 from __future__ import annotations
 
@@ -26,9 +35,9 @@ def accent() -> str:
 
 
 class IslandSize(Enum):
-    REST = "repouso"
-    ACTIVE = "ativo"
-    EXPANDED = "expandido"
+    COMPACT = "compacta"
+    MEDIUM = "media"
+    LARGE = "grande"
 
 
 class IslandState(Enum):
@@ -39,44 +48,67 @@ class IslandState(Enum):
     ACTING = "acting"
     SPEAKING = "speaking"
     CONFIRMING = "confirmando"
+    ERROR = "error"
 
 
-# tamanhos logicos (px); multiplos de 4 (grade do tema)
 SIZES: Final[dict[IslandSize, tuple[int, int]]] = {
-    IslandSize.REST: (dp(64), dp(8)),
-    IslandSize.ACTIVE: (dp(304), dp(48)),
-    IslandSize.EXPANDED: (dp(448), dp(200)),
+    IslandSize.COMPACT: (dp(208), dp(36)),
+    IslandSize.MEDIUM: (dp(380), dp(64)),
+    IslandSize.LARGE: (dp(520), dp(200)),
 }
-CORNER_MAX: Final = dp(28)                 # cantos bem redondos (pedido do Bruno); pilula ate 56 px de altura
-TOP_MARGIN: Final = SPACE.sm
-PAD: Final = SPACE.md
-RING_R: Final = 15                         # raio do anel de pontos
-RING_DOTS: Final = 36
-BANDS: Final = 28                          # barras do espectro
+CW, CH = SIZES[IslandSize.COMPACT]
+MW, MH = SIZES[IslandSize.MEDIUM]
+LW, LH = SIZES[IslandSize.LARGE]
+CORNER_MAX: Final = dp(28)                 # so os cantos de BAIXO sao redondos (colada na borda superior)
+TOP_MARGIN: Final = 0                      # colada ao topo do monitor principal
+PAD: Final = SPACE.lg                      # 16 (compacta usa SPACE.md = 12)
 
-RESIZE_MS: Final = 220                     # crescer/encolher (~250 ms do spec); 0 com "reduzir animacoes"
-FPS: Final = 30
-FPS_REDUCED: Final = 12                    # so a barra de nivel, sem animacao decorativa
+# compacta
+C_PAD: Final = SPACE.md
+C_MIC: Final = 20
+C_BARS: Final = 6
+C_DOT: Final = 6
+# media
+M_MIC: Final = 24
+M_TEXT_X: Final = 52
+M_BARS: Final = 14
+M_WAVE_W: Final = 84
+M_WAVE_H: Final = 36
+# grande
+L_HEADER_Y: Final = 12
+L_WAVE_Y, L_WAVE_H = 44, 28
+L_TEXT_Y, L_TEXT_LINES, L_LINE_H = 78, 3, 17
+L_ACTION_Y: Final = 134
+L_ROW_Y: Final = 156                       # linha dos botoes (32 px de alto)
+L_BAR_W: Final = 6
+L_BAR_GAP: Final = 4
+L_BARS: Final = (LW - 2 * PAD + L_BAR_GAP) // (L_BAR_W + L_BAR_GAP)    # 49
+
+BANDS: Final = 28                          # bandas do analisador
+
+RESIZE_MS: Final = 260                     # crescer/encolher (200 a 350 ms); 0 com "reduzir animacoes"
+OVERSHOOT: Final = 0.8                     # mola leve ao crescer
+FPS_VOICE: Final = 60                      # ondas ao vivo
+FPS: Final = 30                            # demais estados animados
+FPS_REDUCED: Final = 12                    # reduzir movimento: so as barras de nivel
 CONFIRM_TIMEOUT_S: Final = 15              # sem resposta = NAO
+
+ATTACK_S: Final = 0.015                    # ondas: subida quase imediata
+DECAY_S: Final = 0.075                     # queda lenta (60 a 90 ms)
 
 VOICE_STATES: Final = (IslandState.LISTENING, IslandState.SPEAKING)
 ANIMATED_STATES: Final = (IslandState.LISTENING, IslandState.TRANSCRIBING, IslandState.THINKING,
                           IslandState.ACTING, IslandState.SPEAKING, IslandState.CONFIRMING)
 
-# icone do kit por estado (o nome do estado tambem sempre aparece em texto)
-STATE_ICON: Final[dict[IslandState, str]] = {
-    IslandState.IDLE: "brain", IslandState.LISTENING: "mic", IslandState.TRANSCRIBING: "edit",
-    IslandState.THINKING: "brain", IslandState.ACTING: "keyboard", IslandState.SPEAKING: "listen",
-    IslandState.CONFIRMING: "alert",
-}
-
 
 def state_color(state: IslandState) -> str:
-    """Destaque para voz (ouvir/falar); neutro para trabalho interno; atencao para confirmar."""
+    """Destaque para voz (ouvir/falar); neutro para trabalho interno; atencao/erro com cor propria."""
     if state in VOICE_STATES:
         return accent()
     if state is IslandState.CONFIRMING:
         return PALETTE.warn
+    if state is IslandState.ERROR:
+        return PALETTE.error
     if state is IslandState.IDLE:
         return PALETTE.text_muted
     return PALETTE.text
@@ -87,4 +119,4 @@ def state_label(state: IslandState) -> str:
     return {IslandState.IDLE: S.state_idle, IslandState.LISTENING: S.state_listening,
             IslandState.TRANSCRIBING: S.state_transcribing, IslandState.THINKING: S.state_thinking,
             IslandState.ACTING: S.state_acting, IslandState.SPEAKING: S.state_speaking,
-            IslandState.CONFIRMING: S.state_confirming}[state]
+            IslandState.CONFIRMING: S.state_confirming, IslandState.ERROR: S.state_error}[state]
