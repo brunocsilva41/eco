@@ -58,8 +58,27 @@ class IslandState(Enum):
 SIZES: Final[dict[IslandSize, tuple[int, int]]] = {
     IslandSize.COMPACT: (208, 36),
     IslandSize.MEDIUM: (380, 64),
-    IslandSize.LARGE: (600, 248),
+    IslandSize.LARGE: (688, 248),
 }
+# dock lateral (vertical): trilho recolhido (altura = itens), painel medio e painel grande. Grade de 4 px.
+SIDE_W: Final = 56                         # trilho
+SIDE_ITEM: Final = 40                      # item redondo do trilho
+SIDE_GAP: Final = 8
+SIDE_PAD: Final = 8
+SIDE_MW, SIDE_MH = 320, 296
+SIDE_LW, SIDE_LH = 320, 560
+
+
+def rail_height(items: int) -> int:
+    return SIDE_PAD * 2 - SIDE_GAP + items * (SIDE_ITEM + SIDE_GAP)
+
+
+def side_dims(size: "IslandSize", rail_items: int = 6) -> tuple[int, int]:
+    if size is IslandSize.COMPACT:
+        return SIDE_W, rail_height(rail_items)
+    if size is IslandSize.MEDIUM:
+        return SIDE_MW, SIDE_MH
+    return SIDE_LW, SIDE_LH
 CW, CH = SIZES[IslandSize.COMPACT]
 MW, MH = SIZES[IslandSize.MEDIUM]
 LW, LH = SIZES[IslandSize.LARGE]
@@ -77,6 +96,8 @@ M_ICON: Final = 24
 M_TEXT_X: Final = 64
 M_BARS: Final = 14
 M_WAVE_H: Final = 36
+M_LISTEN: Final = 28                       # botao redondo Escuta aberta (media)
+M_LISTEN_Y: Final = 18
 # grande
 L_HEAD_Y: Final = 16
 L_BADGE: Final = 28
@@ -105,6 +126,7 @@ FADE_MS: Final = 150                       # troca de texto/estado (fade + deslo
 HOVER_MS: Final = 110
 DWELL_MS: Final = 160                      # permanencia do mouse na zona do topo
 ZONE_H: Final = 3                          # altura da zona de revelacao (px fisicos logicos)
+ZONE_SIDE_H: Final = 256                   # zona ativa da borda lateral (3 px de largura x 256 px de altura)
 POLL_HZ: Final = 10
 FLASH_S: Final = 2.5                       # YOLO / mudo / microfone
 ERROR_S: Final = 5.0

@@ -53,6 +53,19 @@ class IslandStrings:
     press_to_talk: str = "Pressione {key} para falar"
     mute_short: str = "Mudo"
     unmute_short: str = "Ligar"
+    state_open: str = "Escutando"
+    listen: str = "Escuta aberta"
+    listen_off: str = "Escuta por tecla"
+    listen_on_name: str = "Escuta aberta ligada. Clique para voltar a falar só com a tecla"
+    listen_off_name: str = "Escuta aberta desligada. Clique para o Jarvis escutar sem apertar botão"
+    listen_open_line: str = "Escuta aberta: é só falar"
+    pinned_name: str = "Ilha fixada na tela"
+    pinned_chip: str = "Fixada"
+    side_conversation: str = "Conversa"
+    side_action: str = "Ação atual"
+    side_context: str = "Contexto"
+    side_shortcuts: str = "Atalhos"
+    nothing_said: str = "Nada dito ainda"
 
 
 S = IslandStrings()

@@ -51,6 +51,16 @@ def _cradle() -> QPainterPath:
     return p
 
 
+def _arcs() -> QPainterPath:
+    """Ondas de som dos dois lados do microfone (escuta aberta)."""
+    p = QPainterPath()
+    for sx in (-1.0, 1.0):
+        x0 = 12.0 + sx * 9.6
+        p.moveTo(x0, 5.2)
+        p.quadTo(x0 + sx * 2.2, 8.5, x0, 11.8)
+    return p
+
+
 def _gear() -> QPainterPath:
     pts: list[QPointF] = []
     for i in range(8):
@@ -90,6 +100,7 @@ def _wrench() -> QPainterPath:
 
 _STROKES: dict[str, QPainterPath] = {
     "mic": _join(_cradle(), _capsule()),
+    "listen": _join(_cradle(), _capsule(), _arcs()),
     "stop": _poly((7.0, 7.0), (17.0, 7.0), (17.0, 17.0), (7.0, 17.0), close=True),
     "check": _poly((5.0, 12.5), (10.0, 17.5), (19.0, 7.0)),
     "close": _join(_poly((6.5, 6.5), (17.5, 17.5)), _poly((17.5, 6.5), (6.5, 17.5))),
@@ -107,7 +118,7 @@ _STROKES: dict[str, QPainterPath] = {
     "text": _join(_poly((5.0, 7.5), (19.0, 7.5)), _poly((5.0, 12.0), (15.0, 12.0)), _poly((5.0, 16.5), (11.0, 16.5))),
 }
 _RINGS = {"clock": (12.0, 12.0, 9.0), "info": (12.0, 12.0, 9.0), "stop": None}
-_FILLS: dict[str, QPainterPath] = {"mic": _capsule(), "stop": _STROKES["stop"], "pin": _STROKES["pin"],
+_FILLS: dict[str, QPainterPath] = {"mic": _capsule(), "listen": _capsule(), "stop": _STROKES["stop"], "pin": _STROKES["pin"],
                                    "bolt": _STROKES["bolt"], "shield": _STROKES["shield"]}
 _DOTS = {"alert": [(12.0, 16.6, 1.15)], "info": [(12.0, 7.6, 1.15)]}
 
@@ -160,8 +171,10 @@ def draw(p: QPainter, name: str, rect: QRectF, color: str | QColor, *, fill: boo
     col = _color(color, alpha)
     if name == "mic_off":
         _draw_name(p, "mic", col, w, False)
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)       # vao no icone sem pintar o fundo (vidro)
         p.setPen(QPen(QColor(bg), w + 3.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawLine(QPointF(4.5, 3.5), QPointF(19.5, 20.5))
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         p.setPen(_pen(col, w))
         p.drawLine(QPointF(4.5, 3.5), QPointF(19.5, 20.5))
     else:
@@ -273,7 +286,7 @@ def draw_state(p: QPainter, state: str, rect: QRectF, color: str, t: float, *, m
 
 
 def sheet_names() -> tuple[str, ...]:
-    return ("mic", "mic_off", "stop", "check", "close", "gear", "pin", "bolt", "shield", "layers", "tool", "alert",
+    return ("mic", "listen", "mic_off", "stop", "check", "close", "gear", "pin", "bolt", "shield", "layers", "tool", "alert",
             "clock", "text")
 
 

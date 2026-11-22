@@ -11,6 +11,7 @@ BELOW_NORMAL, e a janela fica OCULTA (zero timers) enquanto não há o que mostr
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from types import SimpleNamespace
@@ -24,7 +25,7 @@ from .bridge import IslandBridge
 from .window import IslandWindow
 
 _EVENTS = frozenset({"state", "transcript", "reply_text", "action_step", "confirm_request", "confirm_done",
-                     "context_usage", "yolo", "mute", "emergency", "error", "mode", "config"})
+                     "context_usage", "yolo", "mute", "emergency", "error", "mode", "config", "listen_mode", "pin"})
 
 
 class _Quit(QObject):
@@ -50,7 +51,75 @@ class _DirectBus:
         self._subs.clear()
 
 
-def main_island_child() -> int:
+class _TraySig(QObject):
+    """Cruza os eventos da thread de leitura do stdin para a thread da UI (a bandeja e widget Qt)."""
+    event = Signal(str, object)
+
+
+def _find_action(menu, text: str):  # type: ignore[no-untyped-def]
+    for a in menu.actions():
+        if a.text() == text:
+            return a
+        sub = a.menu()
+        if sub is not None:
+            r = _find_action(sub, text)
+            if r is not None:
+                return r
+    return None
+
+
+def build_tray(app, send, win):  # type: ignore[no-untyped-def]
+    """Liga o icone da bandeja (``ui/tray.py``). ``win`` None = modo so-bandeja (sem janela da Ilha). Devolve (tray, sig)."""
+    from ..tray import TrayController
+    from ...core import updates
+    from dataclasses import replace
+    from .bridge import _STATE
+    from . import tokens as T
+
+    cbs: dict[str, Any] = {
+        "settings": lambda: send({"c": "settings", "section": "general"}),
+        "quit": lambda: send({"c": "quit"}),
+        "set_listen_mode_toggle": lambda on: send({"c": "listen_mode", "mode": "open" if on else "push"}),
+        "set_mute": lambda on: send({"c": "mute", "on": bool(on)}),
+    }
+    if win is not None:
+        def set_position(mode: str) -> None:
+            win.apply_config(replace(win.cfg, mode=mode, pinned=win.pinned))
+            send({"c": "ui_mode", "mode": mode})
+        cbs.update({"reveal": win.reveal, "toggle_visible": win.toggle_visible, "toggle_pin": win.set_pinned,
+                    "set_size": win.set_size_name, "set_position": set_position})
+    tray = TrayController(app, version=updates.current_version(), callbacks=cbs, check_updates=updates.check)
+    sig = _TraySig()
+    st = {"muted": False, "yolo": False, "state": "idle"}
+
+    def on_event(kind: str, d: Any) -> None:
+        if kind == "state":
+            st["state"] = str(d.get("state", "idle"))
+        elif kind == "mute":
+            st["muted"] = bool(d.get("muted"))
+        elif kind == "yolo":
+            st["yolo"] = bool(d.get("on"))
+        elif kind == "listen_mode":
+            tray.set_open_listening(str(d.get("mode")) == "open")
+        label = T.state_label(_STATE.get(st["state"], T.IslandState.IDLE)) + (" · YOLO" if st["yolo"] else "")
+        tray.set_status(label, muted=st["muted"], listening=st["state"] == "listening")
+
+    sig.event.connect(on_event)
+    if win is not None:
+        win.pin_toggled.connect(lambda on: _sync_pin(tray, on))
+    tray.show()
+    return tray, sig
+
+
+def _sync_pin(tray, on: bool) -> None:  # type: ignore[no-untyped-def]
+    a = _find_action(tray._menu, "Fixar na tela")
+    if a is not None:
+        a.blockSignals(True)
+        a.setChecked(bool(on))
+        a.blockSignals(False)
+
+
+def main_island_child(tray_only: bool = False) -> int:
     out = sys.stdout.buffer                       # canal do protocolo
     sys.stdout = sys.stderr                       # qualquer print acidental não corrompe o protocolo
     lock = threading.Lock()
@@ -71,14 +140,24 @@ def main_island_child() -> int:
     _quit.requested.connect(app.quit)
 
     bus = _DirectBus()
-    win = IslandWindow()
-    bridge = IslandBridge(
-        win, bus,
-        on_confirm_answer=lambda rid, yes: send({"c": "confirm", "id": rid, "yes": bool(yes)}),
-        on_stop=lambda: send({"c": "stop"}),
-        on_mute=lambda on: send({"c": "mute", "on": bool(on)}))
-    win.settings_requested.connect(lambda section: send({"c": "settings", "section": section}))
-    win.start()                                   # escondida: só a zona do topo (se ligada); nada pinta
+    win = None if tray_only else IslandWindow()
+    bridge = None
+    if win is not None:
+        bridge = IslandBridge(
+            win, bus,
+            on_confirm_answer=lambda rid, yes: send({"c": "confirm", "id": rid, "yes": bool(yes)}),
+            on_stop=lambda: send({"c": "stop"}),
+            on_mute=lambda on: send({"c": "mute", "on": bool(on)}))
+        win.settings_requested.connect(lambda section: send({"c": "settings", "section": section}))
+        win.pin_toggled.connect(lambda on: send({"c": "pin", "on": bool(on)}))
+        win.listen_toggled.connect(lambda mode: send({"c": "listen_mode", "mode": mode}))
+        win.start()                               # escondida: só a zona do topo (se ligada); nada pinta
+    tray = tray_sig = None
+    if os.environ.get("JARVIS_NO_TRAY") != "1":
+        try:
+            tray, tray_sig = build_tray(app, send, win)
+        except Exception:  # noqa: BLE001 - a bandeja nunca derruba a Ilha
+            print("falha ao criar a bandeja", file=sys.stderr)
     send({"c": "ready"})
 
     def reader() -> None:
@@ -91,12 +170,16 @@ def main_island_child() -> int:
                     continue
                 try:
                     if kind == "level":
-                        bridge.feed.on_level("mic", float(d.get("mic", 0.0)))
-                        bridge.feed.on_level("tts", float(d.get("tts", 0.0)))
+                        if bridge is not None:
+                            bridge.feed.on_level("mic", float(d.get("mic", 0.0)))
+                            bridge.feed.on_level("tts", float(d.get("tts", 0.0)))
                     elif kind == "quit":
                         break
                     elif kind in _EVENTS and isinstance(d, dict):
-                        bus.publish(kind, **d)
+                        if tray_sig is not None and kind in ("state", "mute", "yolo", "listen_mode"):
+                            tray_sig.event.emit(kind, d)
+                        if bridge is not None:
+                            bus.publish(kind, **d)
                 except (TypeError, ValueError):
                     continue
         except (OSError, ValueError):
@@ -105,6 +188,9 @@ def main_island_child() -> int:
 
     threading.Thread(target=reader, name="island-stdin", daemon=True).start()
     code = app.exec()
-    bridge.close()
+    if tray is not None:
+        tray.hide()
+    if bridge is not None:
+        bridge.close()
     bus.close()
     return int(code)

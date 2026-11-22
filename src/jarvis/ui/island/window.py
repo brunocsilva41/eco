@@ -19,15 +19,16 @@ import math
 import os
 import time
 
-from PySide6.QtCore import QEasingCurve, QPointF, QRect, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import (QColor, QCursor, QGuiApplication, QKeyEvent, QMouseEvent, QPainter, QPainterPath, QPen,
+from PySide6.QtCore import QEasingCurve, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import (QColor, QCursor, QGuiApplication, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPen,
                            QPixmap, QWheelEvent)
 from PySide6.QtWidgets import QWidget
 
 from ..kit.base import set_a11y
 from ..kit.platform import motion_enabled
-from . import glyphs, waves
+from . import glass, glyphs, waves
 from . import render as R
+from . import side as SD
 from . import tokens as T
 from . import winapi
 from .conf import IslandConfig, display
@@ -70,6 +71,8 @@ class IslandWindow(QWidget):
     mute_toggled = Signal(bool)
     settings_requested = Signal(str)
     size_changed = Signal(str)
+    pin_toggled = Signal(bool)              # alfinete clicado: o nucleo salva em ui.island_pinned
+    listen_toggled = Signal(str)            # 'open' | 'push' (modo de escuta pedido pelo clique)
 
     def __init__(self, levels=None, parent: QWidget | None = None, cfg: IslandConfig | None = None) -> None:
         super().__init__(parent)
@@ -104,12 +107,19 @@ class IslandWindow(QWidget):
         # --- tamanho / morfose
         self._pinned: IslandSize | None = None
         self._target = IslandSize.COMPACT
-        self._cur = (float(T.CW), float(T.CH))
+        self._cur = tuple(float(x) for x in self._dim(IslandSize.COMPACT))  # type: ignore[assignment]
         self._morph: tuple[tuple[float, float], tuple[float, float], float, QEasingCurve] | None = None
         # --- presenca
         self._pres = 0.0
         self._pres_dir = 0
-        self._keep = False                         # alfinete
+        self._keep = bool(self.cfg.pinned)         # alfinete (inicial vem do ui.island_pinned salvo)
+        self._pin_local_at = -10.0                 # instante do ultimo clique no alfinete (config antiga nao desfaz)
+        self.listen_open = False                   # escuta aberta (modo do nucleo)
+        self._listen_ok = False                    # ultimo valor CONFIRMADO pelo nucleo
+        self._listen_timer = QTimer(self)
+        self._listen_timer.setSingleShot(True)
+        self._listen_timer.timeout.connect(self._listen_revert)
+        self.glass = glass.apply(self.cfg.opacity)
         self._hover = False
         self._hold_until = 0.0
         self._idle_since = time.monotonic()
@@ -133,7 +143,8 @@ class IslandWindow(QWidget):
         self._level = 0.0
         self._native = QGuiApplication.platformName() == "windows"
         self.waves = {"compact": WaveBars(T.C_BARS, 3, 3, 16.0), "medium": WaveBars(T.M_BARS, 3, 3, float(T.M_WAVE_H)),
-                      "large": WaveBars(T.L_BARS, T.L_BAR_W, T.L_BAR_GAP, float(T.L_WAVE_H))}
+                      "large": WaveBars(T.L_BARS, T.L_BAR_W, T.L_BAR_GAP, float(T.L_WAVE_H)),
+                      "side": WaveBars(48, 3, 3, 36.0)}
         # --- botoes (pintados, sem QWidget)
         self.b_yes = R.Btn("yes", "check", S.yes, "", "primary", 36)
         self.b_no = R.Btn("no", "close", S.no, "", "neutral", 36)
@@ -143,7 +154,9 @@ class IslandWindow(QWidget):
         self.b_cfg = R.Btn("cfg", "gear", "", "", "neutral", name=S.settings)
         self.b_pin = R.Btn("pin", "pin", "", "", "ghost", 28, name=S.pin)
         self.b_talk = R.Btn("talk", "mic", S.talk, "", "ghost")
-        self.btns = [self.b_yes, self.b_no, self.b_mute, self.b_yolo, self.b_stop, self.b_cfg, self.b_pin, self.b_talk]
+        self.b_listen = R.Btn("listen", "listen", S.listen_off, "", "neutral", name=S.listen_off_name)
+        self.btns = [self.b_yes, self.b_no, self.b_mute, self.b_yolo, self.b_stop, self.b_cfg, self.b_pin, self.b_talk,
+                     self.b_listen]
         self._hover_btn: R.Btn | None = None
         self._press_btn: R.Btn | None = None
         self._focus_btn: R.Btn | None = None
@@ -175,11 +188,11 @@ class IslandWindow(QWidget):
     # ================================================================== API publica
     def start(self) -> None:
         """Ponto de partida: escondida (zona do topo armada) ou, com autohide desligado, visivel."""
-        if self.cfg.autohide:
+        if self.cfg.autohide and not self._keep:
             self._arm_zone()
             QTimer.singleShot(1500, winapi.trim_working_set)       # partida escondida: devolve as paginas da inicializacao
         else:
-            self._present(True)
+            self._present(True)                                    # fixada ou sem autohide: sempre visivel
 
     def set_levels_source(self, source) -> None:
         self._levels = source
@@ -290,10 +303,28 @@ class IslandWindow(QWidget):
         """Aplicada ao vivo (mensagem ``config`` do nucleo): modo, folga, esconder sozinha, atalhos."""
         old = self.cfg
         self.cfg = cfg
+        # o alfinete SOBREVIVE a reaplicacao da config: so muda se a mensagem o traz e nao ha clique local recente
+        if cfg.pinned is not None and time.monotonic() - self._pin_local_at > 3.0:
+            self._keep = bool(cfg.pinned)
+        elif cfg.pinned is None:
+            cfg.pinned = self._keep
+        self.glass = glass.apply(cfg.opacity)
+        if old.mode != cfg.mode or old.side_y_pct != cfg.side_y_pct:
+            self._chrome = None
+            self._layers.clear()
+            self._old.clear()
+            self._btn_pm = None
+            self._morph = None
+            sz = self._dim(self._target)
+            self._cur = (float(sz[0]), float(sz[1]))
+            if self._zone is not None:
+                self._zone.disarm()
+        self._chrome = None
         self._layout_buttons()
         self._dirty()
         self._apply_geometry()
-        if not cfg.autohide:
+        self._sync_zone()
+        if not cfg.autohide or self._keep:
             self._disarm_zone()
             self._present(True)
         elif self.isVisible():
@@ -303,8 +334,68 @@ class IslandWindow(QWidget):
             self._arm_zone()
         else:
             self._disarm_zone()
-        if old.mode != cfg.mode:
-            self._chrome = None
+        self._sync_a11y()
+
+    def _sync_zone(self) -> None:
+        if self._zone is not None:
+            self._zone.side, self._zone.pct = self.cfg.side, self.cfg.side_y_pct
+
+    # ---- alfinete
+    @property
+    def pinned(self) -> bool:
+        return self._keep
+
+    def set_pinned(self, on: bool, notify: bool = True) -> None:
+        """Fixa/solta. Fixada = nunca esconde sozinha (so tela cheia real). ``notify``: avisa o nucleo (salva em config)."""
+        on = bool(on)
+        changed = on != self._keep
+        self._keep = on
+        self.cfg.pinned = on
+        self._pin_local_at = time.monotonic()
+        self._layout_buttons()
+        self._dirty()
+        self._sync_a11y()
+        if on:
+            self._disarm_zone()
+            self._present(True)                        # cancela uma saida em andamento
+        self._reschedule()
+        if changed and notify:
+            self.pin_toggled.emit(on)
+
+    # ---- escuta aberta
+    def set_listen_mode(self, mode: str) -> None:
+        """Evento do nucleo ``listen_mode``: 'open' (escuta sem apertar botao) | 'push' (so com a tecla)."""
+        self._listen_timer.stop()
+        self._listen_ok = mode == "open"
+        self._apply_listen(self._listen_ok)
+
+    def _apply_listen(self, on: bool) -> None:
+        self.listen_open = on
+        self._after_change(retarget=False)
+        self._dirty(fade=True)
+
+    def _listen_revert(self) -> None:                  # o nucleo nao confirmou o clique: volta ao ultimo valor confirmado
+        self._apply_listen(self._listen_ok)
+
+    # ---- comandos de menu (bandeja)
+    def reveal(self) -> None:
+        self._touch(max(self.cfg.hide_delay_s, 4.0))
+        self._disarm_zone()
+        self._present(True, force=True)
+
+    def toggle_visible(self) -> None:
+        if self.isVisible() and self._pres_dir >= 0:
+            if self._keep:
+                self.set_pinned(False)
+            self._present(False, force=True)
+        else:
+            self.reveal()
+
+    def set_size_name(self, name: str) -> None:
+        m = {"compact": IslandSize.COMPACT, "medium": IslandSize.MEDIUM, "large": IslandSize.LARGE}
+        self.pin_size(m.get(name))
+        if self.isVisible() is False:
+            self.reveal()
 
     def pin_size(self, size: IslandSize | None) -> None:
         """Fixa um tamanho (clique); ``None`` volta ao automatico."""
@@ -340,6 +431,8 @@ class IslandWindow(QWidget):
             return S.acting_prefix.format(what=self.action["text"])
         if self.muted and self.state is IslandState.IDLE:
             return S.muted
+        if self.listen_open and self.state is IslandState.IDLE:
+            return S.state_open                       # escuta aberta: em repouso o Jarvis esta ESCUTANDO
         return T.state_label(self.state)
 
     def breath(self) -> float:
@@ -392,6 +485,10 @@ class IslandWindow(QWidget):
     def _present(self, want: bool, force: bool = False) -> None:
         if want:
             if not force and not self.isVisible() and self._fs_active():
+                if self._keep or not self.cfg.autohide:      # fixada: volta sozinha quando a tela cheia acabar
+                    self._guard_hid = True
+                    if self._native and not self._guard.isActive():
+                        self._guard.start()
                 return
             self._guard_hid = False
             if not self.isVisible():
@@ -411,7 +508,7 @@ class IslandWindow(QWidget):
 
     def _do_show(self) -> None:
         self._disarm_zone()
-        self._cur = (float(T.SIZES[self._auto_size()][0]), float(T.SIZES[self._auto_size()][1]))
+        self._cur = tuple(float(x) for x in self._dim(self._auto_size()))  # type: ignore[assignment]
         self._target = self._auto_size()
         self._morph = None
         self._layers.clear()
@@ -453,6 +550,7 @@ class IslandWindow(QWidget):
             from .zone import CursorPoller, HotZone
             self._zone = CursorPoller() if ZONE_MODE == "poll" else HotZone()
             self._zone.triggered.connect(self._on_zone)
+        self._sync_zone()
         self._zone.arm()
 
     def _disarm_zone(self) -> None:
@@ -482,6 +580,7 @@ class IslandWindow(QWidget):
         self.motion = motion_enabled()
         if retarget:
             self._retarget()
+        self._refit()
         self._layout_buttons()
         self._sync_timers()
         self._sync_a11y()
@@ -504,13 +603,13 @@ class IslandWindow(QWidget):
             self._layer_dpr = dpr
         pm = self._layers.get(size)
         if pm is None:
-            w, h = T.SIZES[size]
+            w, h = self._dim(size)
             pm = QPixmap(round(w * dpr), round(h * dpr))
             pm.setDevicePixelRatio(dpr)
             pm.fill(Qt.GlobalColor.transparent)
             p = QPainter(pm)
             p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
-            R.STATIC[_NAME[size]](self, p)
+            (SD.STATIC if self.cfg.side else R.STATIC)[_NAME[size]](self, p)
             p.end()
             self._layers[size] = pm
         return pm
@@ -527,7 +626,7 @@ class IslandWindow(QWidget):
         target = self._auto_size()
         if target is self._target:
             return
-        end = T.SIZES[target]
+        end = self._dim(target)
         start = self._cur
         self._target = target
         if not self.isVisible() or not self.motion:
@@ -540,6 +639,25 @@ class IslandWindow(QWidget):
         self._layout_buttons()
         self.size_changed.emit(target.value)
         self._sync_timers()
+
+    def _dim(self, size: IslandSize) -> tuple[int, int]:
+        """Dimensoes nativas do corpo no tamanho ``size`` (topo: tokens; dock lateral: layout vertical)."""
+        if self.cfg.side:
+            return SD.dims(self, size)
+        return T.SIZES[size]
+
+    def _refit(self) -> None:
+        """O trilho cresce/encolhe com os itens (ex.: chip YOLO): reajusta quando o tamanho nativo mudou."""
+        if not self.cfg.side or self._morph is not None:
+            return
+        d = self._dim(self._target)
+        if (float(d[0]), float(d[1])) != self._cur:
+            self._cur = (float(d[0]), float(d[1]))
+            self._chrome = None
+            self._layers.clear()
+            self._old.clear()
+            self._btn_pm = None
+            self._apply_geometry()
 
     @property
     def _floating(self) -> bool:
@@ -559,8 +677,16 @@ class IslandWindow(QWidget):
         g = scr.geometry()
         top = self.cfg.float_gap_px if self._floating else 0
         e = (_C_IN if self._pres_dir >= 0 else _C_OUT).valueForProgress(self._pres) if self.motion else 1.0
-        slide = (1.0 - e) * (bh + top + 8)
-        rect = QRect(g.x() + (g.width() - bw) // 2 - m, round(g.y() + top - m - slide), w, h)
+        side = self.cfg.side
+        if side:                                         # dock lateral: cola na borda, desliza para dentro, centrada na altura
+            cy = g.y() + g.height() * self.cfg.side_y_pct / 100.0
+            y = max(g.y() + 8, min(round(cy - bh / 2), g.y() + g.height() - bh - 8))
+            slide = (1.0 - e) * (bw + 8)
+            x = g.x() + g.width() - bw + slide if side == "right" else g.x() - slide
+            rect = QRect(round(x), y, bw, bh)
+        else:
+            slide = (1.0 - e) * (bh + top + 8)
+            rect = QRect(g.x() + (g.width() - bw) // 2 - m, round(g.y() + top - m - slide), w, h)
         if rect != self.geometry():
             self.setGeometry(rect)
         op = _clamp01(e * 1.15)
@@ -590,8 +716,14 @@ class IslandWindow(QWidget):
         if self.state in T.VOICE_STATES:
             return True
         if self.motion:
+            if self._listen_pulse():
+                return True
             return self.state in T.ANIMATED_STATES or (self.state is IslandState.IDLE and self._breath_active())
         return False
+
+    def _listen_pulse(self) -> bool:
+        """Anel pulsante da Escuta aberta enquanto o botao dela esta visivel (15 fps)."""
+        return self.listen_open and self.b_listen.visible and self._morph is None
 
     def _interval(self) -> int:
         transient = bool(self._pres_dir or self._morph is not None or self._fade_p < 1.0)
@@ -672,6 +804,8 @@ class IslandWindow(QWidget):
 
     def _visible_waves(self) -> tuple[str, ...]:
         fc, fm, fl = self._fractions(*self._cur)
+        if self.cfg.side:
+            return ("side",) if fm + fl > 0.01 else ()
         out = []
         if fc > 0.01:
             out.append("compact")
@@ -700,7 +834,7 @@ class IslandWindow(QWidget):
         else:
             self._fs_hits, self._fs_miss = 0, self._fs_miss + 1
         if self._fs_hits >= T.FULLSCREEN_HIDE_HITS and self.isVisible() and self.state is not IslandState.CONFIRMING:
-            self._guard_hid = not self.cfg.autohide             # sem autohide: volta quando a tela cheia acabar
+            self._guard_hid = (not self.cfg.autohide) or self._keep   # sem autohide ou fixada: volta quando a tela cheia acabar
             self._finish_hide()
             if not self._guard_hid:
                 self._guard.stop()
@@ -747,7 +881,31 @@ class IslandWindow(QWidget):
         self.b_pin.fill = self._keep
         self.b_pin.name = S.unpin if self._keep else S.pin
         self.b_stop.name = S.stop
+        self.b_stop.label, self.b_yes.label, self.b_no.label = S.stop, S.yes, S.no
         self.b_talk.enabled = True
+        self.b_listen.fill = self.listen_open
+        self.b_listen.name = S.listen_on_name if self.listen_open else S.listen_off_name
+        self.b_listen.label = S.listen if self.listen_open else S.listen_off
+        self.b_listen.hk = display(hk.get("open_listen", ""))
+        self.b_listen.variant = "neutral"
+        for b in self.btns:
+            b.visible = False
+            b.isize = 16.0
+        if self._morph is None:
+            if self.cfg.side:
+                SD.layout(self, self._target)
+            elif self._target is IslandSize.LARGE:
+                self._layout_top_large(confirming)
+            elif self._target is IslandSize.MEDIUM:
+                b = self.b_listen
+                b.label = b.hk = ""
+                b.x = float(T.MW - T.PAD - (T.M_BARS * 3 + (T.M_BARS - 1) * 3) - 12 - T.M_LISTEN)
+                b.y, b.w, b.h, b.visible = float(T.M_LISTEN_Y), float(T.M_LISTEN), float(T.M_LISTEN), True
+        for b in self.btns:
+            if not b.visible:
+                b.hover, b.press, b.focus = 0.0, False, False
+
+    def _layout_top_large(self, confirming: bool) -> None:
         W = T.LW
         x = W - T.PAD
         for b in (self.b_cfg, self.b_stop, self.b_yolo, self.b_mute):
@@ -756,27 +914,30 @@ class IslandWindow(QWidget):
             x -= b.w
             b.x = x
             x -= 6
-        self.b_talk.h, self.b_talk.y, self.b_talk.x = T.L_BTN_H, T.L_ROW_Y, T.PAD - 6
+        # Escuta aberta (com keycap) a esquerda; se nao couber com o atalho, perde so o keycap; o "Falar F9" so se sobrar lugar
+        b = self.b_listen
+        b.h, b.y, b.x = T.L_BTN_H, T.L_ROW_Y, T.PAD - 6
+        b.w = b.measure()
+        if b.x + b.w > x:
+            b.hk = ""
+            b.w = b.measure()
+        self.b_talk.h, self.b_talk.y = T.L_BTN_H, T.L_ROW_Y
         self.b_talk.w = self.b_talk.measure()
+        self.b_talk.x = b.x + b.w + 6
         self.b_pin.x, self.b_pin.y, self.b_pin.w = W - T.PAD - 28, T.L_HEAD_Y, 28.0
+        self.b_pin.h = 28
         self.b_yes.y = self.b_no.y = T.L_CONFIRM_Y
         self.b_yes.x = T.PAD
         self.b_yes.w = max(self.b_yes.measure(), 120.0)
         self.b_no.x = self.b_yes.x + self.b_yes.w + 8
         self.b_no.w = max(self.b_no.measure(), 120.0)
-        for b in self.btns:
-            b.visible = False
-        if self._target is IslandSize.LARGE and self._morph is None:
-            for b in (self.b_cfg, self.b_stop, self.b_yolo, self.b_mute, self.b_pin):
-                b.visible = True
-            self.b_talk.visible = not confirming
-            self.b_yes.visible = self.b_no.visible = confirming
-        for b in self.btns:
-            if not b.visible:
-                b.hover, b.press, b.focus = 0.0, False, False
+        for bb in (self.b_cfg, self.b_stop, self.b_yolo, self.b_mute, self.b_pin, self.b_listen):
+            bb.visible = True
+        self.b_talk.visible = (not confirming) and self.b_talk.x + self.b_talk.w <= x
+        self.b_yes.visible = self.b_no.visible = confirming
 
     def _btn_at(self, pos) -> R.Btn | None:
-        if not (self._target is IslandSize.LARGE and self._morph is None):
+        if self._morph is not None:
             return None
         m = self._margin()
         x, y = pos.x() - m, pos.y() - m
@@ -810,10 +971,12 @@ class IslandWindow(QWidget):
         elif k == "yolo":
             self.settings_requested.emit("permissions")           # o YOLO nunca liga por clique: abre a tela dele
         elif k == "pin":
-            self._keep = not self._keep
-            self._layout_buttons()
-            self._dirty()
-            self._reschedule()
+            self.set_pinned(not self._keep)
+        elif k == "listen":
+            want = not self.listen_open                      # otimista: o nucleo confirma com o evento listen_mode
+            self._apply_listen(want)
+            self._listen_timer.start(3000)
+            self.listen_toggled.emit("open" if want else "push")
 
     def mouseMoveEvent(self, e: QMouseEvent) -> None:
         self._set_hover_btn(self._btn_at(e.position()))
@@ -844,7 +1007,7 @@ class IslandWindow(QWidget):
         e.accept()
 
     def wheelEvent(self, e: QWheelEvent) -> None:
-        if self._target is IslandSize.LARGE:
+        if self._target is IslandSize.LARGE and self._morph is None:
             self.scroll = max(0, self.scroll + (1 if e.angleDelta().y() > 0 else -1))
             self._dirty()
         e.accept()
@@ -889,22 +1052,34 @@ class IslandWindow(QWidget):
     def _sync_a11y(self) -> None:
         line = self.confirm_text or self.error_text or self.transcript
         extra = f" {S.muted}." if self.muted else ""
+        extra += f" {S.pinned_name}." if self._keep else ""
+        extra += f" {S.listen}." if self.listen_open else ""
         set_a11y(self, S.window_name, f"{self.label()}.{extra} {line}".strip())
 
     # ================================================================== pintura
     def _fractions(self, w: float, h: float) -> tuple[float, float, float]:
-        u = _clamp01((w - T.CW) / (T.MW - T.CW))
-        v = _clamp01((h - T.MH) / (T.LH - T.MH))
+        if self.cfg.side:
+            u = _clamp01((w - T.SIDE_W) / (T.SIDE_MW - T.SIDE_W))
+            v = _clamp01((h - T.SIDE_MH) / (T.SIDE_LH - T.SIDE_MH)) * u      # o trilho alto (com YOLO) nao e "grande"
+        else:
+            u = _clamp01((w - T.CW) / (T.MW - T.CW))
+            v = _clamp01((h - T.MH) / (T.LH - T.MH))
         return (1.0 - u) ** 2, u * (1.0 - v), v * v
 
     def _body(self, cw: float, ch: float, m: int) -> tuple[QRectF, float]:
+        side = self.cfg.side
+        if side:                                                    # trilho: cantos redondos so do lado de dentro da tela
+            r = min(cw / 2.0, ch / 2.0, float(T.CORNER_MAX))
+            if side == "right":
+                return QRectF(0.5, 0.5, cw + r - 0.5, ch - 1.0), r
+            return QRectF(-r, 0.5, cw + r - 0.5, ch - 1.0), r
         r = min(ch / 2.0, float(T.CORNER_MAX))
         if self._floating:
             return QRectF(m + 0.5, m + 0.5, cw - 1.0, ch - 1.0), r
         return QRectF(0.5, -r, cw - 1.0, ch + r - 0.5), r             # a parte de cima fica fora da janela
 
     def _render_chrome(self, w: int, h: int, cw: int, ch: int, dpr: float) -> QPixmap:
-        """Sombra (so flutuante: camadas translucidas, uma vez por tamanho), fundo preto e borda sutil."""
+        """Sombra (so flutuante), fundo de VIDRO (preto com alfa + brilho em gradiente, pintado com alfa no QPainter) e borda."""
         m = self._margin()
         pm = QPixmap(round(w * dpr), round(h * dpr))
         pm.setDevicePixelRatio(dpr)
@@ -920,17 +1095,23 @@ class IslandWindow(QWidget):
                 a = T.SHADOW_ALPHA * 0.055 * (1.0 + i / steps)
                 p.setBrush(QColor(0, 0, 0, min(255, round(a))))
                 p.drawRoundedRect(body.adjusted(-grow, -grow + 5.0, grow, grow + 5.0), r + grow, r + grow)
-        p.setPen(QPen(self._edge(), 1.0))
-        p.setBrush(QColor(T.BG))
+        alpha = self.glass.alpha
+        edge = QColor(T.EDGE)
+        edge.setAlpha(glass.edge_alpha(alpha))
+        base = QColor(T.BG)
+        base.setAlphaF(alpha)
+        p.setPen(QPen(edge, 1.0))
+        p.setBrush(base)
+        p.drawRoundedRect(body, r, r)
+        g = QLinearGradient(body.topLeft(), body.bottomLeft())          # leve brilho de vidro no alto
+        top = QColor(255, 255, 255, round(255 * glass.SHEEN))
+        g.setColorAt(0.0, top)
+        g.setColorAt(0.55, QColor(255, 255, 255, 0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(g)
         p.drawRoundedRect(body, r, r)
         p.end()
         return pm
-
-    @staticmethod
-    def _edge() -> QColor:
-        c = QColor(T.EDGE)
-        c.setAlpha(T.EDGE_ALPHA)
-        return c
 
     def paintEvent(self, _e) -> None:
         w, h = self.width(), self.height()
@@ -938,7 +1119,7 @@ class IslandWindow(QWidget):
         cw, ch = self._cur
         iw, ih = round(cw), round(ch)
         m = self._margin()
-        key = (w, h, iw, ih, dpr, self._floating)
+        key = (w, h, iw, ih, dpr, self._floating, self.cfg.side, self.glass.alpha)
         if self._chrome is None or self._chrome_key != key:
             self._chrome, self._chrome_key = self._render_chrome(w, h, iw, ih, dpr), key
         p = QPainter(self)
@@ -949,22 +1130,27 @@ class IslandWindow(QWidget):
         clip.addRoundedRect(body, r, r)
         if self._morph is not None or self._pres_dir:       # no repouso nada passa do corpo: sem recorte (mais barato)
             p.setClipPath(clip)
-        ox, oy = m, m
         fr = self._fractions(cw, ch)
         for size, a in zip((IslandSize.COMPACT, IslandSize.MEDIUM, IslandSize.LARGE), fr):
             if a > 0.01:
-                self._draw_size(p, size, a, ox + iw / 2.0, oy, dpr)
+                self._draw_size(p, size, a, iw, ih, dpr)
         p.end()
 
-    def _draw_size(self, p: QPainter, size: IslandSize, a: float, cx: float, top: float, dpr: float) -> None:
-        nw, _nh = T.SIZES[size]
+    def _draw_size(self, p: QPainter, size: IslandSize, a: float, iw: int, ih: int, dpr: float) -> None:
+        nw, nh = self._dim(size)
+        side = self.cfg.side
+        m = self._margin()
+        if side:
+            x0, y0, px, py = (iw - nw if side == "right" else 0), 0.0, nw / 2.0, nh / 2.0
+        else:
+            x0, y0, px, py = m + iw / 2.0 - nw / 2.0, float(m), nw / 2.0, 0.0
         s = 0.94 + 0.06 * a if a < 0.99 else 1.0
         p.save()
-        p.translate(cx, top)
+        p.translate(x0 + px, y0 + py)
         if s != 1.0:
             p.scale(s, s)
             p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        p.translate(-nw / 2.0, 0)
+        p.translate(-px, -py)
         new = self._layer(size, dpr)
         old = self._old.get(size) if self._fade_p < 1.0 else None
         fp = self._fade_p
@@ -977,19 +1163,24 @@ class IslandWindow(QWidget):
             p.setOpacity(a)
             p.drawPixmap(0, 0, new)
         p.setOpacity(a)
-        {IslandSize.COMPACT: R.dyn_compact, IslandSize.MEDIUM: R.dyn_medium, IslandSize.LARGE: R.dyn_large}[size](self, p, dpr)
-        if size is IslandSize.LARGE:
-            p.drawPixmap(0, 0, self._buttons_pixmap(dpr))
+        if side:
+            SD.DYN[_NAME[size]](self, p, dpr)
+        else:
+            {IslandSize.COMPACT: R.dyn_compact, IslandSize.MEDIUM: R.dyn_medium, IslandSize.LARGE: R.dyn_large}[size](self, p, dpr)
+            if size is not IslandSize.COMPACT:
+                SD.listen_ring(self, p, self.b_listen)
+        if size is self._target and self._morph is None and any(b.visible for b in self.btns):
+            p.drawPixmap(0, 0, self._buttons_pixmap(dpr, size))
         p.restore()
 
-    def _buttons_pixmap(self, dpr: float) -> QPixmap:
+    def _buttons_pixmap(self, dpr: float, size: IslandSize) -> QPixmap:
         """Botoes pintados numa camada cacheada: so e refeita quando algum botao muda (hover, pressao, foco, rotulo)."""
-        key = (dpr, tuple((b.key, round(b.hover * 12), b.press, b.focus, b.fill, b.hk, b.label, b.glyph, b.x, b.w, b.variant,
+        key = (dpr, self._dim(size), tuple((b.key, round(b.hover * 12), b.press, b.focus, b.fill, b.hk, b.label, b.glyph, b.x, b.w, b.variant,
                            b.enabled) for b in self.btns if b.visible))
         if self._btn_pm is None or self._btn_key != key:
-            w, h = T.SIZES[IslandSize.LARGE]
+            w, h = self._dim(size)
             pm = self._btn_pm
-            if pm is None or pm.devicePixelRatio() != dpr:
+            if pm is None or pm.devicePixelRatio() != dpr or pm.size() != QSize(round(w * dpr), round(h * dpr)):
                 pm = self._btn_pm = QPixmap(round(w * dpr), round(h * dpr))
                 pm.setDevicePixelRatio(dpr)
             pm.fill(Qt.GlobalColor.transparent)

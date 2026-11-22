@@ -4,10 +4,15 @@ A Ilha é um PROCESSO FILHO (`python -I -X utf8 -c ... island --child`). A conve
 stdin/stdout do filho (sem rede, sem soquete):
 
     núcleo -> Ilha:  {"k": "state"|"transcript"|"reply_text"|"action_step"|"confirm_request"|"confirm_done"|
-                           "context_usage"|"yolo"|"mute"|"emergency"|"error"|"mode"|"config"|"level"|"quit", "d": {...}}
-    Ilha -> núcleo:  {"c": "confirm"|"mute"|"stop"|"settings"|"ready", ...}   (settings pode trazer "section")
+                           "context_usage"|"yolo"|"mute"|"emergency"|"error"|"mode"|"config"|"listen_mode"|"pin"|"level"|"quit",
+                           "d": {...}}      (listen_mode: {"mode": "open"|"push"}; pin: {"on": bool})
+    Ilha -> núcleo:  {"c": "confirm"|"mute"|"stop"|"settings"|"ready"|"pin"|"listen_mode"|"ui_mode"|"quit", ...}
+                     settings pode trazer "section"; pin: {"on": bool} (salvar em ui.island_pinned); listen_mode:
+                     {"mode": "open"|"push"}; ui_mode: {"mode": "docked"|"floating"|"dock_right"|"dock_left"} (ui.island_mode);
+                     quit: encerrar o Jarvis (menu da bandeja)
 
-A mensagem "config" ({"mode","float_gap_px","autohide","hide_delay_s","hover_reveal","hotkeys":{yes,no,stop,mute,talk,yolo}})
+A mensagem "config" ({"mode","float_gap_px","autohide","hide_delay_s","hover_reveal","pinned","opacity","side_y_pct",
+"hotkeys":{yes,no,stop,mute,talk,yolo,open_listen}})
 vai no início de cada partida do filho e de novo a cada `config_applied` (mudança ao vivo nas Configurações).
 
 Garantias: o núcleo NUNCA espera a Ilha (fila limitada: descarta níveis antigos primeiro; o gravador de pipe é
@@ -75,6 +80,8 @@ def sanitize(kind: str, d: dict[str, Any]) -> dict[str, Any] | None:
         return {"pct": float(d.get("pct", 0))}
     if kind == "mute":
         return {"muted": bool(d.get("muted"))}
+    if kind == "listen_mode":
+        return {"mode": "open" if str(d.get("mode")) == "open" else "push"}
     if kind == "emergency":
         return {}
     if kind == "error":
@@ -109,7 +116,7 @@ class IslandLink:
         self._proc: subprocess.Popen[bytes] | None = None
         self._unsub: Callable[[], None] | None = None
         self._threads: list[threading.Thread] = []
-        self._snap: dict[str, Any] = {"state": "idle", "muted": False, "yolo": False, "pct": None}
+        self._snap: dict[str, Any] = {"state": "idle", "muted": False, "yolo": False, "pct": None, "listen": "push"}
         self._snap_lock = threading.Lock()
         self._mic = 0.0
         self._mic_at = 0.0
@@ -177,6 +184,8 @@ class IslandLink:
                 self._snap["muted"] = payload["muted"]
             elif kind == "context_usage":
                 self._snap["pct"] = payload["pct"]
+            elif kind == "listen_mode":
+                self._snap["listen"] = payload["mode"]
         self._enqueue({"k": kind, "d": payload})
 
     def _snapshot_messages(self) -> list[dict[str, Any]]:
@@ -189,6 +198,8 @@ class IslandLink:
         msgs += [{"k": "mode", "d": {"mode": self._permission_mode()}}, {"k": "mute", "d": {"muted": s["muted"]}}]
         if s["yolo"] and self._yolo_remaining() > 0:
             msgs.append({"k": "yolo", "d": {"on": True, "remaining_s": self._yolo_remaining()}})
+        if s.get("listen") == "open":
+            msgs.append({"k": "listen_mode", "d": {"mode": "open"}})
         if s["pct"] is not None:
             msgs.append({"k": "context_usage", "d": {"pct": s["pct"]}})
         msgs.append({"k": "state", "d": {"state": s["state"]}})

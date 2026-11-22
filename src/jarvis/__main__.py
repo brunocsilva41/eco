@@ -117,7 +117,8 @@ def _cmd_record(_: argparse.Namespace) -> int:
 def _cmd_island_demo(args: argparse.Namespace) -> int:
     from .ui.island.demo import main_island_demo
     return main_island_demo(capture=args.capture, seconds=args.seconds, measure_s=args.measure,
-                            reduce_motion=args.reduce_motion)
+                            reduce_motion=args.reduce_motion, mode=args.mode, opacity=args.opacity,
+                            pinned=args.pinned, listen=args.listen, autohide=args.autohide)
 
 
 def _cmd_island(args: argparse.Namespace) -> int:
@@ -126,7 +127,7 @@ def _cmd_island(args: argparse.Namespace) -> int:
         _out("A Ilha roda sozinha junto com `Jarvis.cmd run`. Para ver a demonstração: `Jarvis.cmd island-demo`.")
         return 2
     from .ui.island.child import main_island_child
-    return main_island_child()
+    return main_island_child(tray_only=bool(getattr(args, 'tray_only', False)))
 
 
 def _cmd_doctor(_: argparse.Namespace) -> int:
@@ -186,9 +187,15 @@ def main(argv: list[str] | None = None) -> int:
     isl.add_argument("--capture", metavar="PASTA", help="grava PNG por tamanho e estado (offscreen)")
     isl.add_argument("--measure", type=float, default=0.0, metavar="S", help="mede CPU/RAM, S segundos por fase")
     isl.add_argument("--reduce-motion", action="store_true", help="simula 'reduzir animações'")
+    isl.add_argument("--mode", default="docked", choices=("docked", "floating", "dock_right", "dock_left"), help="posição da Ilha")
+    isl.add_argument("--opacity", type=float, default=0.92, help="opacidade do fundo 0.35..1.0")
+    isl.add_argument("--pinned", action="store_true", help="começa fixada (alfinete)")
+    isl.add_argument("--listen", action="store_true", help="começa com a escuta aberta ligada")
+    isl.add_argument("--autohide", action="store_true", help="esconde sozinha (como no app)")
     isl.set_defaults(fn=_cmd_island_demo)
     ic = sub.add_parser("island", help="interno: processo filho da Ilha (lançado pelo Jarvis)")
     ic.add_argument("--child", action="store_true", help="modo filho (protocolo JSON em stdin/stdout)")
+    ic.add_argument("--tray-only", action="store_true", help="so o icone da bandeja (sem janela da Ilha)")
     ic.set_defaults(fn=_cmd_island)
     sub.add_parser("doctor", help="confere o ambiente").set_defaults(fn=_cmd_doctor)
     su = sub.add_parser("setup", help="assistente de configuração (--repair, --fetch, --offline, --status)")

@@ -107,7 +107,7 @@ def text(p: QPainter, s: str, x: float, y: float, w: float, h: float, px: int, c
 class Btn:
     """Botao da Ilha: so dados + pintura (sem QWidget: menos memoria, sem foco/estilo do Qt)."""
     __slots__ = ("key", "glyph", "label", "hk", "variant", "h", "x", "y", "w", "hover", "press", "visible", "focus",
-                 "fill", "name", "enabled")
+                 "fill", "name", "enabled", "isize")
 
     def __init__(self, key: str, glyph: str, label: str, hk: str, variant: str, h: int = 32, name: str = "") -> None:
         self.key, self.glyph, self.label, self.hk, self.variant, self.h = key, glyph, label, hk, variant, h
@@ -118,6 +118,7 @@ class Btn:
         self.focus = False
         self.fill = False
         self.enabled = True
+        self.isize = 16.0
         self.name = name or label
 
     def measure(self) -> float:
@@ -170,6 +171,11 @@ def paint_button(p: QPainter, b: Btn, dpr: float, alpha: float = 1.0) -> None:
     else:
         bg = QColor(255, 255, 255, round(255 * (0.07 + 0.11 * hv + (0.12 if b.press else 0.0))))
         fg, key_fg, edge = pal.text, pal.text_muted, col("#FFFFFF", 0.10 + 0.16 * hv)
+    if b.key == "listen" and b.fill:                                  # escuta aberta LIGADA: tom de destaque (cor + anel)
+        ac = T.accent()
+        bg = QColor(col(ac, 0.16 + 0.10 * hv + (0.10 if b.press else 0.0)))
+        fg = key_fg = ac
+        edge = col(ac, 0.75)
     if not b.enabled:
         alpha *= 0.45
     p.save()
@@ -177,17 +183,18 @@ def paint_button(p: QPainter, b: Btn, dpr: float, alpha: float = 1.0) -> None:
     p.setPen(QPen(edge, 1.0) if edge is not None else Qt.PenStyle.NoPen)
     p.setBrush(bg)
     p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), rad, rad)
-    x = b.x + (10.0 if (b.label or b.hk) else (b.w - 16.0) / 2.0)
+    isz = b.isize
+    x = b.x + (10.0 if (b.label or b.hk) else (b.w - isz) / 2.0)
     cap_left = b.x + b.w - 8.0
     cy = b.y + b.h / 2.0
     gcol = fg if b.variant != "primary" else pal.on_accent
     if b.key == "yolo" and b.fill:
         gcol = pal.error
-    if b.key == "pin" and b.fill:
+    if b.key in ("pin", "listen") and b.fill:
         gcol = T.accent()
     if b.glyph:
-        glyphs.draw(p, b.glyph, QRectF(x, cy - 8.0, 16.0, 16.0), gcol, fill=b.fill and b.key in ("yolo", "pin"))
-        x += 16.0
+        glyphs.draw(p, b.glyph, QRectF(x, cy - isz / 2.0, isz, isz), gcol, fill=b.fill and b.key in ("yolo", "pin", "listen"))
+        x += isz
     if b.label:
         text(p, b.label, x + 6.0, b.y, b.w, b.h, TYPE.small, fg, TYPE.semibold)
     if b.hk:
@@ -230,6 +237,8 @@ def sub_line(v) -> str:
         return v.error_text
     if st is IslandState.LISTENING:
         return v.transcript or S.waiting_speech
+    if st is IslandState.IDLE and not v.transcript and v.listen_open:
+        return S.listen_open_line
     if st is IslandState.IDLE and not v.transcript:
         hk = conf.display(v.cfg.hotkeys.get("talk", "f9"))
         return S.press_to_talk.format(key=hk) if hk else ""
@@ -243,6 +252,12 @@ def static_compact(v, p: QPainter) -> None:
     r = W - T.C_PAD
     if v.state not in (IslandState.IDLE, IslandState.ERROR, IslandState.CONFIRMING):
         r -= 6 * 3 + 5 * 3 + 8                                    # ondas (dinamicas)
+    if v.pinned:                                                   # fixada: alfinete preenchido (ver tambem o nome acessivel)
+        glyphs.draw(p, "pin", QRectF(r - 11, cy - 6, 12, 12), T.accent(), fill=True)
+        r -= 18
+    if v.listen_open and v.state is IslandState.IDLE:
+        glyphs.draw(p, "listen", QRectF(r - 13, cy - 7, 14, 14), T.accent())
+        r -= 20
     if v.yolo_left() is not None:
         r -= yolo_chip(v, p, r, cy) + 8
     if v.state is IslandState.ACTING:
@@ -258,7 +273,7 @@ def static_medium(v, p: QPainter) -> None:
     W = T.MW
     x = T.M_TEXT_X
     wave_x = W - T.PAD - (T.M_BARS * 3 + (T.M_BARS - 1) * 3)
-    right = wave_x - 12
+    right = wave_x - 12 - (T.M_LISTEN + 8)                         # botao Escuta aberta (dinamico) fica antes das ondas
     timer_w = 0
     if v.state is not IslandState.IDLE:
         timer_w = tw("00:00", TYPE.small, tab=True) + 2
@@ -266,6 +281,9 @@ def static_medium(v, p: QPainter) -> None:
     r = right - (timer_w + 8 if timer_w else 0)
     if v.yolo_left() is not None:
         r -= yolo_chip(v, p, r, 22) + 8
+    if v.pinned:
+        glyphs.draw(p, "pin", QRectF(r - 12, 16, 12, 12), T.accent(), fill=True)
+        r -= 20
     text(p, elide(v.label(), r - x, TYPE.body + 1, TYPE.semibold), x, 12, r - x, 20, TYPE.body + 1, pal.text, TYPE.semibold)
     line = sub_line(v)
     text(p, elide(line, right - x, TYPE.small), x, 34, right - x, 18, TYPE.small, pal.text_muted)

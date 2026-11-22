@@ -144,6 +144,10 @@ class IslandBridge(QObject):
             w.set_permission_mode(str(d.get("mode", "")))
         elif k == "mute":
             w.set_mute(bool(d.get("muted")), flash=True)
+        elif k == "listen_mode":
+            w.set_listen_mode(str(d.get("mode", "push")))
+        elif k == "pin":
+            w.set_pinned(bool(d.get("on")), notify=False)
         elif k == "config":
             w.apply_config(IslandConfig.from_message(d))
         elif k == "emergency":

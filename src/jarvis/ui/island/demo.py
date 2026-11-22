@@ -42,7 +42,10 @@ class DemoCycle(QObject):
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self.next)
         win.confirm_answered.connect(self._answered)
+        win.listen_toggled.connect(lambda mode: bus.publish("listen_mode", mode=mode))   # o "nucleo" falso confirma o clique
         self._steps = (
+            (3.0, lambda: bus.publish("state", state="idle")),
+            (3.0, lambda: bus.publish("listen_mode", mode="open")),                       # simula a escuta aberta ligando
             (3.0, lambda: bus.publish("state", state="idle")),
             (4.0, self._listen),
             (1.6, lambda: (bus.publish("state", state="transcribing"), bus.publish("transcript", text=_Q, final=True))),
@@ -51,6 +54,8 @@ class DemoCycle(QObject):
                            bus.publish("action_step", tool="abrir_app", text="abrir bloco de notas", status="start"))),
             (6.0, lambda: bus.publish("confirm_request", id="c1", text=_CONFIRM, risk=2, timeout_s=6)),
             (5.0, self._speak),
+            (3.0, lambda: bus.publish("state", state="idle")),
+            (2.0, lambda: bus.publish("listen_mode", mode="push")),                       # e desligando
         )
 
     def _listen(self) -> None:
@@ -281,6 +286,93 @@ def capture_all(outdir: str) -> list[str]:
     return made
 
 
+def _backdrop(w: int, h: int, light: bool) -> QImage:
+    """Fundo de teste para o vidro: claro (pior caso: branco com texto escuro) ou escuro, com listras de 'conteudo'."""
+    img = QImage(w, h, QImage.Format.Format_ARGB32)
+    img.fill(QColor("#FFFFFF" if light else "#1B1E24"))
+    p = QPainter(img)
+    ink = QColor("#222222" if light else "#E0E0E0")
+    for y in range(8, h, 18):
+        p.fillRect(12, y, max(8, w - 24 - (y * 7) % 90), 6, ink)
+    p.end()
+    return img
+
+
+def _compose_on(pm, side: str, light: bool, pad: int = 28) -> QImage:  # type: ignore[no-untyped-def]
+    ratio = pm.devicePixelRatio()
+    src = pm.toImage()
+    src.setDevicePixelRatio(1.0)
+    pw = round(pad * ratio)
+    if side:
+        img = _backdrop(src.width() + 2 * pw, src.height() + 2 * pw, light)
+        p = QPainter(img)
+        p.drawImage(img.width() - src.width() if side == "right" else 0, pw, src)
+    else:
+        img = _backdrop(src.width() + 2 * pw, src.height() + pw, light)
+        p = QPainter(img)
+        p.drawImage((img.width() - src.width()) // 2, 0, src)
+    p.end()
+    return img
+
+
+def capture_v3(outdir: str) -> list[str]:
+    """Rodada v3: trilho lateral (2 lados x 3 tamanhos x estados), escuta aberta ligada/desligada em cada modo,
+    alfinete e transparencia (3 valores sobre fundo claro e escuro). Offscreen: ``win.grab()`` + fundo de teste."""
+    os.makedirs(outdir, exist_ok=True)
+    app = _make_app()
+    suffix = f"_{round(app.primaryScreen().devicePixelRatio()) * 100}pct"
+    win = IslandWindow(SyntheticSource(), cfg=_visible_cfg())
+    win.start()
+    _wait(400)
+    made: list[str] = []
+
+    def shoot(name: str, mode: str, size: IslandSize, state: IslandState, *, listen: bool = False, opacity: float = 0.92,
+              light: bool = False, pinned: bool = False, yolo: bool = False, settle: int = 650) -> None:
+        win.apply_config(_visible_cfg(mode=mode, opacity=opacity, pinned=pinned))
+        win.set_listen_mode("open" if listen else "push")
+        win.set_yolo(1499 if yolo else None)
+        win.pin_size(size)
+        _fixture(win, state)
+        _wait(settle)
+        path = os.path.join(outdir, f"ilha_{name}{suffix}.png")
+        _compose_on(win.grab(), win.cfg.side, light).save(path)
+        made.append(path)
+
+    for mode in ("dock_right", "dock_left"):
+        tag = mode.replace("dock_", "lat_")
+        shoot(f"{tag}_recolhido_repouso", mode, IslandSize.COMPACT, IslandState.IDLE)
+        shoot(f"{tag}_recolhido_repouso_escuta_aberta", mode, IslandSize.COMPACT, IslandState.IDLE, listen=True)
+        shoot(f"{tag}_recolhido_ouvindo_yolo", mode, IslandSize.COMPACT, IslandState.LISTENING, yolo=True)
+        shoot(f"{tag}_medio_pensando", mode, IslandSize.MEDIUM, IslandState.THINKING)
+        shoot(f"{tag}_medio_ouvindo_escuta_aberta", mode, IslandSize.MEDIUM, IslandState.LISTENING, listen=True)
+        shoot(f"{tag}_grande_falando", mode, IslandSize.LARGE, IslandState.SPEAKING)
+        shoot(f"{tag}_grande_falando_escuta_aberta_fixada", mode, IslandSize.LARGE, IslandState.SPEAKING, listen=True, pinned=True,
+              yolo=True)
+        shoot(f"{tag}_grande_confirmacao", mode, IslandSize.LARGE, IslandState.CONFIRMING)
+        shoot(f"{tag}_grande_erro", mode, IslandSize.LARGE, IslandState.ERROR)
+    for mode in ("docked", "floating"):
+        for on in (False, True):
+            tag = f"{'acoplada' if mode == 'docked' else 'flutuante'}_escuta_{'ligada' if on else 'desligada'}"
+            shoot(f"topo_{tag}_media_repouso", mode, IslandSize.MEDIUM, IslandState.IDLE, listen=on)
+            shoot(f"topo_{tag}_grande_repouso", mode, IslandSize.LARGE, IslandState.IDLE, listen=on)
+            shoot(f"topo_{tag}_compacta_repouso", mode, IslandSize.COMPACT, IslandState.IDLE, listen=on)
+    shoot("topo_fixada_compacta", "docked", IslandSize.COMPACT, IslandState.IDLE, pinned=True)
+    shoot("topo_fixada_media", "docked", IslandSize.MEDIUM, IslandState.THINKING, pinned=True)
+    shoot("topo_fixada_grande", "docked", IslandSize.LARGE, IslandState.THINKING, pinned=True)
+    shoot("topo_nao_fixada_grande", "docked", IslandSize.LARGE, IslandState.THINKING, pinned=False)
+    for light in (True, False):
+        bgname = "claro" if light else "escuro"
+        for op in (0.35, 0.7, 1.0):
+            shoot(f"vidro_{int(op * 100)}_{bgname}_topo_media_ouvindo", "docked", IslandSize.MEDIUM, IslandState.LISTENING,
+                  opacity=op, light=light, listen=True)
+            shoot(f"vidro_{int(op * 100)}_{bgname}_topo_grande_repouso", "docked", IslandSize.LARGE, IslandState.IDLE,
+                  opacity=op, light=light)
+            shoot(f"vidro_{int(op * 100)}_{bgname}_lateral_grande_falando", "dock_right", IslandSize.LARGE, IslandState.SPEAKING,
+                  opacity=op, light=light)
+    win.close()
+    return made
+
+
 # ------------------------------------------------------------------ medicao
 def measure(seconds: float) -> int:
     import psutil
@@ -329,24 +421,28 @@ def measure(seconds: float) -> int:
 
 # ------------------------------------------------------------------ demo ao vivo
 def main_island_demo(capture: str | None = None, seconds: float = 0.0, measure_s: float = 0.0,
-                     reduce_motion: bool = False, floating: bool = False, autohide: bool = False) -> int:
+                     reduce_motion: bool = False, floating: bool = False, autohide: bool = False, mode: str = "docked",
+                     opacity: float = 0.92, pinned: bool = False, listen: bool = False) -> int:
     if reduce_motion:
         set_motion_override(False)
     if measure_s > 0:
         return measure(measure_s)
     if capture:
-        made = capture_all(capture)
+        made = capture_all(capture) + capture_v3(os.path.join(capture, "v3"))
         print(f"{len(made)} itens gerados em {capture}")
         print("\n".join(_contrast_report()))
         return 0
     from ...core.events import EventBus
 
     app = _make_app()
-    win = IslandWindow(cfg=_visible_cfg(mode="floating" if floating else "docked", autohide=autohide))
+    win = IslandWindow(cfg=_visible_cfg(mode="floating" if floating else mode, autohide=autohide, opacity=opacity,
+                                        pinned=pinned or None))
     win.start()
     bus = EventBus()
     bridge = IslandBridge(win, bus, feed=SyntheticSource())  # type: ignore[arg-type]
     bus.publish("mute", muted=False)
+    if listen:
+        bus.publish("listen_mode", mode="open")
     win.set_permission_mode("balanced")
     DemoCycle(win, bus).start()
     if seconds > 0:
