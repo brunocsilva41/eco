@@ -91,11 +91,36 @@ def request(data_dir: Path, kind: str) -> None:
     atomic_write_text(control_dir(data_dir) / f"{kind}.req", str(time.time()))
 
 
+def _yolo_key(data_dir: Path) -> bytes:
+    import secrets
+    p = control_dir(data_dir) / "yolo.key"
+    try:
+        return bytes.fromhex(p.read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        key = secrets.token_bytes(32)
+        atomic_write_text(p, key.hex())
+        return key
+
+
+def _yolo_mac(data_dir: Path, kind: str, stamp: str) -> str:
+    import hashlib
+    import hmac
+    return hmac.new(_yolo_key(data_dir), f"{kind}|{stamp}".encode("ascii"), hashlib.sha256).hexdigest()
+
+
+def request_yolo(data_dir: Path, on: bool) -> None:
+    """Chamado SOMENTE pelo botão da tela de Configurações (clique do Bruno, com diálogo de confirmação).
+    O pedido é assinado (HMAC) e vale 60 s; o Jarvis ignora pedido sem assinatura válida."""
+    kind = "yolo_on" if on else "yolo_off"
+    stamp = str(time.time())
+    atomic_write_text(control_dir(data_dir) / f"{kind}.req", f"{stamp}|{_yolo_mac(data_dir, kind, stamp)}")
+
+
 def consume(data_dir: Path) -> set[str]:
     """Lê e apaga os pedidos pendentes e ainda válidos. Devolve {'reload', 'restart'} (subconjunto)."""
     found: set[str] = set()
     d = control_dir(data_dir)
-    for kind in ("reload", "restart"):
+    for kind in ("reload", "restart", "yolo_on", "yolo_off"):
         p = d / f"{kind}.req"
         taken = d / f"{kind}.taken"
         try:
@@ -106,9 +131,16 @@ def consume(data_dir: Path) -> set[str]:
             log.warning("não consegui pegar o pedido %s", p)
             continue
         try:
-            stamp = float(taken.read_text(encoding="utf-8").strip())
+            raw = taken.read_text(encoding="utf-8").strip()
+            stamp_txt, _, mac = raw.partition("|")
+            stamp = float(stamp_txt)
         except (OSError, ValueError):
-            stamp = 0.0
+            stamp, stamp_txt, mac = 0.0, "", ""
+        if kind.startswith("yolo_"):
+            import hmac
+            if not mac or not hmac.compare_digest(mac, _yolo_mac(data_dir, kind, stamp_txt)):
+                log.warning("pedido %s sem assinatura válida: ignorado", kind)
+                stamp = 0.0
         try:
             taken.unlink(missing_ok=True)
         except OSError:

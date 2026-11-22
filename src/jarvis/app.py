@@ -30,6 +30,7 @@ from .config import Config, ConfigError
 from .core import logsetup
 from .core.cancel import CancelToken, Cancelled
 from .core.events import EventBus, State
+from .core.permissions import YOLO
 from .core.state import StateMachine
 from .llm.client import LlmClient
 from .llm.server import LlamaServer
@@ -234,6 +235,13 @@ class JarvisApp:
             p.hotkeys.add(s.emergency_hotkey, lambda: stop.trigger("tecla de emergência"))
         except HotkeyError as exc:
             raise StartupError(f"tecla de emergência indisponível: {exc}") from exc    # sem ela o Jarvis NÃO controla o PC
+        self.bus.subscribe(lambda ev: self._open_settings(ev.data.get("section", "permissions")), kind="open_settings")
+        if s.yolo_hotkey.strip():
+            YOLO.on_change(lambda on, why: self.bus.publish("yolo", on=on, text=f"Modo YOLO {why}"))
+            try:
+                p.hotkeys.add(s.yolo_hotkey, self._toggle_yolo)
+            except HotkeyError as exc:
+                log.warning("atalho do YOLO indisponível: %s", exc)
         for combo, cb, label in ((s.mute_hotkey, self.toggle_mute, "mudo"),
                                  (s.confirm_yes_hotkey, lambda: p.confirmer.answer(True, via="key"), "confirmar SIM"),
                                  (s.confirm_no_hotkey, lambda: p.confirmer.answer(False, via="key"), "confirmar NÃO")):
@@ -273,6 +281,28 @@ class JarvisApp:
     def submit_text(self, text: str) -> None:
         """Entrada por texto (modo --text). Se houver confirmação pendente, o texto responde Sim/Não."""
         self._text_q.put(text)
+
+    def _open_settings(self, section: str) -> None:
+        """Abre a tela de Configurações (outro processo) já na seção pedida."""
+        import subprocess
+        import sys
+        code = ("import sys; sys.path.insert(0, r'%s'); from jarvis.__main__ import main; raise SystemExit(main(sys.argv[1:]))"
+                % str(cfgmod.ROOT / "src"))
+        try:
+            subprocess.Popen([sys.executable, "-I", "-X", "utf8", "-c", code, "settings", "--open", section],
+                             cwd=str(cfgmod.ROOT), creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | 0x08000000)
+        except OSError:
+            log.exception("não consegui abrir as Configurações")
+
+    def _toggle_yolo(self) -> None:
+        """Atalho FÍSICO do Bruno. É o único caminho que liga o YOLO (o modelo só pode apertar atalhos da lista, e este é reservado)."""
+        if YOLO.active():
+            YOLO.deactivate("atalho")
+            return
+        YOLO.activate_manual(self.cfg.safety.yolo_minutes)
+        p = self._p
+        if p is not None:
+            p.voice.say(f"Modo YOLO ligado por {self.cfg.safety.yolo_minutes} minutos.")
 
     def toggle_mute(self) -> None:
         p = self._p
@@ -444,6 +474,7 @@ class JarvisApp:
         with self._session_lock:
             old, self._session = self._session, CancelToken()
         old.cancel(source)                                      # PRIMEIRO: nada novo pode começar na sessão antiga
+        YOLO.deactivate("parada de emergência")
         p = self._p
         if p is not None:
             p.voice.interrupt()
@@ -500,6 +531,12 @@ class JarvisApp:
                 return
             if kind == "reload":
                 self.reload_config()
+            if kind == "yolo_on":                                   # clique manual na tela de Configurações (pedido assinado)
+                YOLO.activate_manual(self.cfg.safety.yolo_minutes)
+                if self._p is not None:
+                    self._p.voice.say(f"Modo YOLO ligado por {self.cfg.safety.yolo_minutes} minutos.")
+            elif kind == "yolo_off":
+                YOLO.deactivate("tela de Configurações")
 
     def reload_config(self) -> None:
         """Relê o config.toml e aplica o que dá sem reiniciar. Se o arquivo estiver inválido, mantém a configuração atual."""

@@ -34,6 +34,7 @@ from typing import Any, Callable, Protocol
 from ..config import Config
 from ..core.cancel import CancelToken
 from ..core.events import EventBus
+from ..core.permissions import YOLO
 from ..core.risk import Risk
 
 log = logging.getLogger(__name__)
@@ -281,8 +282,14 @@ class ToolRegistry:
             log.exception("confirm_if de %s falhou; vou pedir confirmação", name)
             tool_wants = True
         # confirmação FORTE por voz ("confirmo"/"autorizo"): ação arriscada, rodada contaminada ou regra da própria ferramenta
-        strong = spec.risk >= Risk.RISKY or (ctx.tainted and spec.risk >= Risk.CONTROL) or tool_wants
+        # "equilibrado": rodada contaminada só endurece o que a própria ferramenta pede (confirm_if); "estrito" endurece tudo que age
+        taint_hardens = ctx.tainted and spec.risk >= Risk.CONTROL and cfg.safety.permission_mode == "strict"
+        strong = spec.risk >= Risk.RISKY or taint_hardens or tool_wants
         need_confirm = strong or name in cfg.tools.confirm
+        if need_confirm and YOLO.active():                              # ação MANUAL do Bruno: sem confirmações (travas duras seguem nos handlers)
+            audit.info(json.dumps({"origin": origin, "tool": name, "args": shown,
+                                   "confirmation": {"allowed": True, "via": "yolo"}}, ensure_ascii=False))
+            need_confirm = False
         self._bus.publish("action_step", tool=name, text=step, status="start", risk=int(spec.risk))
         if need_confirm:
             decision = self._confirm(step, Risk.RISKY if strong else Risk.CONTROL, parent)

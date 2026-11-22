@@ -104,7 +104,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
     allowed = _norm_combos(cfg.apps.hotkeys, "apps.hotkeys")
     confirm_combos = _norm_combos(cfg.apps.hotkeys_confirm, "apps.hotkeys_confirm")
     reserved = _norm_combos((cfg.safety.emergency_hotkey, cfg.safety.mute_hotkey, cfg.safety.confirm_yes_hotkey,
-                             cfg.safety.confirm_no_hotkey, cfg.safety.talk_key), "safety")
+                             cfg.safety.confirm_no_hotkey, cfg.safety.talk_key,
+                             *((cfg.safety.yolo_hotkey,) if cfg.safety.yolo_hotkey.strip() else ())), "safety")
 
     # ------------------------------------------------------------- digitar_texto
     def prepare_digitar(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:

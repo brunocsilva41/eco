@@ -101,9 +101,15 @@ class SafetyCfg:
     tool_timeout_s: float = 15.0
     max_typed_chars: int = 500
     # digitar_texto: só em programas desta lista (e nunca nos de HARD_DENIED_TYPING)
-    typing_allowed_processes: tuple[str, ...] = ("notepad.exe", "wordpad.exe", "winword.exe", "onenote.exe")
+    typing_allowed_processes: tuple[str, ...] = (
+        "notepad.exe", "wordpad.exe", "winword.exe", "onenote.exe", "notepad++.exe", "code.exe", "excel.exe", "powerpnt.exe",
+        "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "outlook.exe", "olk.exe", "thunderbird.exe",
+        "whatsapp.exe", "telegram.exe", "discord.exe", "slack.exe", "obsidian.exe")
     typing_denied_extra: tuple[str, ...] = ()        # acrescenta à lista fixa de bloqueio
-    typing_confirm: str = "always"                   # "always" | "untrusted_or_multiline"
+    typing_confirm: str = "untrusted_or_multiline"   # "always" | "untrusted_or_multiline" (só conteúdo de fora ou parecido com comando)
+    permission_mode: str = "balanced"                # "balanced": só ações nocivas confirmam | "strict": também confirma tudo que age depois de ler conteúdo de fora
+    yolo_hotkey: str = "ctrl+alt+shift+y"            # LIGA/DESLIGA o modo YOLO (sem confirmações). Só por tecla física; nunca por voz. Vazio = desativado
+    yolo_minutes: int = 30                           # o YOLO desliga sozinho após este tempo (e ao reiniciar)
 
 
 @dataclass(frozen=True)
@@ -127,7 +133,7 @@ class AppsCfg:
         "ctrl+t", "ctrl+tab", "ctrl+l", "ctrl+n", "alt+tab", "enter", "esc", "tab",
         "pagedown", "pageup", "home", "end", "f5", "win+d", "win+e",
     )
-    hotkeys_confirm: tuple[str, ...] = ("enter", "ctrl+s", "ctrl+v", "ctrl+x")   # estes pedem Sim/Não antes
+    hotkeys_confirm: tuple[str, ...] = ("ctrl+s",)   # estes pedem Sim/Não antes (enter em diálogo sempre pede; copiar/colar/recortar são livres)
 
 
 @dataclass(frozen=True)
@@ -359,6 +365,10 @@ def validate(cfg: Config) -> list[str]:
         p.append("safety.max_typed_chars fora de 1..2000")
     if s.talk_mode not in ("hold", "toggle"):
         p.append("safety.talk_mode deve ser 'hold' ou 'toggle'")
+    if s.permission_mode not in ("balanced", "strict"):
+        p.append("safety.permission_mode deve ser 'balanced' ou 'strict'")
+    if not 1 <= s.yolo_minutes <= 240:
+        p.append("safety.yolo_minutes fora de 1..240")
     if s.typing_confirm not in ("always", "untrusted_or_multiline"):
         p.append("safety.typing_confirm deve ser 'always' ou 'untrusted_or_multiline'")
     for name in s.typing_allowed_processes:
@@ -368,7 +378,8 @@ def validate(cfg: Config) -> list[str]:
     # teclas de segurança: precisam ser válidas e distintas na forma NORMALIZADA (alt+ctrl+m == ctrl+alt+m)
     sec: dict[str, str | None] = {}
     for label, text in (("emergency_hotkey", s.emergency_hotkey), ("talk_key", s.talk_key), ("mute_hotkey", s.mute_hotkey),
-                        ("confirm_yes_hotkey", s.confirm_yes_hotkey), ("confirm_no_hotkey", s.confirm_no_hotkey)):
+                        ("confirm_yes_hotkey", s.confirm_yes_hotkey), ("confirm_no_hotkey", s.confirm_no_hotkey),
+                        *((("yolo_hotkey", s.yolo_hotkey),) if s.yolo_hotkey.strip() else ())):
         sec[label] = _norm_combo(text, f"safety.{label}", p)
     norms = [v for v in sec.values() if v]
     if len(set(norms)) < len(norms):

@@ -27,6 +27,7 @@ from .core.cancel import CancelToken
 from .core.events import EventBus, State
 from .core.state import StateMachine
 from .core.text import SentenceSplitter
+from .core.permissions import YOLO
 from .llm.client import ContextOverflow, LlmClient, LlmError, Reply, ToolCall, TruncatedReply, image_content
 from .memory import Memory, MemoryError_, Session
 from .tools.registry import ToolRegistry, ToolResult
@@ -56,6 +57,19 @@ _FORCED = (
     (re.compile(r"\bque\s+horas?\b|\bhoras?\s+(?:s[aã]o|e)\b|\bqual\s+(?:[ée]\s+)?(?:a\s+)?(?:hora|data)\b|\bque\s+dia\s+[ée]\s+hoje\b|\bdata\s+de\s+hoje\b", re.I), "hora_atual"),
     (re.compile(r"\b(?:qual|que)\s+(?:[ée]\s+)?(?:a\s+)?janela\b.*\b(?:ativa|aberta|foco|frente)\b|\bjanela\s+ativa\b|\bem\s+que\s+janela\b", re.I), "janela_ativa"),
 )
+
+
+_YOLO_WORD = re.compile(r"\byolo\b", re.I)
+_YOLO_OFF = re.compile(r"\b(?:desativ|deslig|sai|sair|parar|para|cancel|encerr|tira)\w*", re.I)
+_SAY_YOLO_MANUAL = "O modo YOLO não liga por voz. Abri as Configurações, em Permissões: ative por lá, com um clique seu."
+_SAY_YOLO_OFF = "Modo YOLO desligado. As confirmações voltaram."
+
+
+def yolo_request(user_text: str) -> str | None:
+    """'off' (pedido de desligar: sempre permitido), 'refuse' (pedido de ligar/qualquer outro: recusado) ou None."""
+    if not _YOLO_WORD.search(user_text):
+        return None
+    return "off" if _YOLO_OFF.search(user_text) else "refuse"
 
 
 def forced_tool(user_text: str) -> str | None:
@@ -155,6 +169,17 @@ class Agent:
             self._bus.publish("reply_text", text=sentence)
             on_sentence(sentence)
 
+        yolo = yolo_request(user_text)
+        if yolo is not None:                                          # o YOLO NUNCA liga por voz; desligar sempre pode
+            if yolo == "off":
+                YOLO.deactivate("por voz")
+                say = _SAY_YOLO_OFF
+            else:
+                say = _SAY_YOLO_MANUAL
+                log.warning("YOLO pedido por voz/texto: não ligo; abrindo as Configurações em Permissões")
+                self._bus.publish("open_settings", section="permissions")
+            emit(say)
+            return AgentResult(say, 0, (), time.monotonic() - started)
         try:
             rnd = self._begin(user_text, emit, spoken, cancel)
             self._run(rnd, cancel)

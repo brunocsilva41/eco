@@ -127,6 +127,14 @@ FIELDS: tuple[FieldSpec, ...] = (
     # ---- segurança
     _S("safety.emergency_hotkey", G_SEC, "Tecla de emergência", HOTKEY, "Para tudo na hora. OBRIGATÓRIA: não pode ser desativada.", RESTART,
        locked="a tecla de emergência é obrigatória"),
+    _S("safety.permission_mode", G_SEC, "Modo de permissões", CHOICE,
+       "Equilibrado: abrir apps, copiar/colar, escrever texto e controlar janelas são livres; só ações nocivas (apagar, mover, editar arquivos, fechar janelas) pedem confirmação. "
+       "Estrito: também confirma ações depois de ler conteúdo de fora.", RESTART,
+       choices=(("balanced", "Equilibrado (só as nocivas confirmam)"), ("strict", "Estrito"))),
+    _S("safety.yolo_hotkey", G_SEC, "Atalho do modo YOLO", HOTKEY,
+       "Liga/desliga o modo YOLO (sem NENHUMA confirmação). Só funciona apertando a tecla: nunca por voz, nem pelo modelo. Desliga sozinho e ao reiniciar.", RESTART,
+       optional=True),
+    _S("safety.yolo_minutes", G_SEC, "YOLO: duração", INT, "Depois deste tempo o modo YOLO desliga sozinho.", RESTART, minimum=1, maximum=240, unit="min"),
     # ---- logs
     _S("logs.level", G_LOGS, "Nível de log", CHOICE, "", LIVE, choices=(("DEBUG", "Detalhado"), ("INFO", "Normal"), ("WARNING", "Só avisos"), ("ERROR", "Só erros"))),
     _S("logs.max_mb", G_LOGS, "Tamanho por arquivo", INT, "", RESTART, minimum=1, maximum=100, unit="MB"),
