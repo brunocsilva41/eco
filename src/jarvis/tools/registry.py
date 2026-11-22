@@ -29,6 +29,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass
+from collections.abc import Collection
 from typing import Any, Callable, Protocol
 
 from ..config import Config
@@ -217,11 +218,12 @@ class ToolRegistry:
         with self._lock:
             return self._tools.get(name)
 
-    def openai_tools(self) -> list[dict[str, Any]]:
-        """Schemas das ferramentas LIGADAS (as desligadas o modelo nem vê)."""
+    def openai_tools(self, only: "Collection[str] | None" = None) -> list[dict[str, Any]]:
+        """Schemas das ferramentas LIGADAS (as desligadas o modelo nem vê). `only` restringe aos nomes dados (roteamento),
+        sempre na ordem de registro, para o prefixo do prompt ser idêntico entre pedidos do mesmo tipo."""
         with self._lock:
             off = set(self._cfg.tools.disabled)
-            specs = [s for n, s in self._tools.items() if n not in off]
+            specs = [s for n, s in self._tools.items() if n not in off and (only is None or n in only)]
         return [{"type": "function", "function": {
             "name": s.name, "description": s.description, "parameters": s.parameters}} for s in specs]
 

@@ -30,6 +30,7 @@ from .core.text import SentenceSplitter
 from .core.permissions import YOLO
 from .llm.client import ContextOverflow, LlmClient, LlmError, Reply, ToolCall, TruncatedReply, image_content
 from .memory import Memory, MemoryError_, Session
+from .tools import routing
 from .tools.registry import ToolRegistry, ToolResult
 
 log = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ SYSTEM_PROMPT = """Você é o Jarvis, o assistente de voz local do Bruno, no com
 Suas respostas serão FALADAS: no máximo 2 frases curtas, naturais, sem markdown, listas, emojis ou links.
 Para agir no computador use SOMENTE as ferramentas fornecidas. Se faltar ferramenta, diga com franqueza que não consegue.
 Hora, janela ativa, volume, conteúdo da tela e lista de arquivos ou apps: NUNCA responda de memória nem estime; chame a ferramenta (hora_atual, janela_ativa, ver_tela...) e use o resultado.
-Você ENXERGA a tela com ver_tela e controla mouse e teclado: para clicar numa posição, chame ver_tela, ache o alvo na imagem e use clicar_na_tela (x e y de 0 a 1000); depois confira com ver_tela. Prefira clicar_controle quando souber o nome do botão.
+Você ENXERGA a tela com ver_tela e controla mouse e teclado: para clicar chame DIRETO clicar_controle (pelo nome ou por uma descrição curta; ele acha o alvo na tela sozinho, não liste controles antes) e depois confira com ver_tela.
 Nunca diga que fez algo sem ter chamado a ferramenta e recebido o resultado. Confirme em uma frase o que de fato aconteceu.
 Se uma ferramenta disser que o resultado é desconhecido ou que passou do tempo, NÃO repita a ação: verifique antes ou avise o Bruno.
 Se o pedido for ambíguo, faça uma pergunta curta em vez de adivinhar. Ações perigosas pedem confirmação do Bruno; isso é automático.
@@ -57,7 +58,8 @@ _EXTERNAL_TAG = "[baseado em conteúdo externo]"
 # Frases em 1ª pessoa que AFIRMAM uma ação já feita. Sem nenhuma ferramenta chamada na rodada, isso é invenção do modelo.
 _CLAIM = re.compile(r"\b(?:abri|abrimos|cliquei|digitei|fechei|apaguei|movi|copiei|colei|criei|rolei|aumentei|diminu[ií]|executei|"
                     r"enviei|salvei|focalizei|liguei|desliguei|ajustei|troquei|mudei|alterei|instalei|baixei|renomeei|mandei|"
-                    r"ativei|desativei|coloquei|escrevi|selecionei|pressionei|apertei|iniciei|fiz isso|j[aá] fiz)\b", re.I)
+                    r"ativei|desativei|coloquei|escrevi|selecionei|pressionei|apertei|iniciei|fiz isso|j[aá] fiz|"
+                    r"vou (?:agora )?(?:ver|verificar|checar|olhar|abrir|clicar|digitar|fechar|apagar|mover|copiar|criar|rolar|ajustar|procurar|buscar))\b", re.I)
 _NUDGE = ("(Aviso do sistema: você disse que fez uma ação, mas NÃO chamou nenhuma ferramenta nesta conversa. "
           "Chame agora a ferramenta necessária; se não houver ferramenta, diga com franqueza que não fez.)")
 
@@ -163,8 +165,11 @@ class Agent:
     def warmup(self, cancel: CancelToken) -> float:
         """Processa o prompt fixo (sistema + ferramentas) uma vez para o cache do servidor; o 1º pedido real não paga ~30 s."""
         t0 = time.monotonic()
-        self._llm.chat([{"role": "system", "content": self._system_prompt()}, {"role": "user", "content": "Olá"}],
-                       cancel, tools=self._registry.openai_tools(), max_tokens=1)
+        for probe in ("Olá", "Abra o bloco de notas e clique", "Liste os arquivos da pasta"):     # os conjuntos mais usados
+            names, _ = routing.route(probe)
+            self._llm.chat([{"role": "system", "content": self._system_prompt()}, {"role": "user", "content": probe}],
+                           cancel, tools=self._registry.openai_tools(only=names), max_tokens=1)
+        routing.reset()
         return time.monotonic() - t0
 
     def handle(self, user_text: str, cancel: CancelToken, on_sentence: Callable[[str], None]) -> AgentResult:
@@ -206,7 +211,10 @@ class Agent:
         sessions = self._memory.sessions
         session, _ = sessions.ensure_active(self._cfg.memory.idle_minutes)
         sessions.append(session.id, "user", user_text)
-        rnd = _Round(session, user_text, self._system_prompt(), self._registry.openai_tools(), emit, spoken)
+        names, bundles = routing.route(user_text)
+        offered = self._registry.openai_tools(only=names)
+        log.info("ferramentas oferecidas (%d): %s", len(offered), "+".join(sorted(bundles)) or "base")
+        rnd = _Round(session, user_text, self._system_prompt(), offered, emit, spoken)
         if self._compact_flag.is_set():
             self._compact_flag.clear()
             if self._ctx.compact(session, cancel, force=True):

@@ -75,7 +75,7 @@ def _parse_point(text: str) -> tuple[int, int] | None:
     return (x, y) if 0 <= x <= 1000 and 0 <= y <= 1000 else None
 
 
-def _locate(description: str) -> tuple[tuple[int, int] | None, str]:
+def _locate(description: str, target_hwnd: int = 0) -> tuple[tuple[int, int] | None, str]:
     """Acha `description` na tela: lê a janela em foco (recorte, mais nítido) e a tela inteira; só aceita se concordam."""
     from PIL import Image  # noqa: F401  (tipos)
     assert _ground is not None
@@ -90,8 +90,7 @@ def _locate(description: str) -> tuple[tuple[int, int] | None, str]:
     max_side = max(64, cfg_vision_side())
     full_jpeg, _ = screen._encode(img.copy(), max_side, 80)
     points: list[tuple[float, float]] = []
-    fg = win.foreground_window()
-    rect = win.window_rect(fg.hwnd) if fg is not None else None
+    rect = win.window_rect(target_hwnd) if target_hwnd else None
     if rect is not None:
         x0, y0 = max(left, rect[0]), max(top, rect[1])
         x1, y1 = min(left + width, rect[2]), min(top + height, rect[3])
@@ -120,6 +119,14 @@ def cfg_vision_side() -> int:
 
 
 _vision_side = 1024
+_click_impl: Callable[[ToolContext, dict[str, Any]], ToolResult] | None = None
+
+
+def click_by_description(ctx: ToolContext, description: str, hwnd: int = 0) -> ToolResult:
+    """Clica no que `description` descreve, localizando na tela com o modelo de visão (reserva de clicar_controle)."""
+    if _click_impl is None:
+        return ToolResult(False, "A visão ainda não está pronta.")
+    return _click_impl(ctx, {"descricao": description, "_hwnd": hwnd})
 
 
 def register(registry: ToolRegistry, cfg: Config) -> None:
@@ -130,9 +137,16 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if _ground is None:
             return ToolResult(False, "A visão ainda não está pronta.")
         desc = str(args["descricao"]).strip()
-        if len(desc) < 2:
+        if not desc:
             return ToolResult(False, "Diga o que clicar.")
-        point, why = _locate(desc)
+        fg = win.foreground_window()
+        want_hwnd = int(args.get("_hwnd") or (fg.hwnd if fg is not None else 0))
+        if not want_hwnd or win.foreground_hwnd() != want_hwnd:
+            return ToolResult(False, "A janela em foco mudou; não cliquei.")
+        where = f" (na janela «{fg.title[:40]}»)" if fg is not None and fg.title else ""
+        point, why = _locate(f"o botão ou controle «{desc}»{where}" if len(desc) <= 12 else f"{desc}{where}", want_hwnd)
+        if point is not None and win.foreground_hwnd() != want_hwnd:
+            return ToolResult(False, "A janela em foco mudou durante a busca; não cliquei.")
         if ctx.cancel.cancelled:
             return ToolResult(False, "Cancelado.")
         if point is None:
@@ -141,6 +155,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         info = win.window_at(px, py)
         if info is None:
             return ToolResult(False, "Não há janela no ponto achado; não cliquei.")
+        if info.hwnd != want_hwnd:
+            return ToolResult(False, "O ponto achado está fora da janela em foco (outra janela por cima ou mudou); não cliquei.")
         if win.is_own_process_window(info, cfg):
             return ToolResult(False, "O ponto achado é uma janela do próprio Jarvis; não cliquei.")
         if (info.process or "").lower() in _NEVER_CLICK:
@@ -230,6 +246,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return ToolResult(False, f"Não consegui rolar: {exc}")
         return ToolResult(True, f"Rolei {direction} {n} vezes. Use ver_tela para ver o resultado.")
 
+    global _click_impl
+    _click_impl = clicar_em
     registry.register(ToolSpec(
         name="clicar_em",
         description=("Clica com o MOUSE em algo que você descreve em palavras ('o botão 7 da calculadora', 'o ícone de salvar', "

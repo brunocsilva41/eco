@@ -358,7 +358,13 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return ToolResult(False, "Cancelado.")
         if win.foreground_hwnd() != target.hwnd or win.pid_of(target.hwnd) != target.pid:
             return ToolResult(False, "A janela em foco mudou; não cliquei.")
-        return _click_by_name(ctx, query, target.hwnd)
+        result = _click_by_name(ctx, query, target.hwnd)
+        if not result.ok and result.message.startswith("Não achei um controle") and not ctx.cancel.cancelled:
+            from . import mouse_tools                     # reserva: o controle não existe na UIA (ícone, imagem, app web): olha a tela
+            visual = mouse_tools.click_by_description(ctx, query, target.hwnd)
+            if visual.ok or not visual.message.startswith("Não encontrei"):
+                return visual
+        return result
 
     registry.register(ToolSpec(
         name="listar_controles",
@@ -371,9 +377,10 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
     ))
     registry.register(ToolSpec(
         name="clicar_controle",
-        description=("Clica num botão, aba, link ou item pelo nome visível, na janela ativa. "
-                     "Recusa ações de excluir, enviar, pagar ou instalar; botões como Sim, OK, Salvar ou "
-                     "Permitir pedem confirmação forte."),
+        description=("Clica com o mouse em qualquer botão, aba, link, ícone ou item visível, pelo nome ou por uma descrição curta "
+                     "('7', 'botão de mais', 'ícone de salvar'). Tenta achar o controle pelo nome e, se não achar, "
+                     "localiza na tela sozinho. Recusa ações de excluir, enviar, pagar ou instalar; botões como Sim, OK, "
+                     "Salvar ou Permitir pedem confirmação forte."),
         parameters={
             "type": "object",
             "properties": {"nome": {"type": "string", "minLength": 1, "maxLength": 80,
@@ -383,7 +390,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         },
         risk=Risk.CONTROL,
         handler=clicar_controle,
-        timeout_s=12.0,
+        timeout_s=60.0,
         prepare=prepare_clicar,
         confirm_if=confirm_clicar,
         audit_args=lambda a: audit_label(a, "nome"),

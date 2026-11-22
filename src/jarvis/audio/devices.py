@@ -168,6 +168,15 @@ def resolve_device(spec: DeviceSpec, kind: Kind) -> AudioDevice:
         if not usable:
             log.warning("só há dispositivos WDM-KS de %s (sem MME/WASAPI/DirectSound): o serviço de áudio do Windows "
                         "pode estar reiniciando; usando %s mesmo assim", label, capable[0].label)
+        if kind == "output":
+            # O PortAudio fixa "o padrão" na inicialização; o Mapeador de som (MME) e o driver primário (DirectSound) seguem o
+            # padrão ATUAL do Windows a cada abertura de saída: trocar de fone/caixa/monitor funciona sem reiniciar o Jarvis.
+            for marker in ("sound mapper", "mapeador de som", "driver de som primario", "primary sound driver"):
+                follow = [d for d in usable if marker in fold(d.name)]
+                if follow:
+                    chosen = _best(follow)
+                    log.debug("saída segue o padrão do Windows via %s", chosen.label)
+                    return chosen
         chosen = _best(defaults or usable or capable)
         log.debug("dispositivo de %s padrão: %s", label, chosen.label)
         return chosen
