@@ -1,10 +1,10 @@
 # Jarvis v0.1.0 - notas da release
 
-Primeira versão do assistente de voz local em pt-BR. Artefato: `Jarvis-Setup-0.1.0.exe` (170,6 MiB; SHA-256 no arquivo
-`.exe.sha256`). Os modelos (~3,5 GB) são baixados à parte, com conferência de hash.
+Primeira versão do assistente de voz local em pt-BR. Artefato: `Jarvis-Setup-0.1.0.exe` (176,2 MiB, 184.755.225 bytes; SHA-256 `e880837b2b68d851e6cdc5187b5e19690f4078a447acae805a8924a2421dc8ba`,
+também no arquivo `.exe.sha256`). Os modelos (~3,5 GB) são baixados à parte, com conferência de hash.
 
 ## Destaques
-- 100% local: reconhecimento (faster-whisper), modelo de visão e linguagem (Qwen3-VL 4B via llama.cpp Vulkan) e voz (Piper).
+- 100% local: reconhecimento (whisper.cpp Vulkan na placa de vídeo, com queda para faster-whisper na CPU), modelo de visão e linguagem (Qwen3-VL 4B via llama.cpp Vulkan) e voz (Piper).
 - Controla o PC por ferramentas permitidas; UIA primeiro, localização visual como reserva.
 - Ilha no topo da tela com estado, ondas, ação e botões Sim/Não, Mudo, Parar, Configurações.
 - Confirmações só nas ações nocivas; YOLO só por ação manual; tecla de emergência (Ctrl+Alt+F12).
@@ -20,7 +20,7 @@ Windows 10 build 19044+ ou 11, x64; 16 GB de RAM recomendados; GPU com Vulkan (t
 - RAM: servidor ~500 MB, núcleo ~393 MB; partida a frio ~42 s, ~9 s com o disco em cache; aquecimento ~30 s.
 - Pedido típico com cache: 1 a 3 s até a primeira frase (via texto); com ferramenta ~3 a 4 s.
 - Acordar do modo dormindo: ~6 s de recarga mais reprocessar o prompt (23 a 47 s no teste com prompt longo).
-- Instalador: build completo em 283 s; `doctor` 21/21 numa instalação de teste.
+- Instalador: build completo em 283 s; `doctor` 28/28 numa instalação limpa de teste (com a escuta na GPU).
 
 ## Limitações conhecidas
 - O modelo de 4B às vezes escolhe mal entre ferramentas e descreve mal alvos; o clique visual em linguagem natural acertou
