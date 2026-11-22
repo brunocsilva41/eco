@@ -1,8 +1,76 @@
+# Jarvis - arquivos que NAO vao para o GitHub.
+# Regra: so codigo, documentacao e configuracao-modelo. Nada de binarios, modelos, dados pessoais ou logs.
+
+# --- Ambiente Python -------------------------------------------------------
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Binarios e modelos (baixados/compilados; ver installer/manifest.json) --
 bin/
 models/
-venv/
-logs/
-__pycache__/
+*.gguf
+*.onnx
+*.safetensors
+ggml-*.bin
+
+# --- Dados do usuario (memoria, conversas, auditoria, chaves de execucao) ---
 data/
+logs/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.key
+*.pem
+*.pfx
+*.p12
+
+# --- Gravacoes de voz e audio de teste --------------------------------------
 tests/audio_*/
-*.pyc
+*.wav
+*.mp3
+*.flac
+*.ogg
+
+# --- Logs e saidas de bancada ----------------------------------------------
+*.log
+*.err
+@AutomationLog.txt
+
+# --- Trabalho local, renders e ferramentas de terceiros ---------------------
+work/
+.remotion/
+node_modules/
+
+# --- Instalador (artefatos reproduziveis por installer/build.ps1) -----------
+installer/dist/
+installer/staging/
+installer/tools/
+installer/wheels/
+installer/cache/
+installer/work/
+
+# --- Segredos ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+/secrets.*
+/credentials.*
+
+# --- Editor / sistema -------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.bak
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,1 +1,0 @@
-{'tag': 'piper', 'model': 'medium', 'threads': 12, 'beam': 1, 'vad': 0, 'n': 3, 'load_s': 25.28, 'mean_s': 8.243, 'min_s': 7.692, 'max_s': 9.244, 'rtf': 4.129, 'rss_after_load_mb': 865, 'rss_now_mb': 877, 'peak_wset_mb': 1522, 'wer': 0.1429, 'when': '2026-11-19 03:31:27'}

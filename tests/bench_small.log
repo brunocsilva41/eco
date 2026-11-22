@@ -1,2 +1,0 @@
-{'tag': 'piper', 'model': 'small', 'threads': 8, 'beam': 1, 'vad': 0, 'n': 20, 'load_s': 4.63, 'mean_s': 3.582, 'min_s': 2.925, 'max_s': 6.081, 'rtf': 1.556, 'rss_after_load_mb': 365, 'rss_now_mb': 423, 'peak_wset_mb': 696, 'wer': 0.1645, 'when': '2026-11-19 03:19:52'}
-{'tag': 'piper', 'model': 'small', 'threads': 8, 'beam': 1, 'vad': 1, 'n': 20, 'load_s': 4.63, 'mean_s': 3.694, 'min_s': 2.818, 'max_s': 13.157, 'rtf': 1.606, 'rss_after_load_mb': 365, 'rss_now_mb': 482, 'peak_wset_mb': 696, 'wer': 0.1645, 'when': '2026-11-19 03:21:09'}
