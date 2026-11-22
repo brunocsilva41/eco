@@ -165,7 +165,7 @@ class Agent:
     def warmup(self, cancel: CancelToken) -> float:
         """Processa o prompt fixo (sistema + ferramentas) uma vez para o cache do servidor; o 1º pedido real não paga ~30 s."""
         t0 = time.monotonic()
-        for probe in ("Olá", "Abra o bloco de notas e clique", "Liste os arquivos da pasta"):     # os conjuntos mais usados
+        for probe in ("Olá", "Abra o bloco de notas e clique"):     # só os 2 conjuntos mais usados: cada um custa ~8 s de GPU na partida
             names, _ = routing.route(probe)
             self._llm.chat([{"role": "system", "content": self._system_prompt()}, {"role": "user", "content": probe}],
                            cancel, tools=self._registry.openai_tools(only=names), max_tokens=1)
