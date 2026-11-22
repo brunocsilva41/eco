@@ -91,4 +91,4 @@ llama.cpp (GitHub), discussão de benchmark RX 580 (ggml-org/llama.cpp #23109), 
 ## Estado em 2026-11-22
 - Núcleo auditado 2×; primeira execução real do `run --text` feita (bugs de partida, cache de prompt e alucinação de hora/janela corrigidos; atalho direto para hora/janela).
 - UI: LevelMeter corrigido; itens baixos da Auditoria-2 (N-17, N-19, clique por coordenadas verificado) tratados.
-- Próximo: (b) ctx 12288 (medir), depois Ilha I0-I5 com o OK do Bruno; WER real após `Jarvis.cmd record`. Detalhes em Shared\jarvis\STATUS.md.
+- (b) feito: ctx 12288 (prompt fixo 34%, VRAM ~5,8 GB). Próximo:  Ilha I0-I5 com o OK do Bruno; WER real após `Jarvis.cmd record`. Detalhes em Shared\jarvis\STATUS.md.
