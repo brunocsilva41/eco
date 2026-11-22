@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import logging
+import time
 from typing import Any
 
 import mss
@@ -33,11 +34,25 @@ def _primary_monitor(sct: Any) -> Any:
         return monitors[0]
 
 
+_last_geom: tuple[float, int, int, int, int] | None = None     # (instante, esquerda, topo, largura, altura) da última captura
+
+
+def last_capture(max_age_s: float = 180.0) -> tuple[int, int, int, int] | None:
+    """(esquerda, topo, largura, altura) em pixels físicos do monitor da última `ver_tela`, se for recente; senão None.
+    As ferramentas de mouse usam isto para converter coordenadas relativas (0..1000) da imagem em pixels reais."""
+    g = _last_geom
+    if g is None or time.monotonic() - g[0] > max_age_s:
+        return None
+    return g[1:]
+
+
 def _capture_primary() -> Image.Image:
     """Captura o monitor principal como imagem RGB. Libera o recurso de captura ao sair."""
+    global _last_geom
     with mss.mss() as sct:
         monitor = _primary_monitor(sct)
         shot = sct.grab(monitor)
+        _last_geom = (time.monotonic(), int(monitor["left"]), int(monitor["top"]), int(shot.size[0]), int(shot.size[1]))
         return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
 
 

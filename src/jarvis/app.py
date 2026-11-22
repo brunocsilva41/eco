@@ -136,6 +136,8 @@ class JarvisApp:
             server = LlamaServer(cfg, on_event=lambda kind, text: self.bus.publish("notice", notice_kind=kind, text=text))
             stack.callback(server.stop)
             llm = LlmClient(cfg, api_key=lambda: server.api_key)
+            from .tools import mouse_tools                              # a localização visual de clicar_em usa o mesmo modelo
+            mouse_tools.set_grounder(llm)
             speaker = Speaker(cfg.audio, cfg.tts, self.bus)
             stack.callback(speaker.close)
             tts = Synthesizer(cfg.tts)

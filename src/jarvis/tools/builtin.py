@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 # Módulos em jarvis.tools, cada um com `register(registry, cfg)`.
 _MODULES: Final[tuple[str, ...]] = (
-    "apps", "windows_tools", "keyboard", "screen", "uia", "system_tools",
+    "apps", "windows_tools", "keyboard", "screen", "mouse_tools", "uia", "system_tools",
 )
 
 

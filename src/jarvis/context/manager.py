@@ -82,8 +82,7 @@ def _chat_from_rows(rows: list[Message], tool_max: int) -> tuple[list[dict[str, 
                 if not msg["tool_calls"]:
                     del msg["tool_calls"]
             if m.untrusted and m.content:
-                msg["content"] = "[baseado em conteúdo externo] " + m.content
-                tainted = True
+                tainted = True          # sem prefixo no texto: o modelo de 4B o imitava e o falava em voz alta
             out.append(msg)
         elif m.role == "tool":
             if m.tool_call_id and m.tool_call_id in open_calls:

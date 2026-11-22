@@ -144,9 +144,9 @@ def _unicode_event(unit: int, up: bool) -> INPUT:
     return ev
 
 
-def _mouse_event(flags: int, dx: int = 0, dy: int = 0) -> INPUT:
+def _mouse_event(flags: int, dx: int = 0, dy: int = 0, data: int = 0) -> INPUT:
     ev = INPUT(type=INPUT_MOUSE)
-    ev.mi = MOUSEINPUT(dx=dx, dy=dy, mouseData=0, dwFlags=flags, time=0, dwExtraInfo=0)
+    ev.mi = MOUSEINPUT(dx=dx, dy=dy, mouseData=data & 0xFFFFFFFF, dwFlags=flags, time=0, dwExtraInfo=0)
     return ev
 
 
@@ -304,6 +304,33 @@ def click(x: int, y: int, button: str = "left") -> None:
         finally:
             with _state_lock:
                 _held_buttons.discard(button)
+
+
+MOUSEEVENTF_WHEEL: Final = 0x0800
+MOUSEEVENTF_HWHEEL: Final = 0x1000
+_WHEEL_NOTCH: Final = 120
+
+
+def scroll(notches: int, horizontal: bool = False, at: tuple[int, int] | None = None) -> None:
+    """Rola a roda do mouse: `notches` > 0 = para cima/direita, < 0 = para baixo/esquerda. `at` (pixel físico) move o cursor antes."""
+    if not notches or abs(notches) > 50:
+        raise ValueError("rolagem inválida")
+    if at is not None:
+        left = _user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+        top = _user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+        width = _user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+        height = _user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+        x, y = at
+        if width <= 0 or height <= 0 or not (left <= x < left + width and top <= y < top + height):
+            raise ValueError(f"ponto ({x}, {y}) fora da tela")
+        move = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK
+        _send([_mouse_event(move, _normalize_abs(x, left, width), _normalize_abs(y, top, height))])
+        time.sleep(_KEY_GAP_S)
+    flag = MOUSEEVENTF_HWHEEL if horizontal else MOUSEEVENTF_WHEEL
+    step = _WHEEL_NOTCH if notches > 0 else -_WHEEL_NOTCH
+    for _ in range(abs(notches)):
+        _send([_mouse_event(flag, data=step)])
+        time.sleep(0.03)
 
 
 def release_all() -> None:

@@ -238,6 +238,19 @@ def owner_hwnd(hwnd: int) -> int:
     return int(_user32.GetWindow(hwnd, GW_OWNER) or 0) if hwnd else 0
 
 
+def window_at(x: int, y: int) -> "WindowInfo | None":
+    """Janela de nível superior sob o pixel físico (x, y), ou None (área de trabalho, janela sem título)."""
+    _user32.WindowFromPoint.argtypes = (wintypes.POINT,)
+    _user32.WindowFromPoint.restype = wintypes.HWND
+    _user32.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+    _user32.GetAncestor.restype = wintypes.HWND
+    hwnd = _user32.WindowFromPoint(wintypes.POINT(int(x), int(y)))
+    if not hwnd:
+        return None
+    root = _user32.GetAncestor(hwnd, 2) or hwnd                      # GA_ROOT
+    return _describe(int(root))
+
+
 def window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
     """Retângulo (esquerda, topo, direita, base) da janela em pixels físicos, ou None se não deu para ler."""
     rect = wintypes.RECT()
