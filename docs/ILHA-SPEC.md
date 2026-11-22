@@ -106,3 +106,71 @@ I1 IPC com o núcleo; I2 avisos + confirmação Sim/Não; I3 gatilhos: voz perso
 
 ## Fontes novas
 openWakeWord (GitHub/HF), HAwake e outros treinadores, LiveKit wakeword docs; RegisterHotKey/pynput (GitHub issues, wxPython forum, PyPI global-hotkeys); projetos de visualizador FFT (Realtime_PyAudio_FFT, lookas, cli-audio-visualizer); padrões de API local (Kimi CLI server API, Flynn gateway, Octomind WebSocket, guias MCP); guias de movimento e reduced-motion (Intuit, Cloudscape, Atlassian, Smashing Magazine, WCAG 2.3.3). Não achei as páginas da Apple (HIG/Live Activities) nem da Microsoft (Fluent) nas buscas: conferir diretamente.
+
+---
+# ATUALIZAÇÃO v0.3 (2026-11-22): layouts dos 3 tamanhos (implementados na I0)
+
+Posição: topo central do monitor principal, colada à borda (sem margem), só cantos de baixo arredondados, janela do tamanho exato da pílula (clique fora passa), sem foco. Troca de tamanho 260 ms (mola ao crescer). Automático: repouso=compacta, conversa=média, confirmação=grande; clique fixa/alterna (grande, média, compacta, automático).
+
+| Tamanho | Medida | Regiões (x,y em px lógicos) | Dados |
+|---|---|---|---|
+| Compacta | 208x36 | mic 20 @(12,8); rótulo @x40; cronômetro (só ACTING); 6 barras 3+3 px; ponto 6 px à direita | estado (ícone, texto, ponto), tempo da ação |
+| Média | 380x64 | mic 24 @(16,20); rótulo 13 semibold @(52,10); cronômetro à direita; frase 12 @(52,32); 14 barras @x280 | estado, ação ('Executando: ...'), última frase (fala ou resposta), cronômetro, nível ao vivo |
+| Grande | 520x200 | cabeçalho y12 (mic 24, estado 16, chips, cronômetro); espectro y44..72 (49 barras 6+4); fala/resposta y78..129 (3 linhas de 17, rolagem); ação y134..150; linha y156..188 (contexto + botões 32) | state, transcript, reply_text, action_step, context_usage, yolo (contagem), mute, permission_mode, confirm_request |
+
+Tipografia do tema (11/12/13/16), numerais tabulares nos números (cronômetro, contexto, YOLO). Eventos do núcleo entram por `ui/island/bridge.py`: state, transcript, reply_text, action_step, confirm_request/confirm_done, context_usage, yolo, mute, emergency, error; `level` só alimenta as ondas. Saída da Ilha: `confirm_answered`, `stop_requested`, `mute_toggled`, `settings_requested` (a ligar ao núcleo na I1).
+
+---
+# ATUALIZAÇÃO v0.4 (2026-11-22): escondida por padrão, modo flutuante, redesign, atalhos nos botões, otimização
+
+## Presença (escondida por padrão)
+A janela fica OCULTA (SW_HIDE): zero timers, zero repinturas. Aparece só quando:
+- (a) o mouse chega ao centro do topo da tela (zona do tamanho da Ilha x 3 px; permanência de 160 ms contra acidente; `ui.island_hover_reveal`);
+- (b) o núcleo entra em LISTENING (tecla F9 e, no futuro, a palavra de ativação: o gatilho é o ESTADO, não há detecção de palavra na Ilha), e nos estados seguintes (transcrevendo, pensando, agindo, falando);
+- (c) há confirmação pendente: SEMPRE aparece (até em tela cheia) e fica até responder ou expirar (sem resposta = Não);
+- (d) erro e parada de emergência (5 s), mudo e YOLO ligado/desligado (aviso de 2,5 s com texto próprio na compacta).
+Esconde sozinha `ui.island_hide_delay_s` (padrão 3 s) depois de IDLE, NUNCA com o mouse em cima, em confirmação, falando/agindo ou fixada pelo alfinete (Ilha grande). Entrada: desliza do topo + fade 280 ms; saída 200 ms; 'reduzir animações' = instantâneo. Tela cheia (jogo/vídeo) continua escondida, exceto confirmação; a checagem de tela cheia só roda com a Ilha visível (700 ms) ou no instante de revelar.
+`ui.island_autohide = false` mantém a Ilha sempre visível (como antes).
+
+## Zona do mouse: janela mínima x polling (MEDIDO, com a Ilha escondida, 30 s)
+| Estratégia | Ciclos de CPU | Acordadas |
+|---|---|---|
+| janela-zona transparente (`HotZone`, alfa 1/255) | 0,02 Mciclos/s | 0,0 /s |
+| `GetCursorPos` a 10 Hz (`CursorPoller`) | 3,84 Mciclos/s | 17,6 /s |
+Escolhida: a janela-zona (zero acordadas). Custo: a faixa de 256x3 px no centro do topo não deixa o clique passar para o app de baixo enquanto a Ilha está escondida. Reserva: `JARVIS_ISLAND_ZONE=poll`.
+
+## Modo de posição (`ui.island_mode`, ao vivo)
+`docked`: colada ao topo, só os cantos de baixo arredondados. `floating`: pílula totalmente arredondada, afastada `ui.island_float_gap_px` (0..64, padrão 10) do topo, borda branca a 9% e sombra suave (8 camadas translucidas pintadas UMA vez no cache do tamanho; sem QGraphicsEffect/blur). Config, schema, Configurações > Funcionamento > Ilha do Jarvis: `island_mode`, `island_float_gap_px`, `island_autohide`, `island_hide_delay_s`, `island_hover_reveal`. O núcleo manda a mensagem `config` ao subir o filho e a cada `config_applied` (aplicação ao vivo, sem reiniciar).
+
+## Redesign
+Preto profundo `#050608`, cor de destaque única (`tokens.ACCENT_*`), ok/aviso/erro da paleta (AA). Grade de 4 px. Tamanhos: compacta 208x36, média 380x64, grande 600x248 (cabeçalho com emblema, título, chips de modo/YOLO/mudo, contexto, tempo e alfinete; espectro; conversa; ação com progresso linear; botões com keycap). Ícones TODOS em vetor (`glyphs.py`, grade 24, traço 1,75/2 px): microfone (repouso, ouvindo com anel, mudo, erro), parar, check, x, mudo, engrenagem, alfinete, raio (YOLO), escudo, contexto, ferramenta, erro, relógio. Ícones de estado próprios e animados: Ouvindo (anel pulsante), Transcrevendo (linhas), Pensando (3 pontos orbitais), Executando (engrenagem + arco de progresso), Falando (ondas), Confirmando (escudo pulsando). Morfose: cada tamanho é pintado uma vez no tamanho nativo; a troca é cross-fade + escala 0,94 a 1 com mola. Texto/estado trocam com fade + deslocamento de 3 px (150 ms). Ondas em camadas: halo (brilho), barras de fundo, barras da frente com gradiente, picos que caem; reagem ao nível real. Respiração no repouso nos primeiros 6 s visíveis. Botões: hover (110 ms), pressionado, anel de foco de teclado de 2 px.
+
+## Atalhos nos botões
+Sim ⟨Ctrl+Alt+Y⟩, Não ⟨Ctrl+Alt+N⟩, Parar ⟨Ctrl+Alt+F12⟩, Mudo ⟨Ctrl+Alt+M⟩, Falar ⟨F9⟩ (dica; o gatilho é o núcleo), YOLO ⟨Ctrl+Alt+Shift+Y⟩ (clique só abre Configurações > Permissões: o YOLO NUNCA liga por clique), Configurações (sem atalho). Os valores vêm de `safety.*_hotkey` pela mensagem `config` do núcleo. Local, SÓ com o foco da Ilha (ela nunca rouba foco nem captura teclas globais): Enter = Sim e Esc = Não durante a confirmação; Tab/Shift+Tab/Espaço nos botões.
+
+## Otimização (antes -> depois, processo filho real, máquina livre: ffmpeg parados, carga 2 a 10%)
+| Decisão | Efeito |
+|---|---|
+| Sem numpy no filho (ondas e níveis em listas de float); `bridge`/`waves` não importam `dsp` | memória PRIVADA 824 MB -> 34 MB (o OpenBLAS reservava ~790 MB); conjunto de trabalho visível 84 -> 62 MB |
+| Sem ThemeManager.apply (stylesheet), sem kit/Button, botões pintados à mão; barramento local sem threads | menos módulos, menos QWidget |
+| Escondida = janela oculta + `SetProcessWorkingSetSize` (-1,-1) ao esconder e na partida; caches (ícones, sprites, camadas) liberados ao esconder | conjunto de trabalho escondida 80 -> 1,4 a 6 MB; privado 34 MB |
+| Zona do mouse por janela mínima | 0,02 Mciclos/s escondida (0 acordadas/s) |
+| Timers só com a Ilha visível e algo animando; 60 fps voz/transições, 30 fps pensar/agir/confirmar, 15 fps respiração (6 s), 0 fps estático | repouso visível estático 0,03% de 1 núcleo |
+| Ondas por sprites (1 pixmap por altura em px físicos, cacheados) em vez de retângulos com gradiente por quadro | quadro grande 3,9 -> 1,0 ms |
+| Ícones de estado e botões cacheados como QPixmap por quadro de animação/estado | quadro médio 0,68 -> 0,31 ms |
+| Recorte do corpo só durante transição; camadas estáticas por tamanho e DPR (texto pintado só quando muda) | |
+| Prioridade BELOW_NORMAL no filho | |
+Números (MESMO harness para os dois: processo filho real, estados enviados pelo pipe, níveis a 30 Hz, `QueryProcessCycleTime`, % de 1 núcleo a 3 GHz assumidos; máquina com ffmpeg parados e carga 2 a 28%):
+| Fase | ANTES (I1) | DEPOIS (v2) |
+|---|---|---|
+| Escondida (sem janela) | n/a (sempre visível) | ~0% (0,02 Mciclos/s), conjunto de trabalho 1,4 a 6 MB, privado 34 MB |
+| Visível em repouso estático | 0,06% | 0,03% |
+| Respiração do repouso (6 s) | 2,9% (sem limite) | 1,2% (15 fps, só 6 s) |
+| Ouvindo (média, 60 fps) | 10,7% | 3,9% |
+| Falando (média, 60 fps) | 9,9% | 3,8% |
+| Transcrevendo / pensando / executando (30 fps) | 4,4 / 4,7 / 4,5% | 1,9 / 2,0 / 2,8% |
+| Confirmação (grande, 30 fps) | 9,0% | 2,6% |
+| Conjunto de trabalho visível | 85 a 90 MB | 19 a 32 MB |
+| Memória privada | 824 MB | 34 a 48 MB |
+| Revelar + ouvir + esconder (1 ciclo) | n/a | 87 a 133 ms de CPU |
+(Pelo `cpu_percent` do psutil o 'antes' deu 4,9% ouvindo e 4,7% falando com a máquina mais livre; o harness de ciclos é mais fiel.) Metas: RAM < 60 MB escondida (34 MB privado, 1,4 MB de conjunto de trabalho: atingida); CPU escondida ~0% (atingida); <= 5% de 1 núcleo falando (3,8%: atingida).

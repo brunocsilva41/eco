@@ -4,8 +4,11 @@ A Ilha é um PROCESSO FILHO (`python -I -X utf8 -c ... island --child`). A conve
 stdin/stdout do filho (sem rede, sem soquete):
 
     núcleo -> Ilha:  {"k": "state"|"transcript"|"reply_text"|"action_step"|"confirm_request"|"confirm_done"|
-                           "context_usage"|"yolo"|"mute"|"emergency"|"error"|"mode"|"level"|"quit", "d": {...}}
-    Ilha -> núcleo:  {"c": "confirm"|"mute"|"stop"|"settings"|"ready", ...}
+                           "context_usage"|"yolo"|"mute"|"emergency"|"error"|"mode"|"config"|"level"|"quit", "d": {...}}
+    Ilha -> núcleo:  {"c": "confirm"|"mute"|"stop"|"settings"|"ready", ...}   (settings pode trazer "section")
+
+A mensagem "config" ({"mode","float_gap_px","autohide","hide_delay_s","hover_reveal","hotkeys":{yes,no,stop,mute,talk,yolo}})
+vai no início de cada partida do filho e de novo a cada `config_applied` (mudança ao vivo nas Configurações).
 
 Garantias: o núcleo NUNCA espera a Ilha (fila limitada: descarta níveis antigos primeiro; o gravador de pipe é
 uma thread própria); se o filho morrer, reinicia com espera crescente e número limitado de tentativas (o Jarvis
@@ -89,7 +92,8 @@ class IslandLink:
     def __init__(self, bus: Any, *, root: Path, log_dir: Path,
                  on_command: Callable[[str, dict[str, Any]], None],
                  tts_rms: Callable[[], float], speaking: Callable[[], bool],
-                 yolo_remaining: Callable[[], float], permission_mode: Callable[[], str]) -> None:
+                 yolo_remaining: Callable[[], float], permission_mode: Callable[[], str],
+                 ui_config: Callable[[], dict[str, Any]] | None = None) -> None:
         self._bus = bus
         self._root = Path(root)
         self._log_dir = Path(log_dir)
@@ -98,6 +102,7 @@ class IslandLink:
         self._speaking = speaking
         self._yolo_remaining = yolo_remaining
         self._permission_mode = permission_mode
+        self._ui_config = ui_config
         self._stop = threading.Event()
         self._cv = threading.Condition()
         self._q: collections.deque[bytes] = collections.deque()
@@ -150,8 +155,11 @@ class IslandLink:
             if d.get("source") == "mic":
                 self._mic, self._mic_at = float(d.get("rms", 0.0)), time.monotonic()
             return                                         # os níveis saem pela thread de 30 Hz
-        if kind == "config_applied":                       # o modo de permissão pode ter mudado
+        if kind == "config_applied":                       # o modo de permissão e a aparência podem ter mudado
             self._enqueue({"k": "mode", "d": {"mode": self._permission_mode()}})
+            cfg = self._config_message()
+            if cfg is not None:
+                self._enqueue(cfg)
             return
         if kind == "yolo":
             on = bool(d.get("on"))
@@ -174,14 +182,26 @@ class IslandLink:
     def _snapshot_messages(self) -> list[dict[str, Any]]:
         with self._snap_lock:
             s = dict(self._snap)
-        msgs: list[dict[str, Any]] = [{"k": "mode", "d": {"mode": self._permission_mode()}},
-                                      {"k": "mute", "d": {"muted": s["muted"]}}]
+        msgs: list[dict[str, Any]] = []
+        cfg = self._config_message()
+        if cfg is not None:
+            msgs.append(cfg)                                # primeiro: modo/atalhos valem antes de qualquer estado
+        msgs += [{"k": "mode", "d": {"mode": self._permission_mode()}}, {"k": "mute", "d": {"muted": s["muted"]}}]
         if s["yolo"] and self._yolo_remaining() > 0:
             msgs.append({"k": "yolo", "d": {"on": True, "remaining_s": self._yolo_remaining()}})
         if s["pct"] is not None:
             msgs.append({"k": "context_usage", "d": {"pct": s["pct"]}})
         msgs.append({"k": "state", "d": {"state": s["state"]}})
         return msgs
+
+    def _config_message(self) -> dict[str, Any] | None:
+        if self._ui_config is None:
+            return None
+        try:
+            return {"k": "config", "d": dict(self._ui_config())}
+        except Exception:  # noqa: BLE001 - config com defeito nunca derruba o núcleo
+            log.exception("não consegui montar a config da Ilha")
+            return None
 
     def _enqueue(self, msg: dict[str, Any]) -> None:
         line = (json.dumps(msg, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")

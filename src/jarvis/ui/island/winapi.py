@@ -103,3 +103,29 @@ def fullscreen_app_active(own_hwnd: int = 0) -> bool:
         return rect.left <= m.left and rect.top <= m.top and rect.right >= m.right and rect.bottom >= m.bottom
     except Exception:
         return False
+
+
+def lower_priority() -> None:
+    """Processo da Ilha em BELOW_NORMAL (a interface nunca compete com a voz e os modelos)."""
+    if not _WIN:
+        return
+    try:
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.GetCurrentProcess.restype = wintypes.HANDLE
+        k.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        k.SetPriorityClass(k.GetCurrentProcess(), 0x00004000)      # BELOW_NORMAL_PRIORITY_CLASS
+    except Exception:
+        pass
+
+
+def trim_working_set() -> None:
+    """Devolve ao Windows as paginas ociosas (conjunto de trabalho cai; volta sob demanda). Chamado ao esconder."""
+    if not _WIN:
+        return
+    try:
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.GetCurrentProcess.restype = wintypes.HANDLE
+        k.SetProcessWorkingSetSize.argtypes = [wintypes.HANDLE, ctypes.c_size_t, ctypes.c_size_t]
+        k.SetProcessWorkingSetSize(k.GetCurrentProcess(), ctypes.c_size_t(-1), ctypes.c_size_t(-1))
+    except Exception:
+        pass

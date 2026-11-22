@@ -11,13 +11,14 @@ context_usage, yolo, mute, emergency, error. Para I1: passar ``tts_rms`` (ex.:
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
-import numpy as np
+import math
+
 from PySide6.QtCore import QObject, Signal
 
 from . import tokens as T
-from .dsp import LevelSource
+from .conf import IslandConfig
 from .strings import S
 from .tokens import IslandState
 from .window import IslandWindow
@@ -25,6 +26,12 @@ from .window import IslandWindow
 _STATE = {"idle": IslandState.IDLE, "listening": IslandState.LISTENING, "transcribing": IslandState.TRANSCRIBING,
           "thinking": IslandState.THINKING, "acting": IslandState.ACTING, "speaking": IslandState.SPEAKING,
           "error": IslandState.ERROR}
+
+
+class LevelSource(Protocol):
+    """O que a Ilha consome: bandas 0..1 (sequencia de floats) e nivel 0..1 do microfone (ouvindo) ou do TTS (falando)."""
+
+    def read(self, speaking: bool, dt: float) -> tuple[Any, float]: ...
 
 
 class LevelFeed:
@@ -40,8 +47,9 @@ class LevelFeed:
         self._tts = 0.0
         self._tts_rms = tts_rms
         self._t = 0.0
-        self._shape = np.linspace(1.0, 0.35, bands).astype(np.float32)   # graves mais fortes que agudos
-        self._phase = (np.arange(bands) * 1.9).astype(np.float32)
+        self._shape = [1.0 - 0.65 * i / max(1, bands - 1) for i in range(bands)]   # graves mais fortes que agudos
+        self._phase = [i * 1.9 for i in range(bands)]
+        self._out = [0.0] * bands                                          # reaproveitado: sem alocacao por quadro
 
     def on_level(self, source: str, rms: float) -> None:     # chamado em thread do barramento
         if source == "tts":
@@ -49,15 +57,17 @@ class LevelFeed:
         else:
             self._mic = float(rms)
 
-    def read(self, speaking: bool, dt: float) -> tuple[np.ndarray, float]:
+    def read(self, speaking: bool, dt: float) -> tuple[list[float], float]:
         self._t += dt
         if speaking and self._tts_rms is not None:
             level = min(1.0, max(0.0, 20.0 * float(self._tts_rms())))   # RMS linear 0..1 -> escala visual
         else:
             level = self._tts if speaking else self._mic
-        mod = 0.65 + 0.35 * np.sin(self._t * 9.0 + self._phase)
-        bands = np.clip(level * self._shape * mod * 1.2, 0.0, 1.0).astype(np.float32)
-        return bands, float(level)
+        out, t9 = self._out, self._t * 9.0
+        for i in range(self._n):
+            v = level * self._shape[i] * (0.65 + 0.35 * math.sin(t9 + self._phase[i])) * 1.2
+            out[i] = 0.0 if v < 0.0 else 1.0 if v > 1.0 else v
+        return out, float(level)
 
 
 class IslandBridge(QObject):
@@ -129,13 +139,15 @@ class IslandBridge(QObject):
             remaining = d.get("remaining_s")                  # o nucleo (processo pai) manda os segundos restantes
             if remaining is None and d.get("on") and self._yolo_remaining:
                 remaining = self._yolo_remaining()
-            w.set_yolo(float(remaining) if d.get("on") and remaining is not None else (3600.0 if d.get("on") else None))
+            w.set_yolo(float(remaining) if d.get("on") and remaining is not None else (3600.0 if d.get("on") else None), flash=True)
         elif k == "mode":
             w.set_permission_mode(str(d.get("mode", "")))
         elif k == "mute":
-            w.set_mute(bool(d.get("muted")))
+            w.set_mute(bool(d.get("muted")), flash=True)
+        elif k == "config":
+            w.apply_config(IslandConfig.from_message(d))
         elif k == "emergency":
-            w.set_error(S.state_error + ": parada de emergência")
+            w.flash(S.emergency, error=True)
         elif k == "error":
             w.set_error(str(d.get("text", "")))
 

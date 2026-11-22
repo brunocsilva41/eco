@@ -6,7 +6,7 @@ from typing import Any
 __all__ = ["IslandWindow", "IslandSize", "IslandState", "LevelSource", "SpectrumAnalyzer", "SyntheticSource"]
 
 # Importacao PREGUICOSA: o nucleo (sem Qt) importa `ui.island.link`, e isso nao pode carregar o PySide6.
-_LAZY = {"IslandWindow": "window", "IslandSize": "tokens", "IslandState": "tokens", "LevelSource": "dsp",
+_LAZY = {"IslandWindow": "window", "IslandSize": "tokens", "IslandState": "tokens", "LevelSource": "bridge",
          "SpectrumAnalyzer": "dsp", "SyntheticSource": "dsp"}
 
 

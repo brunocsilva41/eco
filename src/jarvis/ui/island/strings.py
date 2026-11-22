@@ -39,6 +39,20 @@ class IslandStrings:
     level: str = "Nível"
     confirm_timeout: str = "Sem resposta em {s} s, vale Não"
     confirm_help: str = "Responda Sim ou Não"
+    pin: str = "Fixar na tela"
+    unpin: str = "Soltar (esconde sozinha)"
+    talk: str = "Falar"
+    yolo_btn: str = "YOLO"
+    yolo_hint: str = "Liga só pelo atalho ou nas Configurações"
+    flash_mic_on: str = "Microfone ligado"
+    flash_muted: str = "Microfone desligado"
+    flash_yolo_on: str = "YOLO ligado"
+    flash_yolo_off: str = "YOLO desligado"
+    emergency: str = "Parada de emergência"
+    ctx_short: str = "Contexto"
+    press_to_talk: str = "Pressione {key} para falar"
+    mute_short: str = "Mudo"
+    unmute_short: str = "Ligar"
 
 
 S = IslandStrings()

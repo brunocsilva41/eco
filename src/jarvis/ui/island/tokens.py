@@ -1,35 +1,37 @@
-"""Tokens da Ilha. Cores vem SEMPRE de ``jarvis.ui.theme`` (paleta escura: a Ilha e preta em
-qualquer tema do Windows); aqui ficam so a escolha da cor de destaque, as medidas e o layout dos
-tres tamanhos (grade de 4 px).
+"""Tokens da Ilha: cores (de ``jarvis.ui.theme``), medidas em grade de 4 px, tempos e o layout dos 3 tamanhos.
 
-COR DE DESTAQUE (ainda nao decidida pelo Bruno): troque em UM lugar, ``ACCENT_ATTR`` (outro campo
-da paleta, ex. "ok") ou ``ACCENT_OVERRIDE`` (uma cor fixa, ex. ciano). Todo o resto segue.
+COR DE DESTAQUE UNICA: ``ACCENT_ATTR``/``ACCENT_OVERRIDE`` (troque em UM lugar). Estados ok/aviso/erro vem da
+paleta escura do tema (contraste AA sobre o preto da Ilha, conferido em ``demo --capture``).
 
-Tabela de layout (px logicos; x/y a partir do canto superior esquerdo da Ilha):
+Layout (px logicos; origem = canto superior esquerdo do corpo da Ilha daquele tamanho):
 
-  COMPACTA 208x36 (repouso)   mic 20 @x12 | rotulo do estado @x40 | [cronometro so em ACTING] | 6 barras | ponto de status
-  MEDIA    380x64 (conversa)  mic 24 @x16 | rotulo (13 semibold) + cronometro | ultima frase (12) | 14 barras @x280
-  GRANDE   520x200 (expandida) cabecalho y12 (mic 24, estado, chips modo) | espectro 49 barras y44..72 |
-                               fala/resposta 3 linhas y78..129 (rolagem) | acao atual y134..150 |
-                               contexto + botoes y156..188 (Sim/Nao, Mudo, Parar, Configuracoes)
+  COMPACTA 208x36   icone de estado 20 @x12 | rotulo 12 semibold @x40 | [chip YOLO] [tempo em ACTING] | 6 barras
+  MEDIA    380x64   emblema 40 @x12,y12 (icone 24) | titulo 14 @y13 + linha 12 @y34 | [YOLO] tempo | 14 barras
+  GRANDE   600x248  cabecalho y16 (emblema 28, titulo 16, chips, alfinete) | espectro y56..84 (ou pergunta da
+                    confirmacao + contagem + Sim/Nao) | fala/resposta 3 linhas y92..146 | acao y154..174 |
+                    linha y188 | botoes y200..232 (Mudo, YOLO, Parar, Configuracoes; contexto a esquerda)
 """
 from __future__ import annotations
 
 from enum import Enum
 from typing import Final
 
-from ..theme import DARK, SPACE, Palette, dp
+from ..theme import DARK, Palette
 
 ACCENT_ATTR: Final = "accent_ink"          # campo de Palette usado como destaque (ambar do tema)
 ACCENT_OVERRIDE: Final[str | None] = None  # ex.: "#22D3EE" para ciano; None = usar o tema
 
-HOTKEY: Final = "F9"                       # mesmo atalho de falar (decisao do Bruno); registro global = fase I3
-HIDE_ON_FULLSCREEN: Final = True           # decisao do Bruno: esconder com jogo/video em tela cheia
-FULLSCREEN_POLL_MS: Final = 700
-FULLSCREEN_HIDE_HITS: Final = 2            # leituras seguidas em tela cheia para esconder (histerese)
-FULLSCREEN_SHOW_MISSES: Final = 3          # leituras seguidas sem tela cheia para voltar
+HOTKEY: Final = "F9"                       # so rotulo (o atalho real vem do nucleo na mensagem 'config')
+HIDE_ON_FULLSCREEN: Final = True
+FULLSCREEN_POLL_MS: Final = 700            # so enquanto a Ilha esta VISIVEL
+FULLSCREEN_HIDE_HITS: Final = 2
+FULLSCREEN_SHOW_MISSES: Final = 3
 
 PALETTE: Final[Palette] = DARK
+BG: Final = "#050608"                      # preto profundo
+EDGE: Final = "#FFFFFF"                    # borda sutil = branco a 9% (alpha em EDGE_ALPHA)
+EDGE_ALPHA: Final = 24
+SHADOW_ALPHA: Final = 150
 
 
 def accent() -> str:
@@ -54,57 +56,78 @@ class IslandState(Enum):
 
 
 SIZES: Final[dict[IslandSize, tuple[int, int]]] = {
-    IslandSize.COMPACT: (dp(208), dp(36)),
-    IslandSize.MEDIUM: (dp(380), dp(64)),
-    IslandSize.LARGE: (dp(520), dp(200)),
+    IslandSize.COMPACT: (208, 36),
+    IslandSize.MEDIUM: (380, 64),
+    IslandSize.LARGE: (600, 248),
 }
 CW, CH = SIZES[IslandSize.COMPACT]
 MW, MH = SIZES[IslandSize.MEDIUM]
 LW, LH = SIZES[IslandSize.LARGE]
-CORNER_MAX: Final = dp(28)                 # so os cantos de BAIXO sao redondos (colada na borda superior)
-TOP_MARGIN: Final = 0                      # colada ao topo do monitor principal
-PAD: Final = SPACE.lg                      # 16 (compacta usa SPACE.md = 12)
+CORNER_MAX: Final = 28                     # raio maximo dos cantos
+SHADOW_M: Final = 24                       # margem da janela para a sombra no modo flutuante
+PAD: Final = 16
 
 # compacta
-C_PAD: Final = SPACE.md
-C_MIC: Final = 20
+C_PAD: Final = 12
+C_ICON: Final = 20
 C_BARS: Final = 6
-C_DOT: Final = 6
 # media
-M_MIC: Final = 24
-M_TEXT_X: Final = 52
+M_BADGE: Final = 40
+M_ICON: Final = 24
+M_TEXT_X: Final = 64
 M_BARS: Final = 14
-M_WAVE_W: Final = 84
 M_WAVE_H: Final = 36
 # grande
-L_HEADER_Y: Final = 12
-L_WAVE_Y, L_WAVE_H = 44, 28
-L_TEXT_Y, L_TEXT_LINES, L_LINE_H = 78, 3, 17
-L_ACTION_Y: Final = 134
-L_ROW_Y: Final = 156                       # linha dos botoes (32 px de alto)
+L_HEAD_Y: Final = 16
+L_BADGE: Final = 28
+L_WAVE_Y, L_WAVE_H = 56, 28
+L_TEXT_Y, L_TEXT_LINES, L_LINE_H = 92, 3, 18
+L_ACTION_Y: Final = 154
+L_RULE_Y: Final = 188
+L_ROW_Y: Final = 200                       # linha dos botoes (32 px)
+L_BTN_H: Final = 32
+L_Q_Y: Final = 56                          # pergunta da confirmacao
+L_COUNT_Y: Final = 112                     # barra de contagem
+L_CONFIRM_Y: Final = 128                   # botoes Sim/Nao (36 px)
+L_CONFIRM_H: Final = 36
 L_BAR_W: Final = 6
 L_BAR_GAP: Final = 4
-L_BARS: Final = (LW - 2 * PAD + L_BAR_GAP) // (L_BAR_W + L_BAR_GAP)    # 49
+L_BARS: Final = (LW - 2 * PAD + L_BAR_GAP) // (L_BAR_W + L_BAR_GAP)    # 52
 
-BANDS: Final = 28                          # bandas do analisador
+BANDS: Final = 28
 
-RESIZE_MS: Final = 260                     # crescer/encolher (200 a 350 ms); 0 com "reduzir animacoes"
-OVERSHOOT: Final = 0.8                     # mola leve ao crescer
-FPS_VOICE: Final = 60                      # ondas ao vivo
-FPS: Final = 30                            # demais estados animados
+# tempos
+RESIZE_MS: Final = 280
+OVERSHOOT: Final = 0.7
+ENTER_MS: Final = 280                      # deslizar do topo + fade
+EXIT_MS: Final = 200
+FADE_MS: Final = 150                       # troca de texto/estado (fade + deslocamento de 3 px)
+HOVER_MS: Final = 110
+DWELL_MS: Final = 160                      # permanencia do mouse na zona do topo
+ZONE_H: Final = 3                          # altura da zona de revelacao (px fisicos logicos)
+POLL_HZ: Final = 10
+FLASH_S: Final = 2.5                       # YOLO / mudo / microfone
+ERROR_S: Final = 5.0
+BREATH_S: Final = 6.0                      # respiracao no repouso so nos primeiros segundos visiveis
+HIDE_DELAY_S: Final = 3.0
+FPS_FAST: Final = 60                       # voz, transicoes
+FPS: Final = 30                            # pensando/executando/transcrevendo/confirmando
+FPS_BREATH: Final = 15
 FPS_REDUCED: Final = 12                    # reduzir movimento: so as barras de nivel
-CONFIRM_TIMEOUT_S: Final = 15              # sem resposta = NAO
+CONFIRM_TIMEOUT_S: Final = 15
 
-ATTACK_S: Final = 0.015                    # ondas: subida quase imediata
-DECAY_S: Final = 0.075                     # queda lenta (60 a 90 ms)
+ATTACK_S: Final = 0.015
+DECAY_S: Final = 0.075
+PEAK_FALL: Final = 0.9                     # picos caem ~0,9 da escala por segundo
 
 VOICE_STATES: Final = (IslandState.LISTENING, IslandState.SPEAKING)
-ANIMATED_STATES: Final = (IslandState.LISTENING, IslandState.TRANSCRIBING, IslandState.THINKING,
-                          IslandState.ACTING, IslandState.SPEAKING, IslandState.CONFIRMING)
+ACTIVE_STATES: Final = (IslandState.LISTENING, IslandState.TRANSCRIBING, IslandState.THINKING,
+                        IslandState.ACTING, IslandState.SPEAKING)
+ANIMATED_STATES: Final = ACTIVE_STATES + (IslandState.CONFIRMING,)
 
 
 def state_color(state: IslandState) -> str:
-    """Destaque para voz (ouvir/falar); neutro para trabalho interno; atencao/erro com cor propria."""
+    """Destaque para voz (ouvir/falar); texto para trabalho interno; aviso/erro com cor propria."""
     if state in VOICE_STATES:
         return accent()
     if state is IslandState.CONFIRMING:

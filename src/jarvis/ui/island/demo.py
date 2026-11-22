@@ -15,11 +15,12 @@ from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
 from ..kit.platform import motion_enabled, set_motion_override
-from ..theme import TYPE, ThemeManager, contrast, make_font
+from ..theme import TYPE, contrast, make_font
+from . import glyphs
 from . import tokens as T
 from .bridge import IslandBridge, LevelFeed
+from .conf import IslandConfig
 from .dsp import SyntheticSource
-from .micicon import MicKind, draw_mic
 from .tokens import IslandSize, IslandState
 from .window import IslandWindow
 
@@ -79,9 +80,6 @@ class DemoCycle(QObject):
 
 def _make_app() -> QApplication:
     app = QApplication.instance() or QApplication(sys.argv)
-    mgr = ThemeManager.instance()
-    mgr.set_mode("dark")          # a Ilha e sempre escura (botoes do kit seguem o tema do app)
-    mgr.apply(app)
     return app  # type: ignore[return-value]
 
 
@@ -133,46 +131,51 @@ def _fixture(win: IslandWindow, state: IslandState) -> None:
 
 
 def icon_sheet(path: str) -> None:
-    """Folha de contato do icone do microfone: 4 estados x 16/20/24 px x 100%/200% (pixels reais) + zoom."""
+    """Folha de icones: todos os glifos em 16/20/24 px x 100%/200% (pixels reais) + vetor ampliado + estados."""
     pal = T.PALETTE
-    kinds = ((MicKind.REST, "Repouso", 0.0), (MicKind.LISTENING, "Ouvindo", 0.45),
-             (MicKind.MUTED, "Mudo", 0.0), (MicKind.ERROR, "Erro", 0.0))
-    cols = [(s, sc) for sc in (1, 2) for s in (16, 20, 24)]
-    cell, label_w, top, zoom = 64, 96, 36, 96
-    row_h = zoom + 16
-    width = label_w + len(cols) * cell + zoom + 32
-    height = top + len(kinds) * row_h + 8
-    img = QImage(width, height, QImage.Format.Format_ARGB32)
-    img.fill(QColor(pal.bg))
+    names = glyphs.sheet_names()
+    states = ("idle", "listening", "muted", "transcribing", "thinking", "acting", "speaking", "confirming", "error")
+    cell, top, zoom = 56, 36, 96
+    cols = [(s_, sc) for sc in (1, 2) for s_ in (16, 20, 24)]
+    rows = [("g", n) for n in names] + [("s", n) for n in states]
+    row_h = 60
+    width = 150 + len(cols) * cell + zoom + 24
+    img = QImage(width, top + len(rows) * row_h + 8, QImage.Format.Format_ARGB32)
+    img.fill(QColor(T.BG))
     p = QPainter(img)
-    center = int(Qt.AlignmentFlag.AlignCenter)
     p.setFont(make_font(TYPE.caption))
     p.setPen(QColor(pal.text_muted))
-    for ci, (s, sc) in enumerate(cols):
-        p.drawText(QRectF(label_w + ci * cell, 8, cell, 24), center, f"{s}px {sc * 100}%")
-    p.drawText(QRectF(label_w + len(cols) * cell, 8, zoom, 24), center, "vetor 96px")
-    for ri, (kind, name, phase) in enumerate(kinds):
+    center = int(Qt.AlignmentFlag.AlignCenter)
+    for ci, (s_, sc) in enumerate(cols):
+        p.drawText(QRectF(150 + ci * cell, 8, cell, 24), center, f"{s_}px {sc * 100}%")
+    p.drawText(QRectF(150 + len(cols) * cell, 8, zoom, 24), center, "vetor 48px")
+    for ri, (kind, name) in enumerate(rows):
         y = top + ri * row_h
-        color = pal.error if kind is MicKind.ERROR else (T.accent() if kind is MicKind.LISTENING else pal.text)
+        color = T.accent() if name in ("listening", "speaking") else (pal.error if name in ("error", "alert") else pal.text)
         p.setPen(QColor(pal.text))
         p.setFont(make_font(TYPE.small, TYPE.semibold))
-        p.drawText(QRectF(12, y, label_w - 12, row_h), int(Qt.AlignmentFlag.AlignVCenter), name)
-        for ci, (s, sc) in enumerate(cols):
-            phys = s * sc + 24
+        p.drawText(QRectF(12, y, 130, row_h), int(Qt.AlignmentFlag.AlignVCenter), ("estado: " if kind == "s" else "") + name)
+        def paint(q: QPainter, rect: QRectF) -> None:
+            if kind == "g":
+                glyphs.draw(q, name, rect, color, fill=name in ("pin", "bolt", "stop"))
+            else:
+                glyphs.draw_state(q, name, rect, color, 0.45)
+        for ci, (s_, sc) in enumerate(cols):
+            phys = s_ * sc + 16
             tile = QImage(phys, phys, QImage.Format.Format_ARGB32)
-            tile.fill(QColor(pal.bg))
+            tile.fill(QColor(T.BG))
             tp = QPainter(tile)
-            tp.translate(12, 12)
+            tp.translate(8, 8)
             tp.scale(sc, sc)
-            draw_mic(tp, QRectF(0, 0, s, s), kind, color, bg=pal.bg, phase=phase)
+            paint(tp, QRectF(0, 0, s_, s_))
             tp.end()
-            p.drawImage(label_w + ci * cell + (cell - phys) // 2, y + (row_h - phys) // 2, tile)
-        z = QImage(zoom, zoom, QImage.Format.Format_ARGB32)
-        z.fill(QColor(pal.bg))
+            p.drawImage(150 + ci * cell + (cell - phys) // 2, y + (row_h - phys) // 2, tile)
+        z = QImage(zoom, row_h - 4, QImage.Format.Format_ARGB32)
+        z.fill(QColor(T.BG))
         zp = QPainter(z)
-        draw_mic(zp, QRectF(10, 10, zoom - 20, zoom - 20), kind, color, bg=pal.bg, phase=phase)
+        paint(zp, QRectF((zoom - 48) / 2, 4, 48, 48))
         zp.end()
-        p.drawImage(label_w + len(cols) * cell, y, z)
+        p.drawImage(150 + len(cols) * cell, y, z)
     p.end()
     img.save(path)
 
@@ -195,7 +198,10 @@ def transition_gif(win: IslandWindow, path: str) -> bool:
         if grow:
             curve.setOvershoot(T.OVERSHOOT)
         for i in range(17):
-            win._morph(T.SIZES[a], T.SIZES[b], curve.valueForProgress(i / 16))
+            v = curve.valueForProgress(i / 16)
+            win._cur = (T.SIZES[a][0] + (T.SIZES[b][0] - T.SIZES[a][0]) * v, T.SIZES[a][1] + (T.SIZES[b][1] - T.SIZES[a][1]) * v)
+            win._apply_geometry()
+            win.update()
             _wait(30)
             rgb = _compose(win.grab(), width=T.LW + 48, height=T.LH + 28).convertToFormat(QImage.Format.Format_RGB888)
             frames.append(Image.frombytes("RGB", (rgb.width(), rgb.height()), bytes(rgb.constBits()),
@@ -205,37 +211,69 @@ def transition_gif(win: IslandWindow, path: str) -> bool:
     return True
 
 
+def _visible_cfg(**kw) -> IslandConfig:
+    c = IslandConfig(autohide=False)
+    for k, v in kw.items():
+        setattr(c, k, v)
+    return c
+
+
 def capture_all(outdir: str) -> list[str]:
+    """PNG por modo (acoplada/flutuante) x tamanho x estado, botoes em hover/pressionado/foco, keycaps."""
     os.makedirs(outdir, exist_ok=True)
     app = _make_app()
     scale = round(app.primaryScreen().devicePixelRatio())
     suffix = f"_{scale * 100}pct"
-    win = IslandWindow(SyntheticSource())
-    win.show()
+    win = IslandWindow(SyntheticSource(), cfg=_visible_cfg())
+    win.start()
+    _wait(500)
     made: list[str] = []
 
-    def shoot(name: str, size: IslandSize, state: IslandState, settle_ms: int = 900) -> None:
+    def shoot(name: str, size: IslandSize, state: IslandState, settle_ms: int = 700) -> None:
         win.pin_size(size)
         _fixture(win, state)
         _wait(settle_ms)
         path = os.path.join(outdir, f"ilha_{name}{suffix}.png")
-        _compose(win.grab()).save(path)
+        _compose(win.grab(), pad_x=48, pad_b=48).save(path)
         made.append(path)
 
-    for size in IslandSize:
-        for st in IslandState:
-            shoot(f"{size.value}_{st.name.lower()}", size, st)
-    win.set_yolo(24 * 60 + 59)                           # modos no cabecalho grande: YOLO + mudo
+    for mode in ("docked", "floating"):
+        win.apply_config(_visible_cfg(mode=mode))
+        for size in IslandSize:
+            for st in IslandState:
+                shoot(f"{'acoplada' if mode == 'docked' else 'flutuante'}_{size.value}_{st.name.lower()}", size, st)
+    win.apply_config(_visible_cfg(mode="floating"))
+    win.set_yolo(24 * 60 + 59)
     win.set_mute(True)
-    shoot("grande_modos_yolo_mudo", IslandSize.LARGE, IslandState.THINKING)
+    shoot("flutuante_grande_modos_yolo_mudo", IslandSize.LARGE, IslandState.THINKING)
     win.set_yolo(None)
     win.set_mute(False)
+    # botoes: hover / pressionado / foco de teclado
+    win.apply_config(_visible_cfg(mode="docked"))
+    win.pin_size(IslandSize.LARGE)
+    _fixture(win, IslandState.CONFIRMING)
+    _wait(700)
+    for tag, btn, kind in (("hover_sim", win.b_yes, "hover"), ("pressionado_nao", win.b_no, "press"),
+                           ("hover_parar", win.b_stop, "hover"), ("foco_mudo", win.b_mute, "focus")):
+        win._hover_btn = btn if kind == "hover" else None
+        btn.press = kind == "press"
+        win._focus_btn = btn if kind == "focus" else None
+        for b in win.btns:
+            b.focus = b is win._focus_btn
+            b.hover = 1.0 if b is win._hover_btn else 0.0
+        win.update()
+        _wait(300)
+        path = os.path.join(outdir, f"ilha_botao_{tag}{suffix}.png")
+        _compose(win.grab(), pad_x=48, pad_b=48).save(path)
+        made.append(path)
+        btn.press = False
+    win._hover_btn = win._focus_btn = None
     set_motion_override(False)                           # versao "reduzir movimento"
     for st in (IslandState.LISTENING, IslandState.THINKING):
         shoot(f"reduzido_grande_{st.name.lower()}", IslandSize.LARGE, st, 600)
     set_motion_override(None)
     if scale == 1:
-        icon_sheet(os.path.join(outdir, "ilha_icone_microfone_folha.png"))
+        icon_sheet(os.path.join(outdir, "ilha_icones_folha.png"))
         made.append("folha de icones")
         if transition_gif(win, os.path.join(outdir, "ilha_transicao_compacta_media_grande.gif")):
             made.append("gif")
@@ -254,8 +292,8 @@ def measure(seconds: float) -> int:
     feed = LevelFeed()
     feed.on_level("mic", 0.5)
     feed.on_level("tts", 0.5)
-    win = IslandWindow(synth)
-    win.show()
+    win = IslandWindow(synth, cfg=_visible_cfg())
+    win.start()
     phases = (("compacta, em repouso", IslandSize.COMPACT, IslandState.IDLE, synth),
               ("media, pensando", IslandSize.MEDIUM, IslandState.THINKING, synth),
               ("media, ouvindo (sintetico)", IslandSize.MEDIUM, IslandState.LISTENING, synth),
@@ -291,7 +329,7 @@ def measure(seconds: float) -> int:
 
 # ------------------------------------------------------------------ demo ao vivo
 def main_island_demo(capture: str | None = None, seconds: float = 0.0, measure_s: float = 0.0,
-                     reduce_motion: bool = False) -> int:
+                     reduce_motion: bool = False, floating: bool = False, autohide: bool = False) -> int:
     if reduce_motion:
         set_motion_override(False)
     if measure_s > 0:
@@ -304,8 +342,8 @@ def main_island_demo(capture: str | None = None, seconds: float = 0.0, measure_s
     from ...core.events import EventBus
 
     app = _make_app()
-    win = IslandWindow()
-    win.show()
+    win = IslandWindow(cfg=_visible_cfg(mode="floating" if floating else "docked", autohide=autohide))
+    win.start()
     bus = EventBus()
     bridge = IslandBridge(win, bus, feed=SyntheticSource())  # type: ignore[arg-type]
     bus.publish("mute", muted=False)
