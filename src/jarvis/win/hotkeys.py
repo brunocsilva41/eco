@@ -19,7 +19,9 @@ from .keys import MOD_NOREPEAT, Combo, parse_combo
 
 log = logging.getLogger(__name__)
 
-_user32 = ctypes.WinDLL("user32", use_last_error=True)
+from .native import load_dll  # noqa: E402
+
+_user32 = load_dll("user32")
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 _user32.RegisterHotKey.argtypes = [wt.HWND, ctypes.c_int, wt.UINT, wt.UINT]
 _user32.UnregisterHotKey.argtypes = [wt.HWND, ctypes.c_int]

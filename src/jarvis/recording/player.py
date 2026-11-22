@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from ..audio.playback import PlaybackError as _AudioPlaybackError
 from ..audio.devices import AudioError, DeviceError, load_sounddevice, resolve_device, stream_extra_settings
 from ..config import AudioCfg
 from .wavio import SAMPLE_RATE
@@ -23,8 +24,7 @@ WATCH_INTERVAL_S = 0.03
 TAIL_S = 0.15                        # folga para o buffer do driver esvaziar antes de fechar
 
 
-class PlaybackError(AudioError):
-    """Não foi possível tocar (saída ausente, ocupada...). Mensagem pronta para o usuário."""
+PlaybackError = _AudioPlaybackError   # uma só classe de erro de reprodução (N-19): quem captura um captura o outro
 
 
 class Player:

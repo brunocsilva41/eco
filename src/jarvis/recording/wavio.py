@@ -17,7 +17,7 @@ from numpy.typing import NDArray
 
 log = logging.getLogger(__name__)
 
-SAMPLE_RATE = 16000
+from ..audio.constants import SAMPLE_RATE  # noqa: E402  (fonte unica; N-19)
 CHANNELS = 1
 SAMPLE_WIDTH = 2                    # bytes (PCM16)
 _INT16_MAX = 32767.0

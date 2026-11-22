@@ -87,3 +87,8 @@ Projetos prontos para estudar (não adotar às cegas; só lemos resumos): Jarvis
 
 ## 9. Fontes principais
 llama.cpp (GitHub), discussão de benchmark RX 580 (ggml-org/llama.cpp #23109), guia RX 580 Vulkan (aivisionslab), Qwen3-VL GGUF (Hugging Face), Windows-Use (Jeomon), UI-TARS, Holo2-4B, Piper pt_BR faber, openWakeWord, whisper.cpp Vulkan Windows (DomoticX).
+
+## Estado em 2026-11-22
+- Núcleo auditado 2×; primeira execução real do `run --text` feita (bugs de partida, cache de prompt e alucinação de hora/janela corrigidos; atalho direto para hora/janela).
+- UI: LevelMeter corrigido; itens baixos da Auditoria-2 (N-17, N-19, clique por coordenadas verificado) tratados.
+- Próximo: (b) ctx 12288 (medir), depois Ilha I0-I5 com o OK do Bruno; WER real após `Jarvis.cmd record`. Detalhes em Shared\jarvis\STATUS.md.

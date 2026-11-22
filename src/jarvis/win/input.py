@@ -109,7 +109,9 @@ _EXPECTED_SIZE = 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28
 if ctypes.sizeof(INPUT) != _EXPECTED_SIZE:  # pragma: no cover - proteção contra struct errada
     raise ImportError(f"INPUT com tamanho {ctypes.sizeof(INPUT)}, esperado {_EXPECTED_SIZE}")
 
-_user32 = ctypes.WinDLL("user32", use_last_error=True)
+from .native import load_dll  # noqa: E402
+
+_user32 = load_dll("user32")
 _user32.SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
 _user32.SendInput.restype = wintypes.UINT
 _user32.GetSystemMetrics.argtypes = (ctypes.c_int,)

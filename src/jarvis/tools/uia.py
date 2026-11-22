@@ -143,6 +143,23 @@ def _collect(cancel: CancelToken, limit: int, expect_hwnd: int | None = None) ->
     return entries, None
 
 
+def _hit_is_control(control: Any, x: int, y: int) -> bool:
+    """O elemento REAL sob o ponto (ControlFromPoint) é o controle alvo ou um descendente dele?
+    Se outra janela/menu/tooltip cobre o ponto, o clique por coordenadas acertaria o alvo errado."""
+    try:
+        want = control.GetRuntimeId()
+        hit = auto.ControlFromPoint(x, y)
+        for _ in range(8):
+            if hit is None:
+                return False
+            if hit.GetRuntimeId() == want:
+                return True
+            hit = hit.GetParentControl()
+    except Exception:  # noqa: BLE001 - sem prova de que o ponto é o alvo, não clica
+        log.warning("não consegui verificar o elemento sob o ponto do clique", exc_info=True)
+    return False
+
+
 def _invoke(control: Any, scan_hwnd: int) -> str:
     """Aciona o controle pelo padrão mais adequado; cai para o clique físico só se necessário.
 
@@ -168,6 +185,8 @@ def _invoke(control: Any, scan_hwnd: int) -> str:
     bounds = win.window_rect(scan_hwnd)
     if bounds is None or not (bounds[0] <= x < bounds[2] and bounds[1] <= y < bounds[3]):
         raise _Aborted("O controle ficou fora da janela; não cliquei.")
+    if not _hit_is_control(control, x, y):
+        raise _Aborted("Há outra coisa na frente do controle; não cliquei.")
     win_input.click(x, y)                            # SendInput absoluto sobre a tela virtual (multi-monitor)
     return "Click"
 

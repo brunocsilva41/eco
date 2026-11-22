@@ -116,8 +116,17 @@ class LevelMeter(QWidget):
             active = name == band
             g.setFont(make_font(TYPE.caption, TYPE.semibold if active else TYPE.regular))
             g.setPen(QColor(p.text if active else p.text_muted))
-            g.drawText(QRectF(x0, top + h + SPACE.xs, x1 - x0, SPACE.lg), int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-                       self._band_name(name))
+            # o nome nunca e cortado: a faixa 'saturado' e estreita (10% da escala), entao o rotulo dela alinha pela
+            # direita e cresce para a esquerda; os demais alinham pela esquerda e podem passar da propria faixa
+            label = self._band_name(name)
+            tw = float(QFontMetrics(g.font()).horizontalAdvance(label)) + SPACE.xs
+            if i == 2:
+                label_rect = QRectF(max(0.0, w - max(tw, x1 - x0)), top + h + SPACE.xs, max(tw, x1 - x0), SPACE.lg)
+                align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            else:
+                label_rect = QRectF(x0, top + h + SPACE.xs, max(tw, x1 - x0), SPACE.lg)
+                align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            g.drawText(label_rect, int(align), label)
         # marcador de pico
         if self._peak > self._floor + 1:
             px_ = self._x(self._peak, 0, w)

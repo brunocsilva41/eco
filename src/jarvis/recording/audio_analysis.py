@@ -21,7 +21,7 @@ from typing import Literal
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-SAMPLE_RATE = 16000
+from ..audio.constants import SAMPLE_RATE  # noqa: E402  (fonte unica; N-19)
 FLOOR_DBFS = -120.0
 CLIP_LEVEL = 0.999
 CLIP_RATE_SATURATED = 0.001

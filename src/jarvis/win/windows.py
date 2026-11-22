@@ -44,9 +44,11 @@ _PYTHON_EXE: Final = re.compile(r"^pythonw?\d*(\.\d+)*\.exe$")
 _IGNORED_CLASSES: Final = frozenset({"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"})
 _FOCUS_WAIT_S: Final = 0.5
 
-_user32 = ctypes.WinDLL("user32", use_last_error=True)
-_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
+from .native import load_dll  # noqa: E402
+
+_user32 = load_dll("user32")
+_kernel32 = load_dll("kernel32")
+_dwmapi = load_dll("dwmapi")
 
 _WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
