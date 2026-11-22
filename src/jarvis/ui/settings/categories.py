@@ -34,7 +34,8 @@ CATEGORIES: tuple[Category, ...] = (
         _S("appearance", custom="theme"),
         _S("talk", ("safety.talk_key", "safety.talk_mode", "safety.mute_hotkey")),
         _S("confirm", ("safety.confirm_yes_hotkey", "safety.confirm_no_hotkey", "safety.confirm_timeout_s")),
-        _S("island", ("ui.island_enabled",)),
+        _S("island", ("ui.island_enabled", "ui.island_mode", "ui.island_float_gap_px", "ui.island_autohide",
+                      "ui.island_hide_delay_s", "ui.island_hover_reveal")),
         _S("limits", ("safety.max_agent_steps", "safety.tool_timeout_s"), 2),
     )),
     Category("voice", "listen", (schema.G_VOICE,), (
@@ -53,6 +54,7 @@ CATEGORIES: tuple[Category, ...] = (
     Category("llm", "brain", (schema.G_LLM,), (
         _S("llm_model", ("llm.model", "llm.mmproj", "llm.reasoning_off")),
         _S("llm_work", ("llm.ctx", "llm.ngl", "llm.temperature", "llm.max_tokens")),
+        _S("llm_power", ("llm.sleep_idle_s", "llm.mmap"), 2),
         _S("llm_net", ("llm.port", "llm.host", "llm.request_timeout_s", "llm.startup_timeout_s"), 2),
         _S("vision", ("vision.max_side_px", "vision.jpeg_quality"), 2),
     )),

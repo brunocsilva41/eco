@@ -81,6 +81,8 @@ class LlmCfg:
     port: int = 8089
     ctx: int = 8192
     ngl: int = 99
+    sleep_idle_s: int = 600                          # ocioso por este tempo, o servidor DESCARREGA o modelo (libera ~5 GB de VRAM e ~2,5 GB de RAM; volta em ~6 s no próximo pedido). 0 = nunca
+    mmap: bool = False                               # False = carrega sem mmap (RAM do servidor cai de ~2,9 GB para ~0,5 GB com tudo na GPU); True = mmap do llama.cpp
     startup_timeout_s: float = 120.0
     request_timeout_s: float = 90.0
     max_tokens: int = 220
@@ -180,6 +182,11 @@ class LogsCfg:
 @dataclass(frozen=True)
 class UiCfg:
     island_enabled: bool = True                      # mostra a Ilha (janela no topo da tela) enquanto o Jarvis roda
+    island_mode: str = "docked"                      # "docked" (colada ao topo) | "floating" (pílula afastada do topo, com sombra)
+    island_float_gap_px: int = 10                    # afastamento do topo no modo flutuante (0..64)
+    island_autohide: bool = True                     # escondida por padrão: aparece com o mouse no topo, F9/ouvindo, confirmação, erro
+    island_hide_delay_s: float = 3.0                 # some sozinha depois deste tempo em repouso
+    island_hover_reveal: bool = True                 # mouse no centro do topo da tela revela a Ilha
 
 
 @dataclass(frozen=True)
@@ -315,6 +322,8 @@ def validate(cfg: Config) -> list[str]:
         p.append("llm.ctx fora de 512..32768")
     if not 0 <= l.ngl <= 999:
         p.append("llm.ngl fora de 0..999")
+    if l.sleep_idle_s != 0 and not 30 <= l.sleep_idle_s <= 86400:
+        p.append("llm.sleep_idle_s deve ser 0 (nunca) ou entre 30 e 86400 segundos")
     if not 0 <= l.temperature <= 2:
         p.append("llm.temperature fora de 0..2")
     if not 16 <= l.max_tokens <= 4096:
@@ -375,6 +384,13 @@ def validate(cfg: Config) -> list[str]:
         p.append("safety.permission_mode deve ser 'balanced' ou 'strict'")
     if not 1 <= s.yolo_minutes <= 240:
         p.append("safety.yolo_minutes fora de 1..240")
+    u = cfg.ui
+    if u.island_mode not in ("docked", "floating"):
+        p.append("ui.island_mode deve ser 'docked' ou 'floating'")
+    if not 0 <= u.island_float_gap_px <= 64:
+        p.append("ui.island_float_gap_px fora de 0..64")
+    if not 0.5 <= u.island_hide_delay_s <= 60:
+        p.append("ui.island_hide_delay_s fora de 0.5..60")
     if s.typing_confirm not in ("always", "untrusted_or_multiline"):
         p.append("safety.typing_confirm deve ser 'always' ou 'untrusted_or_multiline'")
     for name in s.typing_allowed_processes:

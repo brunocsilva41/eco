@@ -138,11 +138,19 @@ class JarvisApp:
             link = IslandLink(self.bus, root=cfgmod.ROOT, log_dir=self.cfg.paths.logs, on_command=self._on_island_command,
                               tts_rms=lambda: getattr(getattr(p.speaker, "_session", None), "_last_rms", 0.0),
                               speaking=lambda: self.state.speaking, yolo_remaining=YOLO.remaining_s,
-                              permission_mode=lambda: self.cfg.safety.permission_mode)
+                              permission_mode=lambda: self.cfg.safety.permission_mode, ui_config=self._island_config)
             link.start()
             self._island = link
         except Exception:  # noqa: BLE001
             log.exception("não consegui iniciar a Ilha (o Jarvis continua sem ela)")
+
+    def _island_config(self) -> dict:
+        """Aparência e comportamento da Ilha + atalhos REAIS (para as dicas nos botões); reenviado a cada config aplicada."""
+        u, s = self.cfg.ui, self.cfg.safety
+        return {"mode": u.island_mode, "float_gap_px": u.island_float_gap_px, "autohide": u.island_autohide,
+                "hide_delay_s": u.island_hide_delay_s, "hover_reveal": u.island_hover_reveal,
+                "hotkeys": {"yes": s.confirm_yes_hotkey, "no": s.confirm_no_hotkey, "stop": s.emergency_hotkey,
+                            "mute": s.mute_hotkey, "talk": s.talk_key, "yolo": s.yolo_hotkey}}
 
     def _on_island_command(self, cmd: str, msg: dict) -> None:
         """Botões da Ilha (thread de leitura do pipe). Mesmas rotas das teclas; a Ilha só pede, o núcleo decide."""
@@ -161,7 +169,7 @@ class JarvisApp:
             now = time.monotonic()
             if now - self._settings_opened_at > 3.0:                    # cliques repetidos não abrem várias janelas
                 self._settings_opened_at = now
-                self.bus.publish("open_settings", section="general")
+                self.bus.publish("open_settings", section="permissions" if msg.get("section") == "permissions" else "general")
 
     def _build(self, cfg: Config) -> None:
         with ExitStack() as stack:                                      # se um construtor falhar, o que já abriu é fechado
@@ -197,6 +205,7 @@ class JarvisApp:
             confirmer.set_voice_listener(self._listen_for_answer, available=lambda: not self._muted)
             confirmer.set_speaker(lambda text, cancel: voice.say_and_wait(text, cancel))
             self.bus.subscribe(lambda ev: agent.request_compaction(), kind="compact_request")
+            self.bus.subscribe(lambda ev: self._maybe_prewake(agent) if ev.data.get("state") == "listening" else None, kind="state")
 
             errors = self._load_models(server, stt, tts, mic)
             if errors:
@@ -205,6 +214,20 @@ class JarvisApp:
             threading.Thread(target=self._warmup, args=(agent,), name="jarvis-warmup", daemon=True).start()
             self._start_hotkeys()
             stack.pop_all()                                             # tudo certo: o shutdown() assume a limpeza
+
+    def _maybe_prewake(self, agent: Agent) -> None:
+        """Entrou em 'Ouvindo' (F9 ou palavra de ativação): acorda o modelo em segundo plano. No máximo 1× a cada 20 s."""
+        now = time.monotonic()
+        if now - getattr(self, "_last_prewake", 0.0) < 20.0:
+            return
+        self._last_prewake = now
+
+        def run() -> None:
+            try:
+                log.debug("pré-aquecimento do modelo: %.1f s", agent.prewake(CancelToken()))
+            except Exception:  # noqa: BLE001 - só otimização
+                log.debug("pré-aquecimento falhou (ignorado)", exc_info=True)
+        threading.Thread(target=run, name="jarvis-prewake", daemon=True).start()
 
     def _warmup(self, agent: Agent) -> None:
         """Aquece o cache do servidor com o prompt fixo (o 1º pedido real não espera o processamento dele)."""

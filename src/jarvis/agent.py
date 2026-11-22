@@ -172,6 +172,14 @@ class Agent:
         routing.reset()
         return time.monotonic() - t0
 
+    def prewake(self, cancel: CancelToken) -> float:
+        """Acorda o modelo (se o servidor dormiu por inatividade) com um pedido mínimo, enquanto o Bruno ainda fala."""
+        t0 = time.monotonic()
+        names, _ = routing.route("Olá")
+        self._llm.chat([{"role": "system", "content": self._system_prompt()}, {"role": "user", "content": "Olá"}],
+                       cancel, tools=self._registry.openai_tools(only=names), max_tokens=1)
+        return time.monotonic() - t0
+
     def handle(self, user_text: str, cancel: CancelToken, on_sentence: Callable[[str], None]) -> AgentResult:
         """Processa um pedido. Levanta Cancelled se cancelado; qualquer outra falha vira fala (nunca silêncio)."""
         started = time.monotonic()

@@ -144,6 +144,10 @@ class LlamaServer:
                "--host", c.host, "--port", str(c.port), "--jinja", "--api-key-file", str(self._key_file),
                "-np", "1", "--no-webui", "-cram", "1024"]      # chave por ARQUIVO (a linha de comando é visível a outros processos)
         #                                                       1 slot; sem UI web; cache de prompt limitado (RAM é curta)
+        if not c.mmap:
+            cmd += ["-lm", "none"]                      # sem mmap: com tudo na GPU a RAM do servidor cai ~2,3 GB (medido)
+        if c.sleep_idle_s > 0:
+            cmd += ["--sleep-idle-seconds", str(c.sleep_idle_s)]   # ocioso: descarrega modelo e KV (VRAM/RAM livres); acorda no 1º pedido
         if c.mmproj is not None:
             cmd += ["--mmproj", str(c.mmproj)]
         if c.reasoning_off:

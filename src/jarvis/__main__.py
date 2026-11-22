@@ -65,6 +65,8 @@ def _stdin_reader(app, stop: threading.Event) -> None:
             return
         if line:
             app.submit_text(line)
+    if not stop.is_set():                    # fim da entrada (terminal fechado / processo pai morreu): não deixa o Jarvis órfão segurando GPU e RAM
+        app.request_stop()
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
