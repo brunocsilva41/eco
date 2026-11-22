@@ -126,7 +126,7 @@ class JarvisApp:
                                                               control.config_mtime(cfgmod.CONFIG_FILE), self._pending_restart))
         log.info("Jarvis pronto. %s para falar; %s para parar tudo.",
                  cfg.safety.talk_key.upper(), cfg.safety.emergency_hotkey.upper())
-        if cfg.ui.island_enabled:
+        if cfg.ui.island_enabled or cfg.ui.tray_enabled:
             self._start_island()
 
     def _start_island(self) -> None:
@@ -139,7 +139,8 @@ class JarvisApp:
             link = IslandLink(self.bus, root=cfgmod.ROOT, log_dir=self.cfg.paths.logs, on_command=self._on_island_command,
                               tts_rms=lambda: getattr(getattr(p.speaker, "_session", None), "_last_rms", 0.0),
                               speaking=lambda: self.state.speaking, yolo_remaining=YOLO.remaining_s,
-                              permission_mode=lambda: self.cfg.safety.permission_mode, ui_config=self._island_config)
+                              permission_mode=lambda: self.cfg.safety.permission_mode, ui_config=self._island_config,
+                              tray_only=not self.cfg.ui.island_enabled)
             link.start()
             self._island = link
         except Exception:  # noqa: BLE001
@@ -151,6 +152,7 @@ class JarvisApp:
         return {"mode": u.island_mode, "float_gap_px": u.island_float_gap_px, "autohide": u.island_autohide,
                 "hide_delay_s": u.island_hide_delay_s, "hover_reveal": u.island_hover_reveal,
                 "listen_mode": "open" if self._listen_open else "push", "pinned": getattr(u, "island_pinned", False),
+                "opacity": getattr(u, "island_opacity", 0.92), "side_y_pct": getattr(u, "island_side_y_pct", 50),
                 "hotkeys": {"open_listen": s.open_listen_hotkey, "yes": s.confirm_yes_hotkey, "no": s.confirm_no_hotkey, "stop": s.emergency_hotkey,
                             "mute": s.mute_hotkey, "talk": s.talk_key, "yolo": s.yolo_hotkey}}
 

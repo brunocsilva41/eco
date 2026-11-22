@@ -5,6 +5,18 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 ## [Não lançado]
 - Licença do projeto ainda pendente de definição.
 
+## [0.1.2] - 2026-11-22
+### Corrigido
+- **Parava de responder (ouvia e voltava ao repouso):** o áudio podia chegar sem sinal (microfone preso depois de a máquina travar). Agora o Jarvis detecta fala sem som, reabre o microfone sozinho depois de 2 ocorrências e avisa; o log registra o pico do áudio.
+- **Calculadora e apps da Microsoft Store:** `abrir_app` agora coloca a janela em foco; `digitar_texto` e `apertar_atalho` aceitam o parâmetro `janela` (trazem o app para a frente antes) e a Calculadora entra nos destinos permitidos (`safety.typing_allowed_titles`). Provado: abrir, digitar `12+7=` e o visor mostra 19.
+- **Configurações abriam várias janelas e demoravam:** abre em ~1 s (páginas montadas sob demanda), com trava de instância única entre processos e sem repetir o clique.
+### Adicionado
+- **Controle de janelas:** `janela_acao` (minimizar, maximizar, restaurar, metade esquerda/direita, centralizar) e `ver_tela` com `alvo="janela"` (olha só o app em foco).
+- **Escuta aberta:** o Jarvis ouve sozinho, sem apertar tecla (`safety.listen_mode = open`, atalho `Ctrl+Alt+L`, botão na Ilha e item na bandeja).
+- **Ícone na bandeja do sistema** com menu: Abrir Configurações, Ilha do Jarvis (tamanho, posição, fixar), Escuta contínua, Silenciar microfone, Verificar atualizações…, Sobre e Encerrar o Jarvis.
+- **Verificador de atualizações** (consulta a última release publicada).
+- **Ilha:** alfinete corrigido (fixada nunca some), transparência (vidro) ajustável e dock lateral vertical (direita/esquerda).
+
 ## [0.1.1] - 2026-11-22
 ### Corrigido
 - **Assistente de instalação não encontrava modelos já existentes no PC.** Agora ele procura sozinho (nome e tamanho, depois confere o SHA-256) em pastas comuns, instalações anteriores, cache do Hugging Face, LM Studio e Ollama; botão «Procurar no computador inteiro» para varrer os discos. Os arquivos conferidos são ligados à instalação por link físico (sem ocupar espaço extra) ou copiados quando estão em outro disco. `Jarvis.cmd setup --scan [--deep] [--use-found]` faz o mesmo sem janela; `--fetch` também aproveita o que já existe antes de baixar.

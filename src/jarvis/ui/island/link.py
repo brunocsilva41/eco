@@ -100,7 +100,8 @@ class IslandLink:
                  on_command: Callable[[str, dict[str, Any]], None],
                  tts_rms: Callable[[], float], speaking: Callable[[], bool],
                  yolo_remaining: Callable[[], float], permission_mode: Callable[[], str],
-                 ui_config: Callable[[], dict[str, Any]] | None = None) -> None:
+                 ui_config: Callable[[], dict[str, Any]] | None = None, tray_only: bool = False) -> None:
+        self._tray_only = tray_only                    # só o ícone da bandeja (sem a janela da Ilha)
         self._bus = bus
         self._root = Path(root)
         self._log_dir = Path(log_dir)
@@ -281,7 +282,8 @@ class IslandLink:
         except OSError:
             err = subprocess.DEVNULL                        # type: ignore[assignment]
         try:
-            return subprocess.Popen([sys.executable, "-I", "-X", "utf8", "-c", code, "island", "--child"],
+            return subprocess.Popen([sys.executable, "-I", "-X", "utf8", "-c", code, "island", "--child",
+                                     *(["--tray-only"] if self._tray_only else [])],
                                     cwd=str(self._root), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err,
                                     creationflags=_CREATE_NO_WINDOW, close_fds=True)
         finally:
