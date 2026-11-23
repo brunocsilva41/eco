@@ -8,7 +8,7 @@ Tudo roda na máquina dele, sem depender de nuvem para o uso normal.
 - CPU: Intel Xeon E5-2650 v4, 12 núcleos / 24 threads (não é o 2640 v3 que o usuário citou).
 - RAM: 16 GB DDR4.
 - GPU: AMD Radeon RX 580 **2048SP**, 8 GB. Driver 31.0.21924.61 (antigo; atualizar o Adrenalin antes de medir).
-- SO: Windows 10 Pro 19045. Disco F: com ~46 GB livres. Pasta do projeto: `F:\Eco`.
+- SO: Windows 10 Pro 19045. Pasta do projeto: a raiz do repositório.
 - OpenVINO NÃO serve: é da Intel e só vimos suporte a GPU Intel. Caminho da GPU AMD = **llama.cpp com Vulkan**.
 - ROCm no Windows para Polaris: não usar.
 
@@ -55,7 +55,7 @@ Projetos prontos para estudar (não adotar às cegas; só lemos resumos): Jarvis
 - Nada de senhas na tela do modelo nem em prompts.
 
 ## 7. Fases e critérios de pronto
-**Fase 0 — Base (pasta e ambiente).** Estrutura em `F:\Eco` (`bin`, `models`, `src`, `logs`, `docs`, `tests`), Python venv, git local. Atualizar driver AMD. Pronto = `vulkaninfo` mostra a RX 580.
+**Fase 0 — Base (pasta e ambiente).** Estrutura em `a raiz do projeto` (`bin`, `models`, `src`, `logs`, `docs`, `tests`), Python venv, git local. Atualizar driver AMD. Pronto = `vulkaninfo` mostra a RX 580.
 **Fase 1 — Cérebro na GPU.** llama.cpp Vulkan + Qwen3-VL 4B Q4_K_M. Pronto = `llama-bench` registrado (pp e tg), resposta em pt-BR via API local, uso de VRAM anotado. Comparar com Gemma 3 4B e com um 8B Q4.
 **Fase 2 — Voz.** faster-whisper + Piper + VAD, com tecla para falar. Pronto = fala->texto->fala em menos de ~5 s para frases curtas; medir WER em 20 frases do usuário.
 **Fases I0–I5 — Ilha do Eco (interface "Dynamic Island").** Entram DEPOIS da Fase 2 (voz). Spec completa e decisões do usuário em `docs/ILHA-SPEC.md` (v0.2). Itens [P]/[R] precisam de prova na máquina dele.

@@ -51,9 +51,9 @@ Contrato `PageLike` da janela. Os campos `updates.*` do schema são desenhados p
 estado, ações e token. `UpdateSession(cfg_loader, quit_cb, current_override, target_dir, relaunch)` expõe `check/download/install/
 ignore/remind_later/cancel` e sinais `checked/progress/ready/failed/installing/state_changed`.
 
-## Prova (22/11/2026, `F:\Jarvis_install_test3`, nada na instalação do usuário)
+## Prova (22/11/2026, uma pasta de teste, nada na instalação do usuário)
 - Release real `v0.1.3` do repositório **privado**: a consulta pública deu 404 e o `gh` entregou a release (via `gh`).
-- Instalada a v0.1.2 do build local em `F:\Jarvis_install_test3`; versão simulada `0.1.2` → `0.1.3` disponível.
+- Instalada a v0.1.2 do build local em uma pasta de teste; versão simulada `0.1.2` → `0.1.3` disponível.
 - Download de 184.815.177 bytes interrompido em ~43 MB e **retomado** pelo `.part`; SHA-256 `76b5fac0…b87ed` igual ao da release.
 - Hashes divergentes entre fontes foram recusados; instalador adulterado/sem hash não roda (testes).
 - Instalação por cima via `apply.ps1` desacoplado (o Python que a lançou já tinha saído): `last_install.json` = `{code 0, version 0.1.3}`,

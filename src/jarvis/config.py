@@ -1,4 +1,4 @@
-"""Configuração centralizada, tipada e validada. Fonte única: `F:\\Jarvis\\config.toml` (opcional).
+"""Configuração centralizada, tipada e validada. Fonte única: `config.toml` na raiz do programa (opcional).
 
 Sem segredos aqui: este arquivo nunca guarda senha, PIN ou token (`validate` recusa chaves com esses nomes).
 Valores inválidos levantam `ConfigError` com a lista de TODOS os problemas de uma vez.
@@ -16,7 +16,7 @@ from typing import Any
 
 from .win.keys import KeyError_, parse_combo
 
-ROOT = Path(__file__).resolve().parents[2]          # F:\Eco
+ROOT = Path(__file__).resolve().parents[2]          # raiz do projeto
 CONFIG_FILE = ROOT / "config.toml"
 
 # processos onde o agente NUNCA digita (equivaleria a executar comandos). A config só pode ACRESCENTAR.

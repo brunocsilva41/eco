@@ -36,7 +36,7 @@ Abra a execução em **Actions** e use **Re-run failed jobs** (só as etapas que
 O build usa binários do whisper.cpp compilados com Vulkan (precisam de Visual Studio Build Tools e Vulkan SDK). O CI **não recompila**: baixa `eco-whispercpp-vulkan-v1.9.5-win-x64.zip` da release `deps-whispercpp-v1.9.5` do próprio repositório e confere o SHA-256 de `tools/ci/deps.lock.json`. Para publicar o pacote uma única vez:
 
 ```powershell
-gh release create deps-whispercpp-v1.9.5 F:\Eco_ci_deps\eco-whispercpp-vulkan-v1.9.5-win-x64.zip --title "Dependências: whisper.cpp v1.9.5 (Vulkan)" --notes "Binários pré-compilados usados pelo build. SHA-256 fixado em tools/ci/deps.lock.json." --prerelease
+gh release create deps-whispercpp-v1.9.5 <pasta>\eco-whispercpp-vulkan-v1.9.5-win-x64.zip --title "Dependências: whisper.cpp v1.9.5 (Vulkan)" --notes "Binários pré-compilados usados pelo build. SHA-256 fixado em tools/ci/deps.lock.json." --prerelease
 ```
 
 Alternativa se o build no runner falhar: runner self-hosted nesta máquina (`gh` > Settings > Actions > Runners; só com tags protegidas) ou construir localmente com `installer\build.ps1` e usar `tools\ci\smoke_installer.ps1` + `tools\ci\make_release_assets.ps1` antes de publicar à mão com `gh release create`.

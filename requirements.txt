@@ -1,4 +1,4 @@
-# Dependências do Eco (Python 3.14, venv em F:\Jarvis\venv). Versões instaladas e usadas nas medições.
+# Dependências do Eco (Python 3.14, venv na raiz do projeto). Versões instaladas e usadas nas medições.
 faster-whisper==1.2.1
 piper-tts==1.8.0
 onnxruntime==1.32.0

@@ -36,6 +36,14 @@ from jarvis.setup.widgets import Ctx  # noqa: E402
 from jarvis.setup.wizard import WizardWindow  # noqa: E402
 from jarvis.ui.kit.buttons import Button  # noqa: E402
 from jarvis.ui.kit.feedback import InlineBanner  # noqa: E402
+import os  # noqa: E402
+import shutil  # noqa: E402
+
+# O runner do CI (e muitos PCs) não tem o Ollama: um executável de mentira (cópia do cmd.exe) no PATH prova a detecção automática.
+if shutil.which("ollama") is None:
+    _stub = Path(tempfile.mkdtemp(prefix="eco_stub_"))
+    shutil.copy(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "cmd.exe", _stub / "ollama.exe")
+    os.environ["PATH"] = str(_stub) + os.pathsep + os.environ.get("PATH", "")
 
 WIN: list = [None]
 SHOTS = Path(ARGS.out) / "capturas" / ("nativo" if ARGS.native else "off") / f"setup-preparar-{ARGS.scale}-{ARGS.theme}"

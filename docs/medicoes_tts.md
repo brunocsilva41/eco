@@ -1,14 +1,14 @@
 # Medicoes TTS em CPU (Fase 2)
 
-Data: 2026-11-19. Maquina: Xeon E5-2650 v4, 16 GB, Windows 10, CPU apenas (sem GPU). Python 3.14.4 (venv F:\Jarvis\venv).
+Data: 2026-11-19. Maquina: Xeon E5-2650 v4, 16 GB, Windows 10, CPU apenas (sem GPU). Python 3.14.4 (venv venv).
 Versoes: piper-tts 1.8.0, onnxruntime 1.32.0, numpy 2.5.5. Nada foi instalado no venv.
 
 ## Piper pt_BR-faber-medium
 - Fonte: https://huggingface.co/rhasspy/piper-voices/tree/main/pt/pt_BR/faber/medium (consultada em 2026-11-19).
-- Arquivos em F:\Jarvis\models\piper-faber\: .onnx 63.221.984 bytes, SHA256 75e913eb463db0b6ac7ddf68d3e4c9ac19ace36dc3b710a81039b448352b8ffc (igual ao LFS oid do HF); .onnx.json 6.257 bytes (tamanho igual ao do HF).
-- Taxa de amostragem: 22050 Hz (config e WAV conferidos). WAV 16 bits mono em F:\Jarvis\tests\audio_piper\01.wav a 20.wav, na ordem das frases.
+- Arquivos em models\piper-faber\: .onnx 63.221.984 bytes, SHA256 75e913eb463db0b6ac7ddf68d3e4c9ac19ace36dc3b710a81039b448352b8ffc (igual ao LFS oid do HF); .onnx.json 6.257 bytes (tamanho igual ao do HF).
+- Taxa de amostragem: 22050 Hz (config e WAV conferidos). WAV 16 bits mono em tests\audio_piper\01.wav a 20.wav, na ordem das frases.
 - API real 1.8.0 (lida no codigo instalado): `PiperVoice.load(model, config, use_cuda=False)`; `voice.synthesize(text, syn_config=None)` e um gerador que devolve um `AudioChunk` por SENTENCA (`.audio_int16_array`); `synthesize_wav(...)` grava WAV. CLI: `python -m piper -m modelo.onnx -f saida.wav`.
-- Comando: `F:\Jarvis\venv\Scripts\python.exe -I F:\Jarvis\src\f2\tts_bench.py piper` (1 aquecimento fora da medicao, depois 20 frases, 1 execucao cada; threads do onnxruntime em padrao, nao ajustadas).
+- Comando: `venv\Scripts\python.exe -I src\f2\tts_bench.py piper` (1 aquecimento fora da medicao, depois 20 frases, 1 execucao cada; threads do onnxruntime em padrao, nao ajustadas).
 
 | Metrica | media | min | max |
 |---|---|---|---|

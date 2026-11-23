@@ -13,6 +13,7 @@ import ctypes
 import json
 import os
 import subprocess
+import tempfile
 import sys
 import time
 from ctypes import wintypes
@@ -21,7 +22,7 @@ from pathlib import Path
 import psutil
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = Path(r"F:\Jarvis\..\Shared").resolve() if False else Path(r"C:\Users\<usuário>\capturas/ui-prints\flash")
+OUT = Path(tempfile.gettempdir()) / "eco_flash_probe"      # saída em pasta temporária (qualquer PC)
 u32 = ctypes.WinDLL("user32", use_last_error=True)
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 u32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]

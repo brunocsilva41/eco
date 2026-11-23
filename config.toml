@@ -11,7 +11,7 @@
 
 [stt]
 # (o modelo é escolhido pela pasta em model_dir)
-# model_dir = 'F:\Jarvis\models\whisper\hf_small'   # use a pasta do modelo escolhido
+# model_dir = '<pasta do modelo>'   # use a pasta do modelo escolhido
 # beam_size = 5
 
 [llm]

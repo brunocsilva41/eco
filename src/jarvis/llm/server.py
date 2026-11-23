@@ -360,7 +360,7 @@ class LlamaServer:
 
 
 def _private_dir() -> Path:
-    """Pasta temporária no perfil do usuário (o Windows a protege por padrão), nunca dentro de F:\\Jarvis\\logs."""
+    """Pasta temporária no perfil do usuário (o Windows a protege por padrão), nunca dentro da pasta de logs do programa."""
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
     return Path(base) / "Eco" / "run"
 

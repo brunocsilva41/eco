@@ -30,9 +30,9 @@ Os modelos somam ~3,5 GB (Qwen3-VL 4B + projetor ~2,95 GB, Whisper small ~0,49 G
 ## Build
 
 ```powershell
-F:\Jarvis\installer\build.ps1            # release (lzma2/max)
-F:\Jarvis\installer\build.ps1 -Fast      # compressão rápida, para testes
-F:\Jarvis\installer\build.ps1 -Relock    # rebaixa as wheels e regera o .lock com hashes
+installer\build.ps1            # release (lzma2/max)
+installer\build.ps1 -Fast      # compressão rápida, para testes
+installer\build.ps1 -Relock    # rebaixa as wheels e regera o .lock com hashes
 ```
 Passos: (a) valida `VERSION`; (b) baixa/confere `llama.cpp b12531 Vulkan` e o Python embeddable (SHA-256 do manifest; confere a assinatura PSF do `python.exe`); (c) wheels offline; (d) monta `installer\staging\app` **só** com `src\jarvis` (sem `__pycache__`, testes), `bin\llama-b12531-vulkan` (só o `llama-server.exe` + DLLs), `runtime\python`, `Eco.cmd/.pyw`, `VERSION`, `manifest.json`, licenças e `THIRD-PARTY.txt`; **falha** se aparecer `work\`, `logs\`, `data\`, `models\`, `venv\`, `.git`, `tests`; (e) roda o ISCC; (f) grava `dist\Eco-Setup-<versão>.exe`, `.exe.sha256` e `Eco-Setup-<versão>-NOTAS.md`.
 

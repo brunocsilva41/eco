@@ -7,7 +7,7 @@
   __pycache__, tests, modelos, venv)   (c) prepara o runtime Python (embeddable oficial 3.14.3 + wheels travadas por hash)
   (d) roda o ISCC   (e) gera o .exe, o .sha256 e as notas em installer\dist.
 
-  Tudo fica dentro de F:\Jarvis\installer (cache\, wheels\, staging\, dist\, tools\). Nao altera PATH, registro global, nem
+  Tudo fica dentro de installer\ (cache\, wheels\, staging\, dist\, tools\). Nao altera PATH, registro global, nem
   nada fora dessa pasta. Inno Setup: usa o que ja estiver instalado; se nao houver, baixa o instalador OFICIAL e instala POR USUARIO
   em installer\tools\InnoSetup (sem admin), conferindo a assinatura digital.
 

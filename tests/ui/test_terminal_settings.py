@@ -68,8 +68,8 @@ def main() -> int:
             R.check("validação do config recusa C:\\Windows", False, "aceitou")
         except cfgmod.ConfigError as exc:
             R.check("validação do config recusa C:\\Windows", "terminal.roots" in str(exc), str(exc)[:80].replace("\n", " "))
-        proj = Path(r"F:\jarvis_term_proj_test")                # fora de AppData e da pasta do Eco (senão a validação recusa)
-        proj.mkdir(exist_ok=True)
+        proj = Path.home() / "Documents" / "eco_term_proj_test"      # fora de AppData e da pasta do Eco (senão a validação recusa); existe em qualquer PC
+        proj.mkdir(parents=True, exist_ok=True)
         win.controller.edit("terminal.roots", [str(proj)])
         U.settle(700)
         win.controller.save()

@@ -1,7 +1,7 @@
 # Front-end do Eco: Qt (Python) x alternativas
 
 Data: 22/11/2026. Máquina: Windows 10 Pro, Xeon E5-2650 v4 (24 threads), 16 GB, RX 580 8 GB. Medido com ffmpeg ocioso (downloads,
-sem render) e carga de CPU ~17%. **Nada de produção foi alterado.** Protótipos, scripts e dados em `F:\Jarvis_proto_ui\`; prints em
+sem render) e carga de CPU ~17%. **Nada de produção foi alterado.** Protótipos, scripts e dados ficaram fora do repositório; prints em
 `capturas/ui-prints\proto-ui\`. Status: **proposta para o usuário aprovar; nenhuma migração feita.**
 
 ## 1. Resposta direta às perguntas do usuário
@@ -171,7 +171,7 @@ porta aleatória, token por sessão) segue o mesmo desenho do servidor MCP local
 - Slint, Flutter, Wails, WinUI (comparações, sem rigor): [Tauri 2.0 vs Flutter 4.0 desktop](https://dev.to/johalputt/comparison-tauri-20-vs-flutter-40-desktop-for-cross-platform-app-performance-5cng), [Slint: alternative to Flutter](https://slint.dev/alternative-to-flutter), [web-to-desktop framework comparison](https://git.tdem.in/Elanis/web-to-desktop-framework-comparison), [WinUI e RAM (Windows Latest)](https://www.windowslatest.com/2026/10/02/windows-11s-winui-just-got-basic-features-and-less-ram-hogging-after-years-of-losing-apps-to-the-web/)
 - A busca não encontrou benchmark rigoroso de WebView2 isolado no Windows; os números acima de Tauri são **desta máquina**.
 
-## 9. Arquivos do experimento (`F:\Jarvis_proto_ui\`)
+## 9. Arquivos do experimento (fora do repositório)
 
 `measure\measure_qt.py`, `grab_flash.py`, `fps_island.py` (Qt atual) · `measure_tauri.py`, `prof_tauri.py`, `shot_tauri.py`,
 `shots_variants.py`, `gif_island.py`, `cdp.mjs` (Tauri) · `qml\island.qml`, `run_qml.py` · `tauri-proto\` (projeto) ·
