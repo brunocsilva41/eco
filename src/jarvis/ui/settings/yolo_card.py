@@ -1,6 +1,6 @@
 """Cartao do modo YOLO (Configuracoes > Ferramentas e seguranca > Permissoes). So visual e ligacao: o pedido vai por
 ``control.request_yolo`` (assinado, vale 60 s); nada e gravado em config. Ligar exige dialogo com Cancelar como
-padrao; desligar nao pede nada. Sem Jarvis em execucao os dois botoes ficam desabilitados e a tela explica."""
+padrao; desligar nao pede nada. Sem Eco em execucao os dois botoes ficam desabilitados e a tela explica."""
 from __future__ import annotations
 
 import logging
@@ -126,7 +126,7 @@ class YoloCard(QFrame):
         if self.on_button.isEnabled():
             self.on_button.setFocus(Qt.FocusReason.TabFocusReason)
         else:
-            self._want_focus = True                       # foca quando o estado do Jarvis chegar
+            self._want_focus = True                       # foca quando o estado do Eco chegar
 
     # ---- pintura
     def _refresh(self) -> None:

@@ -10,7 +10,7 @@
       ]
     },
     "voice": {
-      "title": "Voz do Jarvis",
+      "title": "Voz do Eco",
       "description": "Voz Piper em português do Brasil (faber).",
       "packages": [
         "piper-faber"

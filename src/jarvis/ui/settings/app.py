@@ -47,7 +47,8 @@ def open_settings(cfg: Config | None = None, parent: QWidget | None = None,
     window = SettingsWindow(cfg, parent)
     window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
     _instance = window
-    window.show()
+    from ..kit.visibility import show_after_first_paint
+    show_after_first_paint(window)                  # sem o instante em branco antes de pintar
     window.raise_()
     window.activateWindow()
     QTimer.singleShot(0, lambda: window.open_section(open_section))   # depois do primeiro layout
@@ -64,7 +65,9 @@ def _another_instance_running() -> bool:
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     u32 = ctypes.WinDLL("user32", use_last_error=True)
     k32.CreateMutexW.restype = ctypes.c_void_p
-    handle = k32.CreateMutexW(None, False, "Local\\JarvisSettingsSingleton")
+    import os
+    suffix = os.environ.get("JARVIS_TEST_INSTANCE", "")                       # testes usam trava própria: nunca tocam a janela do usuário
+    handle = k32.CreateMutexW(None, False, "Local\\JarvisSettingsSingleton" + suffix)
     if ctypes.get_last_error() == 183 or ctypes.GetLastError() == 183:      # ERROR_ALREADY_EXISTS
         from .texts import T
         hwnd = u32.FindWindowW(None, T.window.title)
@@ -83,7 +86,17 @@ def main_settings(open_section: str | None = None) -> int:
     app = QApplication.instance()
     owns_app = app is None
     if app is None:
+        try:                                                    # barra de tarefas própria (não agrupa com o Python) e ícone do app
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Eco.Settings")
+        except (AttributeError, OSError):
+            pass
         app = QApplication(sys.argv[:1])
+        try:
+            from ..tray import make_icon
+            app.setWindowIcon(make_icon())
+        except Exception:                                       # noqa: BLE001  (ícone é só enfeite)
+            log.debug("sem ícone do app", exc_info=True)
     if owns_app:
         UiPrefs().apply_saved_theme()
         ThemeManager.instance().apply(app)  # type: ignore[arg-type]

@@ -22,7 +22,8 @@ _key: bytes | None = None
 
 def _key_path() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(base) / "Jarvis" / "audit.key"
+    new, old = Path(base) / "Eco" / "audit.key", Path(base) / "Jarvis" / "audit.key"
+    return old if old.exists() and not new.exists() else new   # instalações antigas mantêm a chave (a auditoria segue verificável)
 
 
 def _load_key() -> bytes:

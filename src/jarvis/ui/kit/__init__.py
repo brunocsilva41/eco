@@ -1,4 +1,4 @@
-"""Kit de componentes do Jarvis (PySide6). Base: ``ui/theme.py`` (tokens) e ``ui/strings.py`` (textos pt-BR).
+"""Kit de componentes do Eco (PySide6). Base: ``ui/theme.py`` (tokens) e ``ui/strings.py`` (textos pt-BR).
 
 Regras do kit
 -------------
@@ -40,7 +40,7 @@ Composicao de uma tela (coluna de leitura, barra de acoes fixa)::
     voz.add(FieldRow("Ouvir sem apertar tecla", ToggleSwitch(True), help="Fica sempre ao alcance da voz."))
     col.addWidget(voz)
     avancado = Section("Avancado", level=2)            # level 2: ritmo mais curto
-    row = avancado.add(FieldRow("Pasta de logs", PathField("C:/Jarvis/logs", mode="dir"), stacked=True))
+    row = avancado.add(FieldRow("Pasta de logs", PathField("C:/Eco/logs", mode="dir"), stacked=True))
     col.addWidget(avancado)
     col.addStretch(1)
 
@@ -88,6 +88,8 @@ _EXPORTS: dict[str, str] = {
     "ProgressBar": ".meters",
     "SearchField": ".search",
     "Section": ".layout",
+    "SectionCard": ".cards",
+    "PageHeader": ".cards",
     "StatusChip": ".status",
     "TextField": ".fields",
     "Toast": ".feedback",
@@ -106,6 +108,7 @@ if TYPE_CHECKING:
     from .actionbar import ActionBar
     from .base import ElidedLabel, Label
     from .buttons import Button, ButtonVariant
+    from .cards import PageHeader, SectionCard
     from .chips import ChipList
     from .dialogs import ConfirmDialog
     from .feedback import InlineBanner, MessageBlock, Toast

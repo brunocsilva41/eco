@@ -1,4 +1,4 @@
-# Medições (máquina do Bruno) — 2026-11-19
+# Medições (máquina do usuário) — 2026-11-19
 
 Hardware: Xeon E5-2650 v4, 16 GB RAM, RX 580 2048SP 8 GB, driver AMD 31.0.21924.61 (NÃO atualizado).
 llama.cpp: build b12531 (commit e4b620af1), `llama-b12531-bin-win-vulkan-x64.zip`, sha256 conferido.

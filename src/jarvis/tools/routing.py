@@ -19,6 +19,7 @@ BUNDLES: dict[str, tuple[str, ...]] = {
                  "apagar_arquivo", "desfazer", "abrir_pasta"),
     "memoria": ("lembrar", "esquecer", "editar_memoria", "listar_memorias", "buscar_memoria", "buscar_conversas",
                 "abrir_conversa", "listar_conversas", "nova_conversa", "resumir_conversa"),
+    "terminal": ("executar_comando", "terminal_saida", "terminal_cancelar", "terminal_historico"),   # só aparece se o terminal estiver ligado
 }
 CORE_BUNDLES = ("apps", "controle", "arquivos")                          # sempre oferecidos, sempre nesta ordem
 HIDDEN = frozenset({"clicar_em", "clicar_na_tela"})          # registradas, mas nunca oferecidas ao modelo
@@ -31,6 +32,8 @@ _KEYWORDS: dict[str, re.Pattern[str]] = {name: re.compile(p) for name, p in {
     "arquivos": r"\b(arquiv|pasta|documento|download|area de trabalho|desktop|apag|delet|exclu|mov[ae]|renome|cri[ae]|salv|"
                 r"ler\b|leia|planilha|pdf|imagem|foto|copi[ae]|desfaz|lixeira|\.txt|\.docx|\.pdf)",
     "memoria": r"\b(lembr|memori|esquec|conversa|anot|guard|resum|ontem|historico|o que (eu|voce) (falou|disse|pedi)|nova conversa)",
+    "terminal": r"\b(terminal|comando|prompt de comando|powershell|cmd\b|bash|shell|git\b|commit|clon[ae]|branch|npm\b|pip\b|python\b|node\b|"
+                r"linha de comando|repositorio|pull\b|push\b|merge|rebase|stash)",
 }.items()}
 _STICKY_S = 180.0
 _last: tuple[float, frozenset[str]] = (0.0, frozenset())

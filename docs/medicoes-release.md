@@ -1,4 +1,4 @@
-# Medições de release — Jarvis v0.1.0 (2026-11-22)
+# Medições de release — Eco v0.1.0 (2026-11-22)
 
 Máquina: Xeon E5-2650 v4 (12 núcleos/24 threads), 16 GB de RAM, AMD RX 580 2048SP 8 GB (Vulkan), Windows 10 Pro 19045.
 Modelo: Qwen3-VL-4B Q4_K_M (2,3 GiB) + mmproj; contexto 12288; voz Piper `pt_BR-faber-medium`; STT faster-whisper `base` int8.
@@ -14,7 +14,7 @@ Durante as medições havia 4 processos `ffmpeg` de outros agentes, parados (dow
 | Whisper base (carregar) | 1,5–4,1 s |
 | `llama-server` pronto (cache de disco quente) | 6,8–9,0 s (primeira vez após boot: ~25 s) |
 | Ilha: processo filho até "ready" | 0,69 s |
-| **Jarvis utilizável** (todas as etapas em paralelo) | **~10 s** |
+| **Eco utilizável** (todas as etapas em paralelo) | **~10 s** |
 | Aquecimento do prompt fixo (segundo plano, uma vez) | 23 s |
 Primeira resposta rápida (cache quente) só depois do aquecimento: ~33 s após abrir.
 
@@ -58,14 +58,14 @@ A 1ª oração da fala agora sai na primeira vírgula/dois-pontos (≥ 24 letras
 Janela aparece 65 ms depois de receber o estado "Ouvindo" (animação completa 280 ms); processo filho pronto em 0,69 s; privada 34–48 MB (antes 824 MB).
 
 ## 6. Instalador
-Ver `installer\dist\Jarvis-Setup-0.1.0-NOTAS.md` (tamanho e SHA-256 do `.exe` e provas de instalação/desinstalação).
+Ver `installer\dist\Eco-Setup-0.1.0-NOTAS.md` (tamanho e SHA-256 do `.exe` e provas de instalação/desinstalação).
 
 ## 7. Reconhecimento de voz (frases pt-BR sintetizadas, 20 frases)
 | Modelo | limpo | ruído 15 dB | ruído 8 dB | distante | latência/frase |
 |---|---|---|---|---|---|
 | base | 16,4% | 17,1% | 33,6% | 24,3% | 0,8 s |
 | small | 13,8% | 16,4% | 18,4% | 13,8% | 2,5 s |
-Vocabulário no `initial_prompt` reduziu o WER do base em 2–4 pontos. WER com a voz real do Bruno: n/m (não há gravações).
+Vocabulário no `initial_prompt` reduziu o WER do base em 2–4 pontos. WER com a voz real do usuário: n/m (não há gravações).
 
 ## 8. Os 5 maiores gargalos medidos
 1. **Prompt de 3,4 mil tokens a frio (23 s) a 150–177 tok/s.** Corrigido: núcleo fixo e ordenado de ferramentas, prefixo em cache → 1º token 0,7–1,4 s; custo pago uma vez, em segundo plano. Extra de memória (rara) ainda custa ~13 s.
@@ -80,7 +80,7 @@ Corrigidos e baratos: RAM do servidor (−2,35 GB com `-lm none`), VRAM ociosa (
 - Whisper base, CPU por frase (regra da política: diferença < 10% = menos CPU-s): 2 threads 1,66 s / 3,3 CPU-s; 4 threads 1,04 s / 4,2; **6 threads 0,94 s / 5,6 (adotado)**; 12 threads 0,86 s / 10,3. Padrão `stt.cpu_threads` 12 → 6.
 
 ## 10. Mapa CPU × GPU por serviço (regra da política: GPU por padrão; CPU só onde medir menor tempo; <10% = menos CPU-s; empate = GPU)
-Tabela completa também em `Shared\triade\POLITICA-GPU.md` e `estudio-br\config\recursos.json` (tarefas `jarvis_*`). Chaves em `config.toml`: `llm.device`, `llm.mmproj_device`, `stt.device`, `tts.device` (`auto`|`gpu`|`cpu`). `Jarvis.cmd doctor` mostra onde cada serviço roda.
+Tabela completa também em `Shared\triade\POLITICA-GPU.md` e `estudio-br\config\recursos.json` (tarefas `jarvis_*`). Chaves em `config.toml`: `llm.device`, `llm.mmproj_device`, `stt.device`, `tts.device` (`auto`|`gpu`|`cpu`). `Eco.cmd doctor` mostra onde cada serviço roda.
 | Serviço | Vencedor | GPU | CPU | Padrão |
 |---|---|---|---|---|
 | LLM Qwen3-VL 4B (llama.cpp Vulkan) | **GPU** | 199 tok/s prompt, 21,8 tok/s geração, 5 CPU-s | 146 / 6,5 tok/s, 165 CPU-s (12 thr); 85 CPU-s (6 thr) | `llm.device=auto` (GPU; cai para CPU com aviso se não subir) |
@@ -93,6 +93,6 @@ Tabela completa também em `Shared\triade\POLITICA-GPU.md` e `estudio-br\config\
 | Captura de tela + JPEG | **CPU** | DXGI 16 ms / 48 ms de CPU | GDI 49 ms / 27 ms de CPU; JPEG 58 ms | CPU (DXGI ganharia 33 ms; exige dxcam+OpenCV; <1% da latência de visão) |
 | UI/Ilha (Qt) | **CPU** | n/m (custaria VRAM e acordadas) | 0% escondida, 3,8% de 1 núcleo falando | CPU |
 | UI Automation | **CPU** | n/a | 0,07–0,6 s | CPU |
-**Orçamento de VRAM (pico medido, tudo ligado):** 6.780 MB de 8.192 MB (modelo+KV ~5,1 GB, visão 0,77 GB, escuta ~1 GB, sistema ~1 GB). Cabe, com ~1,4 GB de folga. Disputa com render de vídeo: depois de `llm.sleep_idle_s` (600 s) o Jarvis descarrega modelo, visão e escuta (~5 GB livres); antes disso, e para liberar na hora, `llm.device = cpu`. Testes na GPU foram feitos sem render ativo (os `ffmpeg` presentes eram downloads parados).
+**Orçamento de VRAM (pico medido, tudo ligado):** 6.780 MB de 8.192 MB (modelo+KV ~5,1 GB, visão 0,77 GB, escuta ~1 GB, sistema ~1 GB). Cabe, com ~1,4 GB de folga. Disputa com render de vídeo: depois de `llm.sleep_idle_s` (600 s) o Eco descarrega modelo, visão e escuta (~5 GB livres); antes disso, e para liberar na hora, `llm.device = cpu`. Testes na GPU foram feitos sem render ativo (os `ffmpeg` presentes eram downloads parados).
 **Segurança:** se a GPU falha, cai para CPU com aviso, sem travar: LLM (partida sem GPU → `-ngl 0` + visão na CPU, evento `gpu_fallback`), escuta (carga ou execução falha → faster-whisper, avisos no log). Comprovado simulando falhas (modelo ggml inexistente; partida do servidor falhando).
 **Desempenho da escuta na GPU, ponta a ponta:** carregar 2,1–2,5 s (uma vez); a frase leva 0,9–1,0 s; WER nas 20 frases: limpo 11,8%, ruído 15 dB 14,5%, 8 dB 17,8%.

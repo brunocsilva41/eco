@@ -178,7 +178,7 @@ class Sandbox:
                 log.warning("sandbox: não consegui resolver a pasta protegida %r", text)
         # Raízes proibidas: o perfil inteiro (ou qualquer pasta que o contenha) e pastas sensíveis (AppData, ProgramData,
         # Inicializar, .ssh, .aws, .gnupg), tanto dentro delas quanto contendo-as. Uma raiz precisa estar ESTRITAMENTE
-        # dentro de uma subpasta do perfil (ex.: Documents\Jarvis).
+        # dentro de uma subpasta do perfil (ex.: Documents\Eco).
         home = env.get("USERPROFILE") or str(Path.home())
         self._home_parts: list[tuple[str, ...]] = []
         self._sensitive_roots: list[tuple[str, tuple[str, ...]]] = []
@@ -205,7 +205,7 @@ class Sandbox:
         """Motivo pelo qual `parts` (casefold) não pode ser raiz de arquivos, ou None."""
         for home in self._home_parts:
             if _is_prefix(parts, home):                        # é o perfil ou uma pasta que o contém (ex.: C:\Users)
-                return "o perfil do usuário inteiro (use uma subpasta, como Documents\\Jarvis)"
+                return "o perfil do usuário inteiro (use uma subpasta, como Documents\\Eco)"
         for label, prot in self._sensitive_roots:
             if _is_prefix(prot, parts) or _is_prefix(parts, prot):
                 return f"{label} (sensível)"

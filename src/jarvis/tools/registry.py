@@ -1,6 +1,6 @@
 """Registro de ferramentas: allowlist, validação de argumentos, risco, confirmação, timeout e auditoria.
 
-Contrato para quem escreve ferramentas (módulos em jarvis/tools/*.py):
+Contrato para quem escreve ferramentas (módulos em eco/tools/*.py):
 
     def register(registry: ToolRegistry, cfg: Config) -> None:
         registry.register(ToolSpec(name=..., description=..., parameters={...JSON schema...},
@@ -63,7 +63,7 @@ class ToolResult:
 
 @dataclass(frozen=True)
 class Prepared:
-    """Resultado da fase `prepare`: o que será perguntado ao Bruno e o estado guardado para o handler."""
+    """Resultado da fase `prepare`: o que será perguntado ao usuário e o estado guardado para o handler."""
     text: str                            # frase da confirmação, já com o alvo REAL (título/processo)
     state: Any = None                    # ex.: hwnd resolvido; chega ao handler em ctx.prepared
 
@@ -95,6 +95,7 @@ class ToolSpec:
     prepare: PrepareFn | None = None
     confirm_if: Callable[[dict[str, Any], bool], bool] | None = None   # (args, tainted) -> exige confirmação?
     audit_args: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    visible: Callable[[Config], bool] | None = None   # ferramenta que depende da config (ex.: terminal desligado): False = nem o modelo nem a nuvem a veem
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,7 @@ class Decision:
 
 class Confirmer(Protocol):
     def ask(self, text: str, risk: Risk, cancel: CancelToken) -> Decision:
-        """Pede Sim/Não ao Bruno. Deve devolver allowed=False em timeout, cancelamento ou erro."""
+        """Pede Sim/Não ao usuário. Deve devolver allowed=False em timeout, cancelamento ou erro."""
 
 
 class ToolError(Exception):
@@ -261,10 +262,22 @@ class ToolRegistry:
         with self._lock:
             return sorted(self._tools)
 
+    @property
+    def bus(self) -> EventBus:
+        return self._bus
+
+    @staticmethod
+    def _hidden(spec: ToolSpec, cfg: Config) -> bool:
+        try:
+            return spec.visible is not None and not spec.visible(cfg)
+        except Exception:  # noqa: BLE001 - regra com defeito = esconde (mais seguro)
+            log.exception("visible de %s falhou; escondendo a ferramenta", spec.name)
+            return True
+
     def enabled_names(self) -> list[str]:
         with self._lock:
             off = set(self._cfg.tools.disabled)
-            return sorted(n for n in self._tools if n not in off)
+            return sorted(n for n, s in self._tools.items() if n not in off and not self._hidden(s, self._cfg))
 
     def get(self, name: str) -> ToolSpec | None:
         with self._lock:
@@ -275,7 +288,7 @@ class ToolRegistry:
         sempre na ordem de registro, para o prefixo do prompt ser idêntico entre pedidos do mesmo tipo."""
         with self._lock:
             off = set(self._cfg.tools.disabled)
-            specs = [s for n, s in self._tools.items() if n not in off and (only is None or n in only)]
+            specs = [s for n, s in self._tools.items() if n not in off and (only is None or n in only) and not self._hidden(s, self._cfg)]
             if isinstance(only, (list, tuple)):                           # ordem pedida (prefixo do prompt idêntico entre pedidos)
                 order = {n: i for i, n in enumerate(only)}
                 specs.sort(key=lambda s: order[s.name])
@@ -284,14 +297,19 @@ class ToolRegistry:
 
     # ------------------------------------------------------------- execução
     def execute(self, name: str, raw_args: Any, parent_cancel: CancelToken, memory: Any = None,
-                origin: str = "agent", tainted: bool = False) -> ToolResult:
-        """Executa uma ferramenta pedida pelo modelo. Nunca levanta: sempre devolve ToolResult."""
+                origin: str = "agent", tainted: bool = False, cloud_label: str | None = None,
+                cloud_force: bool = True) -> ToolResult:
+        """Executa uma ferramenta pedida pelo modelo. Nunca levanta: sempre devolve ToolResult.
+
+        `cloud_label` (ex.: "OpenCode") marca um pedido vindo de um agente NA NUVEM (via MCP/ACP): toda ação que age no PC
+        (CONTROL ou RISKY) exige confirmação FORTE do usuário, com o nome do agente na pergunta. Consultas (READ) seguem livres.
+        `cloud_force=False` (modo "normal" do agente): só o nome na pergunta; vale a regra normal do Modo de permissões."""
         started = time.monotonic()
         with self._lock:
             spec = self._tools.get(name)
             cfg = self._cfg
             blocked = self._blocked
-        if spec is None or name in cfg.tools.disabled:
+        if spec is None or name in cfg.tools.disabled or self._hidden(spec, cfg):
             audit.warning(_line(origin, name, None, "recusada: ferramenta inexistente ou desligada"))
             return ToolResult(False, f"A ferramenta '{name}' não está disponível.")
         if blocked and spec.risk >= Risk.CONTROL:
@@ -312,12 +330,13 @@ class ToolRegistry:
         ctx_cancel = parent_cancel.child()
         ctx = ToolContext(cfg=cfg, cancel=ctx_cancel, bus=self._bus, memory=memory, tainted=tainted)
         try:
-            return self._execute_inner(spec, cfg, args, shown, ctx, parent_cancel, origin, started)
+            return self._execute_inner(spec, cfg, args, shown, ctx, parent_cancel, origin, started, cloud_label, cloud_force)
         finally:
             ctx_cancel.release()
 
     def _execute_inner(self, spec: ToolSpec, cfg: Config, args: dict[str, Any], shown: dict[str, Any],
-                       ctx: ToolContext, parent: CancelToken, origin: str, started: float) -> ToolResult:
+                       ctx: ToolContext, parent: CancelToken, origin: str, started: float,
+                       cloud_label: str | None = None, cloud_force: bool = True) -> ToolResult:
         name = spec.name
         try:
             step = spec.confirm_text(args) if spec.confirm_text else spec.description
@@ -336,6 +355,8 @@ class ToolRegistry:
                 return outcome
             ctx.prepared = outcome.state
             step = outcome.text
+        if cloud_label:
+            step = f"O agente {cloud_label}, na nuvem, quer: {step}"
 
         try:
             tool_wants = bool(spec.confirm_if and spec.confirm_if(args, ctx.tainted))
@@ -345,9 +366,9 @@ class ToolRegistry:
         # confirmação FORTE por voz ("confirmo"/"autorizo"): ação arriscada, rodada contaminada ou regra da própria ferramenta
         # "equilibrado": rodada contaminada só endurece o que a própria ferramenta pede (confirm_if); "estrito" endurece tudo que age
         taint_hardens = ctx.tainted and spec.risk >= Risk.CONTROL and cfg.safety.permission_mode == "strict"
-        strong = spec.risk >= Risk.RISKY or taint_hardens or tool_wants
+        strong = spec.risk >= Risk.RISKY or taint_hardens or tool_wants or bool(cloud_label and cloud_force and spec.risk >= Risk.CONTROL)
         need_confirm = strong or name in cfg.tools.confirm
-        if need_confirm and YOLO.active():                              # ação MANUAL do Bruno: sem confirmações (travas duras seguem nos handlers)
+        if need_confirm and YOLO.active():                              # ação MANUAL do usuário: sem confirmações (travas duras seguem nos handlers)
             audit.info(json.dumps({"origin": origin, "tool": name, "args": shown,
                                    "confirmation": {"allowed": True, "via": "yolo"}}, ensure_ascii=False))
             need_confirm = False

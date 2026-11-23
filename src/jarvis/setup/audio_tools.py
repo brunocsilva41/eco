@@ -1,6 +1,6 @@
 """Áudio do assistente: lista de dispositivos, gravação com medidor, reprodução, fala de exemplo e calibragem do VAD.
 
-Usa os mesmos módulos do Jarvis (`audio.devices`, `audio.vad`, `audio.tts`, `audio.playback`), então o teste é fiel ao uso real.
+Usa os mesmos módulos do Eco (`audio.devices`, `audio.vad`, `audio.tts`, `audio.playback`), então o teste é fiel ao uso real.
 """
 from __future__ import annotations
 

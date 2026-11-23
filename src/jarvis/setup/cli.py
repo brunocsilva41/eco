@@ -1,16 +1,16 @@
-"""Subcomando `Jarvis.cmd setup`: assistente em Qt (padrão) e modos sem janela para o instalador e para scripts.
+"""Subcomando `Eco.cmd setup`: assistente em Qt (padrão) e modos sem janela para o instalador e para scripts.
 
-    Jarvis.cmd setup                          abre o assistente (continua de onde parou)
-    Jarvis.cmd setup --repair                 abre como "Reparar/Reconfigurar"
-    Jarvis.cmd setup --fetch [--components vision,voice,stt_small]
+    Eco.cmd setup                          abre o assistente (continua de onde parou)
+    Eco.cmd setup --repair                 abre como "Reparar/Reconfigurar"
+    Eco.cmd setup --fetch [--components vision,voice,stt_small]
                                               baixa e confere os modelos, sem janela (usado pelo instalador)
-    Jarvis.cmd setup --offline PASTA_OU_ZIP   importa modelos de um pacote offline (confere o SHA-256)
-    Jarvis.cmd setup --make-pack PASTA        cria um pacote offline a partir dos modelos já instalados
-    Jarvis.cmd setup --scan [--deep] [--use-found]
+    Eco.cmd setup --offline PASTA_OU_ZIP   importa modelos de um pacote offline (confere o SHA-256)
+    Eco.cmd setup --make-pack PASTA        cria um pacote offline a partir dos modelos já instalados
+    Eco.cmd setup --scan [--deep] [--use-found]
                                               procura modelos que você JÁ TEM no PC (pastas comuns; --deep = discos inteiros);
                                               --use-found confere o SHA-256 e liga/copia para a instalação
-    Jarvis.cmd setup --status                 mostra o estado dos arquivos de modelo
-    Jarvis.cmd setup --capture PASTA          (desenvolvimento) grava PNG de todas as telas, offscreen
+    Eco.cmd setup --status                 mostra o estado dos arquivos de modelo
+    Eco.cmd setup --capture PASTA          (desenvolvimento) grava PNG de todas as telas, offscreen
 Códigos de saída: 0 ok, 2 uso/arquivo, 3 sem internet, 4 falha de download/integridade, 5 disco cheio, 130 cancelado.
 """
 from __future__ import annotations
@@ -210,6 +210,6 @@ def run_setup(ns: argparse.Namespace) -> int:
 
 
 def main_setup(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="jarvis setup", description="Assistente de configuração do Jarvis.")
+    ap = argparse.ArgumentParser(prog="eco setup", description="Assistente de configuração do Eco.")
     add_arguments(ap)
     return run_setup(ap.parse_args(argv))

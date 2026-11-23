@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Build reproduzivel do instalador do Jarvis (Inno Setup 6): Jarvis-Setup-<versao>.exe + SHA-256 + notas.
+  Build reproduzivel do instalador do Eco (Inno Setup 6): Eco-Setup-<versao>.exe + SHA-256 + notas.
 
 .DESCRIPTION
   (a) valida installer\VERSION (semver)   (b) monta installer\staging\app so com o necessario (sem work, logs, data, .git,
@@ -156,13 +156,13 @@ foreach ($d in @($pyDst, $llamaDst, $wcDst)) {
 }
 
 # pyc do projeto (primeira partida rapida mesmo em Program Files, onde o usuario nao grava)
-& $pyExe -I -X utf8 -m compileall -q -s $App -p "<jarvis>" (Join-Path $App "src\jarvis") | Out-Null
+& $pyExe -I -X utf8 -m compileall -q -s $App -p "<eco>" (Join-Path $App "src\jarvis") | Out-Null
 
 # arquivos da raiz
-foreach ($f in "Jarvis.cmd", "Jarvis.pyw", "jarvis_boot.py") { Copy-Item (Join-Path $Installer "payload\$f") $App }
+foreach ($f in "Eco.cmd", "Eco.pyw", "eco_boot.py") { Copy-Item (Join-Path $Installer "payload\$f") $App }
 Copy-Item $verFile (Join-Path $App "VERSION")
 Copy-Item (Join-Path $Installer "manifest.json") $App
-Copy-Item (Join-Path $Installer "assets\jarvis.ico") $App
+Copy-Item (Join-Path $Installer "assets\eco.ico") $App
 Copy-Item (Join-Path $Installer "LICENSE.pt-BR.txt") $App
 Copy-Item (Join-Path $Installer "LICENSE.en.txt") $App
 & $VenvPy -I (Join-Path $Installer "make_notices.py") $site (Join-Path $App "THIRD-PARTY.txt") | Out-Host
@@ -175,9 +175,9 @@ $bad = Get-ChildItem $App -Recurse -Force -ErrorAction SilentlyContinue | Where-
 if ($bad) { Fail "staging contem itens proibidos: $($bad[0].FullName)" }
 if (Test-Path (Join-Path $App "config.toml")) { Fail "staging contem config.toml (o pacote deve usar o padrao)" }
 # varredura de privacidade: nada pessoal no codigo/arquivos empacotados (fora de site-packages e binarios)
-# 'Bruno' como NOME DO DONO em comentarios/prompts do codigo e so aviso (nao e dado pessoal); caminhos de usuario, e-mails e 'Fuxi' reprovam
-$warn = @(Get-ChildItem (Join-Path $App "src") -Recurse -File -Include *.py | Select-String -Pattern 'Bruno' -List)
-if ($warn.Count -gt 0) { Write-Host ("AVISO: 'Bruno' aparece em {0} arquivo(s) do codigo (nome do dono em prompts/comentarios); nao e caminho nem dado pessoal." -f $warn.Count) -ForegroundColor Yellow }
+# 'usuário' como NOME DO DONO em comentarios/prompts do codigo e so aviso (nao e dado pessoal); caminhos de usuario, e-mails e 'Fuxi' reprovam
+$warn = @(Get-ChildItem (Join-Path $App "src") -Recurse -File -Include *.py | Select-String -Pattern 'usuário' -List)
+if ($warn.Count -gt 0) { Write-Host ("AVISO: 'usuário' aparece em {0} arquivo(s) do codigo (nome do dono em prompts/comentarios); nao e caminho nem dado pessoal." -f $warn.Count) -ForegroundColor Yellow }
 $pat = 'C:\\Users\\[A-Za-z]|Fuxi|[A-Za-z0-9._-]+@[A-Za-z0-9-]+\.(com|br|org|net)'
 $hits = @(Get-ChildItem (Join-Path $App "src") -Recurse -File -Include *.py,*.json,*.txt,*.md,*.toml | Select-String -Pattern $pat -List)
 $hits += @(Get-ChildItem $App -File -Include *.cmd,*.pyw,*.py,*.json,*.txt | Select-String -Pattern $pat -List)
@@ -218,22 +218,22 @@ if ($env:JARVIS_SIGN_CMD) {
   $IsccArgs += "/DSignTool=jarvissign"
   $signNote = "assinado via JARVIS_SIGN_CMD"
 }
-$iss = Join-Path $Installer "Jarvis.iss"
+$iss = Join-Path $Installer "Eco.iss"
 if ($Fast) {
-  $tmpIss = Join-Path $Installer "Jarvis.fast.iss"
+  $tmpIss = Join-Path $Installer "Eco.fast.iss"
   (Get-Content $iss -Raw -Encoding UTF8) -replace 'Compression=lzma2/max', 'Compression=lzma2/fast' | Set-Content $tmpIss -Encoding UTF8
   $iss = $tmpIss
 }
 $t0 = Get-Date
 $log = Join-Path $Dist "iscc.log"
 $p = Start-Process -FilePath $iscc -ArgumentList ($IsccArgs + @("`"$iss`"")) -WorkingDirectory $Installer -NoNewWindow -Wait -PassThru -RedirectStandardOutput $log
-if ($Fast -and (Test-Path (Join-Path $Installer "Jarvis.fast.iss"))) { Remove-Item (Join-Path $Installer "Jarvis.fast.iss") -Force }
+if ($Fast -and (Test-Path (Join-Path $Installer "Eco.fast.iss"))) { Remove-Item (Join-Path $Installer "Eco.fast.iss") -Force }
 if ($p.ExitCode -ne 0) { Get-Content $log -Tail 30 | Out-Host; Fail "ISCC falhou (codigo $($p.ExitCode)); veja $log" }
 Write-Host ("compilado em {0:n0} s" -f ((Get-Date) - $t0).TotalSeconds)
 
 # ------------------------------------------------------------------ hash + notas
 Step "f" "Hash e notas"
-$exe = Join-Path $Dist "Jarvis-Setup-$Version.exe"
+$exe = Join-Path $Dist "Eco-Setup-$Version.exe"
 if (-not (Test-Path $exe)) { Fail "saida esperada nao encontrada: $exe" }
 $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
 Set-Content -Path "$exe.sha256" -Value "$hash *$(Split-Path -Leaf $exe)" -Encoding ASCII
@@ -242,7 +242,7 @@ try { $commit = (git -C $Root rev-parse --short HEAD 2>$null) } catch {}
 $sizeInst = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 $sigStatus = (Get-AuthenticodeSignature $exe).Status
 $notes = @"
-# Jarvis $Version - notas do instalador
+# Eco $Version - notas do instalador
 
 - Arquivo: ``$(Split-Path -Leaf $exe)`` ($sizeInst MB)
 - SHA-256: ``$hash``
@@ -250,15 +250,15 @@ $notes = @"
 - Commit: $commit
 - Assinatura de codigo: $signNote (status do Windows: $sigStatus)
 - Requisitos: Windows 10 21H2 (19044) ou 11, x64, 12 GB de RAM ou mais (16 GB recomendado), GPU com Vulkan (AMD/NVIDIA/Intel) para velocidade.
-- Conteudo: Jarvis + Python 3.14.3 embutido + llama.cpp b12531 (Vulkan). Os modelos (~3,5 GB) NAO estao no instalador: sao baixados pelo
-  assistente de configuracao (HTTPS, SHA-256, retomada) ou importados de um pacote offline (pasta Jarvis-Modelos ao lado do instalador).
-- Instalacao silenciosa: ``Jarvis-Setup-$Version.exe /VERYSILENT /SUPPRESSMSGBOXES /DIR="C:\\Pasta" /LOG="install.log" [/DOWNLOADMODELS=1] [/OFFLINEPACK="C:\\Jarvis-Modelos"]``
+- Conteudo: Eco + Python 3.14.3 embutido + llama.cpp b12531 (Vulkan). Os modelos (~3,5 GB) NAO estao no instalador: sao baixados pelo
+  assistente de configuracao (HTTPS, SHA-256, retomada) ou importados de um pacote offline (pasta Eco-Modelos ao lado do instalador).
+- Instalacao silenciosa: ``Eco-Setup-$Version.exe /VERYSILENT /SUPPRESSMSGBOXES /DIR="C:\\Pasta" /LOG="install.log" [/DOWNLOADMODELS=1] [/OFFLINEPACK="C:\\Eco-Modelos"]``
 - Desinstalacao silenciosa: ``unins000.exe /VERYSILENT [/PURGEDATA=1] [/KEEPMODELS=1]`` (por padrao MANTEM dados do usuario e remove modelos)
 
 ## Modelos (manifest.json)
 $((($Manifest.packages | ForEach-Object { "- $($_.name): licenca $($_.license)" }) -join "`n"))
 "@
-Set-Content -Path (Join-Path $Dist "Jarvis-Setup-$Version-NOTAS.md") -Value $notes -Encoding UTF8
+Set-Content -Path (Join-Path $Dist "Eco-Setup-$Version-NOTAS.md") -Value $notes -Encoding UTF8
 Write-Host ""
 Write-Host "PRONTO: $exe ($sizeInst MB)" -ForegroundColor Green
 Write-Host "SHA-256: $hash"

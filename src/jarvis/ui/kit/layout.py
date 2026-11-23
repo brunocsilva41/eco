@@ -6,6 +6,8 @@ movido, apagado ou lido sozinho). NUNCA um cartao por campo e nunca cartao dentr
 """
 from __future__ import annotations
 
+import html
+import unicodedata
 from typing import Literal
 
 from PySide6.QtCore import Qt
@@ -14,7 +16,52 @@ from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePol
 from ..theme import SIZE, SPACE, repolish, pal
 from . import icons
 from .base import ElidedLabel, Label, set_a11y, strs, watch_theme
+from .visibility import set_shown
 from .status import StatusChip
+
+
+def _fold_char(ch: str) -> str:
+    base = "".join(c for c in unicodedata.normalize("NFD", ch.casefold()) if not unicodedata.combining(c))
+    return base[:1] if base else ch
+
+
+def highlight_html(text: str, words: list[str]) -> str:
+    """Texto escapado com as ocorrencias de ``words`` (sem acento/maiuscula) em destaque de busca."""
+    folded = "".join(_fold_char(c) for c in text)
+    marks = [False] * len(text)
+    for w in words:
+        w = "".join(_fold_char(c) for c in w)
+        if not w:
+            continue
+        i = folded.find(w)
+        while i >= 0:
+            for j in range(i, i + len(w)):
+                marks[j] = True
+            i = folded.find(w, i + len(w))
+    p = pal()
+    out, inside = [], False
+    for ch, on in zip(text, marks):
+        if on and not inside:
+            out.append(f'<span style="background-color:{p.accent}; color:{p.on_accent};">')
+        elif inside and not on:
+            out.append("</span>")
+        inside = on
+        out.append(html.escape(ch))
+    if inside:
+        out.append("</span>")
+    return "".join(out)
+
+
+class _WrapHelp(Label):
+    """Ajuda que quebra em varias linhas (nada some com reticencias) e aceita destaque de busca."""
+
+    def __init__(self, text: str) -> None:
+        super().__init__(text, "help", wrap=True)
+        self._plain = text
+
+    def set_highlight(self, words: list[str]) -> None:
+        self.setTextFormat(Qt.TextFormat.RichText if words else Qt.TextFormat.PlainText)
+        self.setText(highlight_html(self._plain, words) if words else self._plain)
 
 
 class FieldRow(QWidget):
@@ -27,7 +74,8 @@ class FieldRow(QWidget):
     """
 
     def __init__(self, label: str, control: QWidget, *, help: str = "", restart_required: bool = False,
-                 locked_reason: str = "", stacked: bool = False, parent: QWidget | None = None) -> None:
+                 locked_reason: str = "", stacked: bool = False, wrap_help: bool = False,
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._control = control
         self._help = help
@@ -40,24 +88,23 @@ class FieldRow(QWidget):
         self._label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         if isinstance(control, QWidget) and control.focusPolicy() != Qt.FocusPolicy.NoFocus:
             self._label.setBuddy(control)
-        self._help_label = ElidedLabel(help)
-        self._help_label.setVisible(bool(help) and not locked_reason)
+        self._help_label = _WrapHelp(help) if wrap_help else ElidedLabel(help)
+        set_shown(self._help_label, bool(help) and not locked_reason)
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
         head.setSpacing(SPACE.sm)
         self._lock_icon = QLabel()
         self._lock_icon.setPixmap(icons.pixmap("lock", pal().text_muted, SIZE.icon, self))
-        self._lock_icon.setVisible(bool(locked_reason))
+        set_shown(self._lock_icon, bool(locked_reason))
         head.addWidget(self._lock_icon)
         head.addWidget(self._label)
         self._badge = StatusChip("warn", f.restart_required, icon_name="refresh")
         self._badge.setToolTip(f.restart_hint)
-        self._badge.setVisible(restart_required)
+        set_shown(self._badge, restart_required)
         head.addWidget(self._badge)
         head.addStretch(1)
         self._lock_text = Label(f"{f.locked}: {locked_reason}" if locked_reason else "", "help", wrap=True)
-        self._lock_text.setVisible(bool(locked_reason))
-
+        set_shown(self._lock_text, bool(locked_reason))
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
         text_col.setSpacing(SPACE.xs)
@@ -106,7 +153,7 @@ class FieldRow(QWidget):
     def set_error(self, message: str | None) -> None:
         self._error = message or ""
         self._error_text.setText(self._error)
-        self._error_box.setVisible(bool(self._error))
+        set_shown(self._error_box, bool(self._error))
         invalid = bool(self._error)
         setter = getattr(self._control, "set_invalid", None)
         if callable(setter):
@@ -118,6 +165,12 @@ class FieldRow(QWidget):
 
     def error(self) -> str:
         return self._error
+
+    def set_highlight(self, words: list[str]) -> None:
+        """Realca no rotulo e na ajuda as palavras da busca (sem acento/maiuscula). Lista vazia limpa."""
+        self._label.setTextFormat(Qt.TextFormat.RichText if words else Qt.TextFormat.PlainText)
+        self._label.setText(highlight_html(self._label_text, words) if words else self._label_text)
+        self._help_label.set_highlight(words)
 
     def _sync_a11y(self) -> None:
         desc = " ".join(x for x in (self._help, self._locked, f"{strs().fields.error_prefix}: {self._error}" if self._error else "") if x)
@@ -149,7 +202,7 @@ class Section(QWidget):
         self._title = Label(title, "heading" if major else "label")
         root.addWidget(self._title)
         self._desc = Label(description, "help", wrap=True)
-        self._desc.setVisible(bool(description))
+        set_shown(self._desc, bool(description))
         root.addWidget(self._desc)
         root.addSpacing(SPACE.md if major else SPACE.sm)
         self._body = QVBoxLayout()

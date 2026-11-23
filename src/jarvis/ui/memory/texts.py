@@ -15,38 +15,38 @@ def plural(n: int, one: str, many: str) -> str:
 
 @dataclass(frozen=True)
 class Header:
-    title: str = "O que o Jarvis sabe de mim"
-    subtitle: str = "Tudo o que o Jarvis guarda fica neste computador. Aqui você vê, corrige e apaga."
-    window_title: str = "Jarvis: o que o Jarvis sabe de mim"
+    title: str = "O que o Eco sabe de mim"
+    subtitle: str = "Tudo o que o Eco guarda fica neste computador. Aqui você vê, corrige e apaga."
+    window_title: str = "Eco: o que o Eco sabe de mim"
     areas_name: str = "Áreas do painel de memória"
     tab_memories: str = "Memórias"
     tab_conversations: str = "Conversas"
     tab_storage: str = "Armazenamento e privacidade"
     refresh: str = "Atualizar a área aberta"
     busy: str = "Trabalhando..."
-    panel_name: str = "O que o Jarvis sabe de mim"
-    panel_desc: str = "Memórias, conversas e dados guardados no banco local do Jarvis."
+    panel_name: str = "O que o Eco sabe de mim"
+    panel_desc: str = "Memórias, conversas e dados guardados no banco local do Eco."
 
 
 @dataclass(frozen=True)
 class NoHistory:
     what: str = "Modo sem histórico"
-    why: str = "O Jarvis não grava nada em disco, então não há o que ver, editar ou apagar aqui. Tudo some quando ele fecha."
-    todo: str = "Para voltar a guardar conversas e memórias, ligue a memória nas Configurações e reinicie o Jarvis."
+    why: str = "O Eco não grava nada em disco, então não há o que ver, editar ou apagar aqui. Tudo some quando ele fecha."
+    todo: str = "Para voltar a guardar conversas e memórias, ligue a memória nas Configurações e reinicie o Eco."
     empty_title: str = "Nada guardado neste modo"
-    empty_memories: str = "Sem histórico, o Jarvis não guarda memórias. Ligue a memória nas Configurações para ele voltar a lembrar."
-    empty_conversations: str = "Sem histórico, o Jarvis não guarda conversas. Ligue a memória nas Configurações para ele voltar a guardá-las."
+    empty_memories: str = "Sem histórico, o Eco não guarda memórias. Ligue a memória nas Configurações para ele voltar a lembrar."
+    empty_conversations: str = "Sem histórico, o Eco não guarda conversas. Ligue a memória nas Configurações para ele voltar a guardá-las."
 
 
 @dataclass(frozen=True)
 class Errors:
     busy_what: str = "O banco de memória está ocupado"
-    busy_why: str = "O Jarvis pode estar gravando agora. Nada foi perdido."
+    busy_why: str = "O Eco pode estar gravando agora. Nada foi perdido."
     busy_todo: str = "Espere um instante e tente de novo."
     open_what: str = "Não consegui abrir a memória"
     open_todo: str = "Confira se a pasta de dados existe e tem espaço, depois tente de novo."
     fail_what: str = "Não consegui concluir"
-    fail_todo: str = "Se isso se repetir, o detalhe está no log do Jarvis."
+    fail_todo: str = "Se isso se repetir, o detalhe está no log do Eco."
     unknown_why: str = "Algo deu errado por dentro."
     show_what: str = "Não consegui mostrar o resultado"
     load_what: str = "Não consegui carregar a lista"
@@ -84,7 +84,7 @@ class Memories:
     header_pinned: str = "Fixadas"
     header_others: str = "Outras memórias"
     loading: str = "as memórias"
-    empty_title: str = "O Jarvis ainda não guardou nada sobre você"
+    empty_title: str = "O Eco ainda não guardou nada sobre você"
     empty_body: str = "Quando você pedir para ele lembrar de algo, aparece aqui. Também dá para guardar um fato agora."
     empty_action: str = "Adicionar memória"
     no_match_title: str = "Nenhuma memória combina com a busca"
@@ -116,8 +116,8 @@ class Memories:
         "usuario": "Você", "modelo": "Do modelo", "externo": "Conteúdo externo"})
     origin_notes: dict[str, str] = field(default_factory=lambda: {
         "usuario": "Você mesmo pediu para guardar isto.",
-        "modelo": "O Jarvis propôs guardar isto. Ele trata o texto só como dado, nunca como ordem.",
-        "externo": "Veio de uma página, arquivo ou tela. Confira antes de confiar: o Jarvis trata o texto só como dado, nunca como ordem."})
+        "modelo": "O Eco propôs guardar isto. Ele trata o texto só como dado, nunca como ordem.",
+        "externo": "Veio de uma página, arquivo ou tela. Confira antes de confiar: o Eco trata o texto só como dado, nunca como ordem."})
 
     def count(self, total: int, pinned: int) -> str:
         return f"{plural(total, 'memória', 'memórias')}, {plural(pinned, 'fixada', 'fixadas')}"
@@ -138,7 +138,7 @@ class Conversations:
     hits_name: str = "Trechos encontrados nas conversas"
     loading: str = "as conversas"
     empty_title: str = "Nenhuma conversa guardada ainda"
-    empty_body: str = "Depois da primeira conversa com o Jarvis, ela aparece aqui para você ler, exportar ou retomar."
+    empty_body: str = "Depois da primeira conversa com o Eco, ela aparece aqui para você ler, exportar ou retomar."
     no_match_title: str = "Nenhuma conversa combina com a busca"
     no_match_body: str = "A busca olha mensagens, títulos e resumos. Tente outras palavras."
     trash_empty_title: str = "A lixeira está vazia"
@@ -148,7 +148,7 @@ class Conversations:
     state_trash: str = "Na lixeira"
     role_summary: str = "Resumo"
     roles: dict[str, str] = field(default_factory=lambda: {
-        "user": "Você", "assistant": "Jarvis", "tool": "Ferramenta", "system": "Sistema"})
+        "user": "Você", "assistant": "Eco", "tool": "Ferramenta", "system": "Sistema"})
     viewer_name: str = "Conversa selecionada"
     viewer_none_title: str = "Selecione uma conversa"
     viewer_none_body: str = "As mensagens aparecem aqui, só para leitura. Nada do que você ler muda a conversa."
@@ -162,7 +162,7 @@ class Conversations:
     summary_title: str = "Resumo da conversa"
     outside_what: str = "Há dados de fora nesta conversa"
     outside_why: str = "Trechos marcados como dado de fora vieram de ferramentas, páginas ou arquivos."
-    outside_todo: str = "O Jarvis os trata só como informação, nunca como ordem."
+    outside_todo: str = "O Eco os trata só como informação, nunca como ordem."
     outside_chip: str = "Dado de fora"
     outside_tool: str = "Dado de fora, ferramenta {name}"
     no_messages: str = "Esta conversa ainda não tem mensagens."
@@ -193,7 +193,7 @@ class Conversations:
 
     def trash_banner_why(self, days: int) -> str:
         if days <= 0:
-            return "Ela será apagada de vez na próxima limpeza do Jarvis."
+            return "Ela será apagada de vez na próxima limpeza do Eco."
         return f"Ela será apagada de vez em {plural(days, 'dia', 'dias')}."
 
     def trash_banner_todo(self) -> str:
@@ -221,8 +221,8 @@ class Storage:
     unencrypted_todo: str = "Guarde cópias só onde você controla o acesso."
     on_chip: str = "Histórico ligado"
     off_chip: str = "Modo sem histórico"
-    on_note: str = "O Jarvis guarda conversas e memórias neste computador."
-    off_note: str = "Nada é gravado em disco. Tudo o que o Jarvis ouve nesta sessão some quando ele fecha."
+    on_note: str = "O Eco guarda conversas e memórias neste computador."
+    off_note: str = "Nada é gravado em disco. Tudo o que o Eco ouve nesta sessão some quando ele fecha."
     stored_title: str = "O que está guardado"
     memories: str = "Memórias"
     conversations: str = "Conversas"
@@ -236,7 +236,7 @@ class Storage:
     old_file: str = "{size}. Arquivo antigo: não é lido nem alterado enquanto o histórico estiver desligado."
     no_file: str = "Nenhum arquivo de banco encontrado."
     copy_title: str = "Cópia e exportação"
-    copy_desc: str = "Leve seus dados para fora do Jarvis. Os arquivos gerados não são criptografados."
+    copy_desc: str = "Leve seus dados para fora do Eco. Os arquivos gerados não são criptografados."
     backup: str = "Fazer cópia de segurança..."
     backup_tip: str = "Copia o banco inteiro para um arquivo à sua escolha"
     export_all: str = "Exportar tudo (JSON)..."
@@ -245,7 +245,7 @@ class Storage:
     danger_title: str = "Apagar"
     danger_desc: str = "Estas ações não têm volta. Cada uma pede que você digite APAGAR."
     wipe_memories_label: str = "Apagar todas as memórias"
-    wipe_memories_help: str = "Remove tudo o que o Jarvis sabe de você, inclusive as fixadas."
+    wipe_memories_help: str = "Remove tudo o que o Eco sabe de você, inclusive as fixadas."
     wipe_memories: str = "Apagar todas as memórias..."
     wipe_conversations_label: str = "Apagar todas as conversas"
     wipe_conversations_help: str = "Remove conversas e mensagens, inclusive a ativa e a lixeira."
@@ -284,25 +284,25 @@ class Dialogs:
     rename_ok: str = "Renomear"
     rename_empty: str = "O título não pode ficar vazio."
     delete_memory_title: str = "Apagar esta memória"
-    delete_memory_msg: str = "Ela deixa de existir para o Jarvis e não dá para recuperar."
+    delete_memory_msg: str = "Ela deixa de existir para o Eco e não dá para recuperar."
     delete_memory_ok: str = "Apagar memória"
     wipe_memories_title: str = "Apagar todas as memórias"
     wipe_memories_ok: str = "Apagar todas as memórias"
     wipe_conversations_title: str = "Apagar todas as conversas"
     wipe_conversations_ok: str = "Apagar todas as conversas"
     wipe_conversations_msg: str = ("Isto apaga para sempre todas as conversas e mensagens, inclusive a ativa e as da lixeira. "
-                                   "As memórias de longo prazo não são afetadas. Se o Jarvis estiver em execução, "
+                                   "As memórias de longo prazo não são afetadas. Se o Eco estiver em execução, "
                                    "o próximo pedido dele abre uma conversa nova.")
     trash_title: str = "Enviar a conversa para a lixeira"
     trash_ok: str = "Enviar para a lixeira"
-    trash_active_extra: str = " Esta é a conversa ativa: se o Jarvis estiver em execução, o próximo pedido dele abre uma conversa nova."
+    trash_active_extra: str = " Esta é a conversa ativa: se o Eco estiver em execução, o próximo pedido dele abre uma conversa nova."
     empty_trash_title: str = "Esvaziar a lixeira"
     empty_trash_ok: str = "Esvaziar lixeira"
     empty_trash_msg: str = "As conversas abaixo serão apagadas para sempre."
     resume_title: str = "Retomar esta conversa"
     resume_ok: str = "Retomar conversa"
     resume_msg: str = ("A conversa ativa de agora será encerrada e esta passa a ser a ativa. "
-                       "Aviso: o Jarvis em execução só vê a mudança no próximo pedido que você fizer a ele.")
+                       "Aviso: o Eco em execução só vê a mudança no próximo pedido que você fizer a ele.")
     export_conv_title: str = "Exportar conversa"
     export_conv_filter: str = "Markdown (*.md);;JSON (*.json);;Todos os arquivos (*)"
     export_all_title: str = "Exportar memórias e conversas"
@@ -314,7 +314,7 @@ class Dialogs:
         return f"Ela tem {plural(messages, 'mensagem', 'mensagens')} e fica na lixeira por {plural(days, 'dia', 'dias')}, onde pode ser restaurada."
 
     def wipe_memories_msg(self, n: int, pinned: int) -> str:
-        return (f"Isto apaga para sempre {plural(n, 'memória', 'memórias')} de longo prazo do Jarvis, "
+        return (f"Isto apaga para sempre {plural(n, 'memória', 'memórias')} de longo prazo do Eco, "
                 f"{plural(pinned, 'fixada', 'fixadas')} incluídas. As conversas não são afetadas.")
 
     def wipe_memories_target(self, n: int, pinned: int) -> str:
@@ -340,7 +340,7 @@ class Notices:
     trash_emptied_title: str = "Lixeira esvaziada"
     wiped_conversations_title: str = "Conversas apagadas"
     resumed_title: str = "Conversa retomada"
-    resumed_detail: str = "O Jarvis em execução só a vê depois do próximo pedido que você fizer a ele."
+    resumed_detail: str = "O Eco em execução só a vê depois do próximo pedido que você fizer a ele."
     exported_title: str = "Conversa exportada"
     exported_all_title: str = "Dados exportados"
     exported_note: str = "Trechos com cara de senha ou chave foram omitidos."

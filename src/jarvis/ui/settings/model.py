@@ -72,7 +72,7 @@ def field_message(problem: Problem) -> str:
 
 @dataclass(frozen=True)
 class SaveOutcome:
-    """O que a tela mostra depois de gravar: resultado do store, o que mudou e o estado do Jarvis."""
+    """O que a tela mostra depois de gravar: resultado do store, o que mudou e o estado do Eco."""
     result: SaveResult
     reset: bool
     running: bool

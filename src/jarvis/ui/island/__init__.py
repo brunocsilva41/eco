@@ -1,4 +1,4 @@
-"""Ilha do Jarvis (interface estilo Dynamic Island). Fase I0: prototipo visual com dados falsos."""
+"""Ilha do Eco (interface estilo Dynamic Island). Fase I0: prototipo visual com dados falsos."""
 from __future__ import annotations
 
 from typing import Any

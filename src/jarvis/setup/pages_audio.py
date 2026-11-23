@@ -705,10 +705,11 @@ class DonePage(Page):
             self.warn_host.addWidget(InlineBanner("warn", S.F_INCOMPLETE))
         for i in range(self.summary.body.count() - 1, 0, -1):
             it = self.summary.body.takeAt(i)
-            if it.widget():
-                it.widget().hide()
-                it.widget().setParent(None)
-                it.widget().deleteLater()
+            old = it.widget()                      # guarda o widget: depois de setParent(None) o item perde a referencia (AttributeError ao reabrir a etapa)
+            if old is not None:
+                old.hide()
+                old.setParent(None)
+                old.deleteLater()
         mic = cfg.audio.input_device or S.F_DEFAULT_DEV
         out = cfg.audio.output_device or S.F_DEFAULT_DEV
         profile = {"balanced": "Equilibrado", "strict": "Estrito"}.get(cfg.safety.permission_mode, cfg.safety.permission_mode)

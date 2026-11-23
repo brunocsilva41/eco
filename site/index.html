@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Eco — seu assistente de voz. Local. Privado.</title>
+<meta name="description" content="Eco é um assistente de voz em português do Brasil para Windows. Ouve, pensa, fala e controla o PC com travas de segurança. Roda no seu computador, com a sua GPU.">
+<meta name="theme-color" content="#0E1116" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Eco — seu assistente de voz. Local. Privado.">
+<meta property="og:description" content="Assistente de voz em pt-BR para Windows: transcrição local, IA local ou agentes na nuvem opcionais, voz natural e controle do PC com segurança.">
+<meta property="og:image" content="assets/og.png">
+<meta property="og:locale" content="pt_BR">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="css/style.css">
+<script>
+  /* aplica o tema salvo antes da pintura, sem piscar */
+  document.documentElement.classList.add("js");
+  try { var t = localStorage.getItem("eco-theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#conteudo">Ir para o conteúdo</a>
+
+<header class="nav" id="topo">
+  <div class="nav__in">
+    <a class="brand" href="#topo" aria-label="Eco, início">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#eco-mark"/></svg>
+      <span>Eco</span>
+    </a>
+    <nav class="nav__links" aria-label="Seções">
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#recursos">Recursos</a>
+      <a href="#privacidade">Privacidade</a>
+      <a href="#requisitos">Requisitos</a>
+      <a href="#faq">Perguntas</a>
+    </nav>
+    <div class="nav__act">
+      <button class="icon-btn" id="theme-btn" type="button" aria-label="Alternar tema (automático)" title="Tema: automático">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </button>
+      <a class="btn btn--sm btn--primary" href="#download">Baixar</a>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo">
+
+<!-- ============ HERO ============ -->
+<section class="hero" aria-labelledby="h-hero">
+  <div class="hero__glow" aria-hidden="true"></div>
+  <p class="eyebrow reveal">Para Windows · pt-BR · 100% no seu PC</p>
+  <h1 id="h-hero" class="display reveal">Fale. O <span class="grad">Eco</span> resolve.</h1>
+  <p class="lead reveal">Um assistente de voz que ouve, pensa, fala e controla o computador, com a sua voz, no seu hardware e com travas de segurança em cada ação.</p>
+
+  <div class="stage reveal" id="stage">
+    <div class="island-wrap">
+      <button class="island" id="island" type="button" data-state="idle" aria-live="polite" aria-label="Demonstração da Ilha do Eco. Estado: em repouso. Pressione para avançar o estado.">
+        <span class="island__icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><use href="#eco-mark"/></svg>
+        </span>
+        <span class="island__text">
+          <span class="island__label" id="island-label">Em repouso</span>
+          <span class="island__sub" id="island-sub">Diga “Eco” ou segure F9</span>
+        </span>
+        <span class="island__waves" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </span>
+        <span class="island__actions" aria-hidden="true">
+          <span class="chip chip--no">Não</span><span class="chip chip--yes">Sim</span>
+        </span>
+      </button>
+    </div>
+    <div class="states" role="group" aria-label="Escolha um estado da Ilha">
+      <button type="button" class="state" data-go="idle" aria-pressed="true">Repouso</button>
+      <button type="button" class="state" data-go="listening" aria-pressed="false">Ouvindo</button>
+      <button type="button" class="state" data-go="thinking" aria-pressed="false">Pensando</button>
+      <button type="button" class="state" data-go="speaking" aria-pressed="false">Falando</button>
+      <button type="button" class="state" data-go="confirming" aria-pressed="false">Confirmação</button>
+      <button type="button" class="state" data-go="error" aria-pressed="false">Erro</button>
+      <button type="button" class="state state--play" id="play" aria-pressed="true" aria-label="Pausar a demonstração automática">Pausar</button>
+    </div>
+  </div>
+
+  <div class="cta reveal">
+    <a class="btn btn--primary btn--lg" href="#download" id="hero-download">Baixar para Windows</a>
+    <a class="btn btn--ghost btn--lg" href="#como-funciona">Ver como funciona <span aria-hidden="true">›</span></a>
+  </div>
+  <p class="fine reveal" id="hero-ver">Windows 10 (build 19044+) ou 11 · 64 bits</p>
+</section>
+
+<!-- ============ FAIXA ============ -->
+<section class="ribbon" aria-label="Princípios">
+  <ul>
+    <li><strong>Local primeiro.</strong> Escuta, IA e voz rodam no PC.</li>
+    <li><strong>Você no controle.</strong> Toda ação nociva pede confirmação.</li>
+    <li><strong>Sem conta.</strong> Funciona sem login e sem nuvem.</li>
+  </ul>
+</section>
+
+<!-- ============ COMO FUNCIONA ============ -->
+<section class="sec" id="como-funciona" aria-labelledby="h-como">
+  <div class="sec__head">
+    <p class="eyebrow reveal">Como funciona</p>
+    <h2 id="h-como" class="h2 reveal">Da sua voz à resposta,<br>sem sair do computador.</h2>
+    <p class="lead lead--sm reveal">Cinco etapas. A única que pode usar a internet é a que você escolher ligar.</p>
+  </div>
+  <ol class="flow" id="flow">
+    <li class="flow__step" data-i="1">
+      <span class="flow__n">1</span>
+      <h3>Você fala</h3>
+      <p>O microfone é aberto só quando você pede: segure F9 ou deixe a escuta contínua ligada. O áudio não é gravado em disco.</p>
+      <span class="tag tag--local">No PC</span>
+    </li>
+    <li class="flow__step" data-i="2">
+      <span class="flow__n">2</span>
+      <h3>Transcrição local</h3>
+      <p>Reconhecimento de fala em português com faster-whisper ou whisper.cpp (Vulkan). O texto nasce no seu computador.</p>
+      <span class="tag tag--local">No PC</span>
+    </li>
+    <li class="flow__step" data-i="3">
+      <span class="flow__n">3</span>
+      <h3>O cérebro decide</h3>
+      <p>Um modelo local (llama.cpp, na sua GPU) responde por padrão. Se quiser, um agente na nuvem da sua própria assinatura recebe <em>só o texto</em>. Se falhar, o local assume.</p>
+      <span class="tag tag--local">Local</span><span class="tag tag--opt">Nuvem opcional</span>
+    </li>
+    <li class="flow__step" data-i="4">
+      <span class="flow__n">4</span>
+      <h3>Ação, com confirmação</h3>
+      <p>Abrir um programa, digitar, clicar, rodar um comando. Cada ação passa por travas e, quando é nociva, pelo seu Sim ou Não.</p>
+      <span class="tag tag--local">No PC</span>
+    </li>
+    <li class="flow__step" data-i="5">
+      <span class="flow__n">5</span>
+      <h3>Resposta falada</h3>
+      <p>A síntese de voz (Piper) fala de volta em português natural, também local. Você interrompe quando quiser.</p>
+      <span class="tag tag--local">No PC</span>
+    </li>
+  </ol>
+</section>
+
+<!-- ============ RECURSOS ============ -->
+<section class="sec sec--tint" id="recursos" aria-labelledby="h-rec">
+  <div class="sec__head">
+    <p class="eyebrow reveal">Recursos</p>
+    <h2 id="h-rec" class="h2 reveal">Feito para quem usa o PC<br>o dia inteiro.</h2>
+  </div>
+  <div class="bento">
+    <article class="card card--wide reveal">
+      <h3>Privacidade de verdade</h3>
+      <p>Voz, transcrição, modelo e memória ficam na sua máquina. Não há conta, anúncio nem telemetria. O servidor do modelo escuta só em 127.0.0.1.</p>
+      <div class="kv"><span>Padrão</span><b>Nada sai do PC</b></div>
+    </article>
+    <article class="card reveal">
+      <h3>Acelerado por GPU</h3>
+      <p>Modelo e transcrição usam Vulkan. Testado em uma Radeon RX 580 de 8 GB; outras GPUs ainda não foram testadas.</p>
+    </article>
+    <article class="card reveal">
+      <h3>Controla o PC com segurança</h3>
+      <p>Ferramentas em lista permitida, digitação só em programas autorizados, apagar vai para a Lixeira e há tecla de emergência.</p>
+      <div class="kv"><span>Emergência</span><b>Ctrl+Alt+F12</b></div>
+    </article>
+    <article class="card reveal">
+      <h3>Terminal integrado</h3>
+      <p>Opcional e desligado por padrão: rode git e outros comandos por voz, com lista permitida, comandos sempre bloqueados e confirmação.</p>
+    </article>
+    <article class="card reveal">
+      <h3>Voz natural em português</h3>
+      <p>A resposta é falada pelo Piper, local, com normalização de números, horas, datas e siglas. Aperte F9 para interromper.</p>
+    </article>
+    <article class="card card--wide reveal">
+      <h3>Agentes na nuvem, se você quiser</h3>
+      <p>Conecte o OpenCode, o Antigravity, o Claude Code, o Codex ou o Copilot pelo protocolo ACP, usando o login que você já tem. Só texto vai para a nuvem, a Ilha avisa a cada uso e as mesmas travas locais continuam valendo.</p>
+      <div class="pills"><span>OpenCode</span><span>Antigravity</span><span>Claude Code</span><span>Codex</span><span>Copilot</span></div>
+    </article>
+    <article class="card reveal">
+      <h3>Ilha que não atrapalha</h3>
+      <p>Uma pílula discreta mostra o estado, as ondas da voz e os botões Sim e Não. Some em tela cheia.</p>
+    </article>
+    <article class="card reveal">
+      <h3>Atualiza sozinho</h3>
+      <p>Aviso de versão nova, download com retomada e instalação por cima com conferência de SHA-256. Você pode desligar.</p>
+    </article>
+    <article class="card reveal">
+      <h3>Memória que você controla</h3>
+      <p>Conversas e preferências em SQLite local. Veja, edite ou esqueça tudo, ou use o modo sem histórico.</p>
+    </article>
+    <article class="card reveal">
+      <h3>Fale do seu jeito</h3>
+      <p>Segure F9 e fale, ou ligue a escuta aberta (Ctrl+Alt+L) para o Eco ouvir sem apertar nada. Mute com Ctrl+Alt+M.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ============ POR DENTRO ============ -->
+<section class="sec" id="por-dentro" aria-labelledby="h-in">
+  <div class="sec__head">
+    <p class="eyebrow reveal">Por dentro</p>
+    <h2 id="h-in" class="h2 reveal">Configurações que fazem sentido.</h2>
+    <p class="lead lead--sm reveal">Busca com realce, seções em cartões e tudo explicado em português.</p>
+  </div>
+  <div class="shots reveal" id="shots">
+    <div class="tabs" role="tablist" aria-label="Telas do Eco">
+      <button role="tab" id="tab-0" aria-controls="panel-0" aria-selected="true" tabindex="0">Cérebro</button>
+      <button role="tab" id="tab-1" aria-controls="panel-1" aria-selected="false" tabindex="-1">Busca</button>
+      <button role="tab" id="tab-2" aria-controls="panel-2" aria-selected="false" tabindex="-1">Terminal</button>
+    </div>
+    <div class="device">
+      <div class="device__bar" aria-hidden="true"><i></i><i></i><i></i></div>
+      <figure role="tabpanel" id="panel-0" aria-labelledby="tab-0" class="shot">
+        <img data-shot="cerebro" src="assets/shots/cerebro-dark.png" width="1120" height="768" loading="lazy" decoding="async" alt="Tela de Configurações do Eco, página Cérebro em nuvem, com seletor de cérebro local ou agente na nuvem.">
+      </figure>
+      <figure role="tabpanel" id="panel-1" aria-labelledby="tab-1" class="shot" hidden>
+        <img data-shot="busca" src="assets/shots/busca-dark.png" width="1120" height="768" loading="lazy" decoding="async" alt="Busca nas Configurações do Eco com o trecho encontrado realçado.">
+      </figure>
+      <figure role="tabpanel" id="panel-2" aria-labelledby="tab-2" class="shot" hidden>
+        <img data-shot="terminal" src="assets/shots/terminal-dark.png" width="1040" height="590" loading="lazy" decoding="async" alt="Página Terminal das Configurações do Eco, com o modo do terminal integrado e as pastas permitidas.">
+      </figure>
+    </div>
+    <p class="fine fine--center" data-placeholder-note>Capturas ilustrativas; as imagens finais seguem a identidade Eco.</p>
+  </div>
+</section>
+
+<!-- ============ PRIVACIDADE ============ -->
+<section class="sec sec--tint" id="privacidade" aria-labelledby="h-priv">
+  <div class="sec__head">
+    <p class="eyebrow reveal">Segurança e privacidade</p>
+    <h2 id="h-priv" class="h2 reveal">O que fica. O que pode sair.<br>Sem letra miúda.</h2>
+  </div>
+  <div class="split">
+    <div class="panel panel--stay reveal">
+      <h3><span class="dot dot--ok" aria-hidden="true"></span>Nunca sai do seu PC</h3>
+      <ul>
+        <li>Seu áudio e as gravações da sua voz</li>
+        <li>A transcrição, no modo padrão</li>
+        <li>Capturas de tela e títulos de janelas</li>
+        <li>Memória, conversas e arquivos</li>
+        <li>Senhas e tokens (o Eco nunca os vê)</li>
+      </ul>
+    </div>
+    <div class="panel panel--maybe reveal">
+      <h3><span class="dot dot--warn" aria-hidden="true"></span>Só sai se você ligar</h3>
+      <ul>
+        <li><b>Agente na nuvem (opcional):</b> apenas o texto do pedido, por agente que você autorizar, com aviso na Ilha e registro em log</li>
+        <li><b>Verificação de atualização:</b> consulta a página de versões no GitHub (pode ser desligada)</li>
+        <li><b>Download dos modelos:</b> uma vez, na instalação, por HTTPS e conferido por SHA-256</li>
+      </ul>
+    </div>
+  </div>
+  <ul class="safety reveal" aria-label="Travas de segurança">
+    <li>Servidor do modelo só em loopback, com chave por execução</li>
+    <li>Sem shell livre: só ferramentas registradas</li>
+    <li>Apagar vai para a Lixeira, com desfazer</li>
+    <li>Auditoria com assinatura HMAC</li>
+    <li>Tecla de emergência que para tudo</li>
+    <li>Sem resposta em 15 s, a confirmação vale Não</li>
+  </ul>
+</section>
+
+<!-- ============ REQUISITOS ============ -->
+<section class="sec" id="requisitos" aria-labelledby="h-req">
+  <div class="sec__head">
+    <p class="eyebrow reveal">Requisitos</p>
+    <h2 id="h-req" class="h2 reveal">Roda em hardware comum.</h2>
+  </div>
+  <dl class="req reveal">
+    <div><dt>Sistema</dt><dd>Windows 10 (build 19044 ou superior) ou Windows 11, 64 bits</dd></div>
+    <div><dt>Memória</dt><dd>16 GB recomendados (mínimo 12 GB)</dd></div>
+    <div><dt>Vídeo</dt><dd>GPU com Vulkan e 8 GB de VRAM recomendados. Testado em Radeon RX 580 de 8 GB; NVIDIA e Intel ainda não foram testadas</dd></div>
+    <div><dt>Disco</dt><dd>Cerca de 3,5 GB para os modelos, mais o programa</dd></div>
+    <div><dt>Instalação</dt><dd>Por usuário, sem administrador. O assistente de configuração prepara microfone, voz e modelos</dd></div>
+  </dl>
+</section>
+
+<!-- ============ DOWNLOAD ============ -->
+<section class="sec sec--tint" id="download" aria-labelledby="h-dl">
+  <div class="sec__head">
+    <p class="eyebrow reveal">Download</p>
+    <h2 id="h-dl" class="h2 reveal">Instale em minutos.</h2>
+  </div>
+  <div class="dl reveal" id="dl" data-state="loading">
+    <div class="dl__main">
+      <div class="dl__ver" id="dl-ver">Carregando…</div>
+      <p class="dl__meta" id="dl-meta">Eco para Windows 10/11 · 64 bits</p>
+      <a class="btn btn--primary btn--lg" id="dl-btn" href="#download" aria-disabled="true">Baixar para Windows</a>
+      <p class="fine" id="dl-note"></p>
+    </div>
+    <div class="dl__hash">
+      <h3>Confira a integridade</h3>
+      <p>SHA-256 do instalador:</p>
+      <code id="dl-sha" class="hash">—</code>
+      <button type="button" class="btn btn--ghost btn--sm" id="copy-sha">Copiar hash</button>
+      <details class="how">
+        <summary>Como verificar</summary>
+        <p>No PowerShell, na pasta do download:</p>
+        <pre><code>Get-FileHash .\Eco-Setup-&lt;versão&gt;.exe -Algorithm SHA256</code></pre>
+        <p>O resultado deve ser idêntico ao hash acima. Se for diferente, apague o arquivo e baixe de novo.</p>
+      </details>
+    </div>
+  </div>
+  <p class="fine fine--center reveal">O instalador ainda <strong>não é assinado digitalmente</strong>: o SmartScreen do Windows pode avisar “editor desconhecido”. Por isso o hash acima existe.</p>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="sec" id="faq" aria-labelledby="h-faq">
+  <div class="sec__head">
+    <p class="eyebrow reveal">Perguntas frequentes</p>
+    <h2 id="h-faq" class="h2 reveal">Respostas diretas.</h2>
+  </div>
+  <div class="faq reveal">
+    <details><summary>O Eco funciona sem internet?</summary><p>Sim, depois de instalado e com os modelos baixados. Só os recursos opcionais (agentes na nuvem e verificação de atualização) usam a internet.</p></details>
+    <details><summary>Preciso de uma conta?</summary><p>Não. O Eco não tem conta. Para usar um agente na nuvem você usa o login que já tem nele; o Eco nunca vê a sua senha.</p></details>
+    <details><summary>Ele pode mexer no meu computador sozinho?</summary><p>Só com as ferramentas permitidas e dentro das travas. Ações nocivas (apagar, mover, editar arquivos, fechar janelas) pedem o seu Sim, e Ctrl+Alt+F12 para tudo na hora.</p></details>
+    <details><summary>Funciona com placa NVIDIA ou Intel?</summary><p>Usa Vulkan, então em teoria sim, mas só foi testado em uma Radeon RX 580. Se não houver Vulkan, cai para a CPU, que é bem mais lenta.</p></details>
+    <details><summary>Posso usar só o modelo local?</summary><p>É o padrão. O cérebro em nuvem é opcional, vem desligado e tem fallback automático para o local.</p></details>
+    <details><summary>Por que o Windows avisa ao instalar?</summary><p>O instalador ainda não tem assinatura de código. Confira o SHA-256 antes de abrir.</p></details>
+    <details><summary>Como atualizo?</summary><p>O Eco avisa quando há versão nova e instala por cima, mantendo os seus dados. Dá para desligar a verificação nas Configurações.</p></details>
+  </div>
+</section>
+
+<!-- ============ HISTÓRICO ============ -->
+<section class="sec sec--tint" id="novidades" aria-labelledby="h-nov">
+  <div class="sec__head">
+    <p class="eyebrow reveal">Novidades</p>
+    <h2 id="h-nov" class="h2 reveal">Em constante evolução.</h2>
+  </div>
+  <ol class="log reveal" id="log">
+    <li><b>Em teste</b><span>Nome Eco, atualização automática, Configurações redesenhadas, cérebro em nuvem via ACP e terminal integrado.</span></li>
+    <li><b>v0.1.3</b><span>Pedido de permissão na Ilha: «Permitir e lembrar?» com Sim ou Não, também por voz.</span></li>
+    <li><b>v0.1.2</b><span>Escuta aberta, ícone na bandeja, controle de janelas e correção do microfone preso.</span></li>
+    <li><b>v0.1.1</b><span>Assistente que encontra modelos já existentes no PC.</span></li>
+  </ol>
+  <p class="fine fine--center reveal">As versões anteriores foram publicadas com o nome antigo do projeto.</p>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="foot__in">
+    <div class="brand brand--foot"><svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#eco-mark"/></svg><span>Eco</span></div>
+    <p>Seu assistente de voz. Local. Privado.</p>
+    <ul class="foot__links">
+      <li><a href="#privacidade">Privacidade</a></li>
+      <li><a href="#faq">Perguntas</a></li>
+      <li><a href="#download">Download</a></li>
+      <li><a href="#topo">Voltar ao topo</a></li>
+    </ul>
+    <p class="fine">Licença do software: a definir pelo autor. Windows é marca da Microsoft; nomes de agentes citados pertencem aos seus donos e o Eco não é afiliado a eles.</p>
+  </div>
+</footer>
+
+<!-- símbolo da marca (provisório até a arte final) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="eco-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2DD4FF"/><stop offset="1" stop-color="#4F7CFF"/></linearGradient>
+    <symbol id="eco-mark" viewBox="0 0 32 32">
+      <path d="M16 3.5a12.5 12.5 0 1 0 12.5 12.5" fill="none" stroke="url(#eco-g)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M10 13.5v5M16 10v12M22 12.5v7" fill="none" stroke="url(#eco-g)" stroke-width="3" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<script src="js/main.js" defer></script>
+</body>
+</html>

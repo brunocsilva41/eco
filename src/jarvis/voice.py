@@ -218,7 +218,7 @@ class Voice:
                         produced = self._put_piece(_Piece(item), item.epoch)   # marca de fim
                     else:
                         produced = False
-            except Exception:  # noqa: BLE001 - falha de TTS nunca derruba o Jarvis
+            except Exception:  # noqa: BLE001 - falha de TTS nunca derruba o Eco
                 log.exception("falha ao sintetizar a fala")
                 produced = False
             if not produced:
@@ -241,7 +241,7 @@ class Voice:
             handed: list[_Item] = []
             try:
                 self._speaker.play_stream(self._chunks(token, epoch, piece, handed), token)
-            except Exception:  # noqa: BLE001 - falha de áudio nunca derruba o Jarvis
+            except Exception:  # noqa: BLE001 - falha de áudio nunca derruba o Eco
                 log.exception("falha ao reproduzir a fala")
             finally:
                 for it in handed:                     # nada que passou por este stream fica pendente

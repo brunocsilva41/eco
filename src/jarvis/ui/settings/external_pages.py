@@ -1,4 +1,4 @@
-"""Paginas que abrem outras telas do Jarvis: "Minha voz" (gravador) e "O que o Jarvis sabe de mim" (painel de
+"""Paginas que abrem outras telas do Eco: "Minha voz" (gravador) e "O que o Eco sabe de mim" (painel de
 memoria). As duas telas sao de outros modulos e entram por importacao PREGUICOSA: se faltarem, a pagina
 mostra uma mensagem clara em vez de quebrar.
 """
@@ -32,7 +32,7 @@ class MyVoicePage(PageBase):
         self.col.addLayout(self._error_slot)
         self._texts = [v.phrases_title, v.phrases_body, v.wake_title, v.wake_body, v.privacy]
         self._add(v.phrases_title, v.phrases_body, v.phrases_button, "frases", primary=True)
-        self._add(v.wake_title, v.wake_body, v.wake_button, "jarvis", primary=False)
+        self._add(v.wake_title, v.wake_body, v.wake_button, "eco", primary=False)
         note = Label(v.privacy, "help", wrap=True)
         self.col.addSpacing(SPACE.xxl)
         self.col.addWidget(note)

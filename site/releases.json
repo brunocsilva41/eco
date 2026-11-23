@@ -1,0 +1,11 @@
+{
+  "_comentario": "Gerado pelo workflow de Pages (tools/ci/gen_releases_json.py) a partir da release real do GitHub; nunca edite valores a mao. Enquanto version/url/sha256 forem null o site mostra 'Em breve'. url = download direto do asset (https://github.com/<dono>/<repo>/releases/latest/download/Eco-Setup.exe); sha256 = 64 hex conferido contra o .sha256 publicado.",
+  "version": null,
+  "date": null,
+  "size_bytes": null,
+  "sha256": null,
+  "url": null,
+  "versioned_url": null,
+  "notes_url": null,
+  "channel": "stable"
+}

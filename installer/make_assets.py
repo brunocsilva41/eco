@@ -54,7 +54,7 @@ def side(w: int, h: int) -> QImage:
     g.drawImage(QRectF((w - dd) / 2, h * 0.16, dd, dd), glyph)
     g.setPen(QColor(p.text))
     g.setFont(make_font(w * 0.17, 700))
-    g.drawText(QRectF(0, h * 0.16 + dd + h * 0.03, w, h * 0.09), Qt.AlignmentFlag.AlignCenter, "Jarvis")
+    g.drawText(QRectF(0, h * 0.16 + dd + h * 0.03, w, h * 0.09), Qt.AlignmentFlag.AlignCenter, "Eco")
     g.setPen(QColor(p.text_muted))
     g.setFont(make_font(w * 0.07, 400))
     g.drawText(QRectF(w * 0.08, h * 0.16 + dd + h * 0.13, w * 0.84, h * 0.14), Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap,
@@ -80,8 +80,8 @@ for s in (55, 64, 80):
     img.convertToFormat(QImage.Format.Format_RGB888).save(str(out / f"small-{s}.bmp"), "BMP")
 
 big = mark(256)
-big.save(str(out / "jarvis-256.png"), "PNG")
+big.save(str(out / "eco-256.png"), "PNG")
 from PIL import Image  # noqa: E402
 
-Image.open(out / "jarvis-256.png").save(out / "jarvis.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+Image.open(out / "eco-256.png").save(out / "eco.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 print("assets em", out)

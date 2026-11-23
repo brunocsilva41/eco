@@ -1,13 +1,14 @@
 """SearchField: busca com debounce, Ctrl+F para focar, Esc para limpar/sair."""
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QKeyEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import QLineEdit, QWidget
 
 from ..theme import SIZE, pal
 from . import icons
 from .base import set_a11y, strs, watch_theme
+from .visibility import set_shown
 from .fields import TextField
 
 _DEBOUNCE_MS = 150
@@ -31,7 +32,7 @@ class SearchField(TextField):
         self._clear = QAction(f.search_clear, self)
         self._clear.triggered.connect(self.clear)
         self.addAction(self._clear, QLineEdit.ActionPosition.TrailingPosition)
-        self._clear.setVisible(False)
+        set_shown(self._clear, False)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(_DEBOUNCE_MS)
@@ -52,7 +53,7 @@ class SearchField(TextField):
         self.selectAll()
 
     def _on_text(self, text: str) -> None:
-        self._clear.setVisible(bool(text))
+        set_shown(self._clear, bool(text))
         if text:
             self._timer.start()
         else:
@@ -66,6 +67,14 @@ class SearchField(TextField):
         p = pal()
         self._lead.setIcon(icons.icon("search", p.text_muted, SIZE.icon, widget=self))
         self._clear.setIcon(icons.icon("close", p.text_muted, SIZE.icon, widget=self))
+
+    def event(self, e) -> bool:  # type: ignore[no-untyped-def]
+        # Sem isto o atalho Esc da JANELA (fechar) roubava a tecla antes do campo: Esc na busca fechava as Configuracoes
+        # (ou abria "descartar alteracoes?") em vez de limpar o texto. Aceitar o ShortcutOverride entrega a tecla ao campo.
+        if e.type() == QEvent.Type.ShortcutOverride and isinstance(e, QKeyEvent) and e.key() == Qt.Key.Key_Escape:
+            e.accept()
+            return True
+        return super().event(e)
 
     def keyPressEvent(self, e: QKeyEvent) -> None:
         if e.key() == Qt.Key.Key_Escape:

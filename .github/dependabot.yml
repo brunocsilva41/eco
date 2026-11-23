@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # as ações ficam fixadas por SHA; o Dependabot propõe as atualizações por Pull Request
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

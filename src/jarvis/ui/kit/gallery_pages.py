@@ -236,7 +236,7 @@ def controls() -> Page:
     combo = ComboField([("Padrão do Windows", "default"), ("Headset USB", "usb")])
     fl.add(row(captioned("número (setas, PageUp/Down)", num), captioned("lista", combo), gap=SPACE.lg))
     focus += [("numero", num), ("lista", combo)]
-    fl.add(captioned("caminho", PathField("C:/Jarvis/logs", mode="dir")))
+    fl.add(captioned("caminho", PathField("C:/Eco/logs", mode="dir")))
     chips = ChipList(["notepad.exe", "calc.exe"])
     fl.add(captioned("lista de itens (Enter adiciona, x remove)", chips))
     focus.append(("lista-itens", chips))
@@ -253,8 +253,8 @@ def controls() -> Page:
     fr = Section("Linhas de campo", "Rótulo, ajuda de uma linha, controle, erro e selo. Nunca um cartão por campo.", level=1)
     r1 = FieldRow("Microfone", ComboField([("Padrão do Windows", "default")]), help="Usado em todas as conversas.")
     r2 = FieldRow("Sensibilidade", NumberField(60, minimum=0, maximum=100, suffix="%"), help="Mais alto capta falas mais baixas.", restart_required=True)
-    r3 = FieldRow("Pasta de logs", PathField("D:/nao-existe"), help="Onde o Jarvis guarda os registros.", stacked=True)
-    r3.set_error("Essa pasta não existe. Escolha outra, ou o Jarvis não consegue gravar os registros.")
+    r3 = FieldRow("Pasta de logs", PathField("D:/nao-existe"), help="Onde o Eco guarda os registros.", stacked=True)
+    r3.set_error("Essa pasta não existe. Escolha outra, ou o Eco não consegue gravar os registros.")
     r4 = FieldRow("Tecla de emergência", KeyCaptureField("Ctrl+Alt+Esc"), help="Interrompe tudo na hora.",
                   locked_reason="não pode ser alterada, ela é a trava de segurança")
     r5 = FieldRow("Ouvir sem apertar tecla", ToggleSwitch(True), help="Fica sempre ao alcance da voz.")
@@ -291,13 +291,13 @@ def feedback_and_states() -> Page:
     ind.add(row(ListeningIndicator("idle"), ListeningIndicator("listening"), ListeningIndicator("recording"), gap=SPACE.xl))
     lay.addWidget(ind)
     bn = Section("Avisos", "Erro diz o que houve, por que importa e o que fazer.", level=1)
-    bn.add(InlineBanner.error("Não consegui abrir o microfone", "Sem ele o Jarvis não ouve você.",
+    bn.add(InlineBanner.error("Não consegui abrir o microfone", "Sem ele o Eco não ouve você.",
                               "Feche o outro programa que usa o microfone e tente de novo.", action_text="Tentar de novo", dismissible=True))
     bn.add(InlineBanner("warn", "A tecla de emergência está sem uso", "Ela interrompe tudo caso algo saia do controle.", "Confira em Ferramentas e segurança."))
     bn.add(InlineBanner("ok", "Configurações salvas", "", ""))
     lay.addWidget(bn)
     es = Section("Vazio, carregando e erro", level=1)
-    es.add(row(EmptyState("Nenhuma memória ainda", "O Jarvis guarda aqui o que você pede para lembrar.", action_text="Adicionar memória"),
+    es.add(row(EmptyState("Nenhuma memória ainda", "O Eco guarda aqui o que você pede para lembrar.", action_text="Adicionar memória"),
                LoadingState("as memórias"), ErrorState("Não consegui ler as memórias", "Sem elas ele esquece o que você pediu.", "Tente de novo.")))
     lay.addWidget(es)
     lay.addStretch(1)

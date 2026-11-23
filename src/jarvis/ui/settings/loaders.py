@@ -16,7 +16,7 @@ from jarvis.tools.catalog import ToolInfo, describe_tools
 log = logging.getLogger(__name__)
 
 DeviceKind = Literal["input", "output"]
-_EXCLUDED_RANK = 99          # WDM-KS e afins: o Jarvis so os usa por indice explicito, entao nao entram na lista
+_EXCLUDED_RANK = 99          # WDM-KS e afins: o Eco so os usa por indice explicito, entao nao entram na lista
 
 
 @dataclass(frozen=True)

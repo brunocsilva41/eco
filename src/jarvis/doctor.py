@@ -1,4 +1,4 @@
-"""`jarvis doctor`: confere o ambiente sem abrir o microfone, tocar som nem subir o modelo."""
+"""`eco doctor`: confere o ambiente sem abrir o microfone, tocar som nem subir o modelo."""
 from __future__ import annotations
 
 import shutil
@@ -61,7 +61,7 @@ def _check_port(cfg: Config) -> CheckResult:
     host, port = cfg.llm.host, cfg.llm.port
     if health_ok(host, port):
         return CheckResult("porta do LLM", False,
-                           f"{host}:{port} já tem um servidor de modelo rodando que o Jarvis não iniciou; ele NÃO o usa. "
+                           f"{host}:{port} já tem um servidor de modelo rodando que o Eco não iniciou; ele NÃO o usa. "
                            "Feche-o ou mude llm.port")
     with socket.socket() as s:
         s.settimeout(0.5)
@@ -145,7 +145,38 @@ def _check_where(cfg: Config) -> list[CheckResult]:
     return out
 
 
-def run_doctor(cfg: Config) -> list[CheckResult]:
+def _check_toolpaths(cfg: Config) -> list[CheckResult]:
+    """Caminhos PERSONALIZADOS (Configurações > Caminhos dos programas) precisam valer; senão o Eco usa a busca automática."""
+    from .core import toolpaths
+    out: list[CheckResult] = []
+    for d in toolpaths.CATALOG:
+        if not toolpaths.is_custom(d, cfg):
+            continue
+        v = toolpaths.validate_path(d.key, toolpaths.configured_value(d, cfg), run_version=True, check_signature=False)
+        out.append(CheckResult(f"caminho personalizado: {d.title}", v.ok, v.message))
+    return out
+
+
+def _scan_results(cfg: Config) -> list[CheckResult]:
+    """Varredura TOTAL das ferramentas (versão, onde foi achada, o que fazer). FALTA em item obrigatório = falha."""
+    from .core import toolpaths
+    txt = {"ok": "OK", "warn": "AVISO", "fail": "FALTA", "info": "opcional"}
+    out: list[CheckResult] = []
+    for it in toolpaths.scan_all(cfg):
+        parts = [txt.get(it.status, it.status)]
+        if it.version:
+            parts.append(f"versão {it.version}")
+        if it.path:
+            parts.append(f"{it.path} ({it.where})")
+        if it.detail and it.detail != "encontrado":
+            parts.append(it.detail)
+        if it.status in ("fail", "warn") and it.hint:
+            parts.append("fazer: " + it.hint)
+        out.append(CheckResult(f"ferramenta: {it.title}", it.status != "fail", " · ".join(parts)))
+    return out
+
+
+def run_doctor(cfg: Config, full: bool = False) -> list[CheckResult]:
     results: list[CheckResult] = [_check_python(), _check_disk(cfg), _check_ram(),
                                   _file("llama-server", cfg.paths.llama_bin / "llama-server.exe"),
                                   _file("modelo LLM", cfg.llm.model), _file("mmproj (visão)", cfg.llm.mmproj, required=False),
@@ -154,4 +185,7 @@ def run_doctor(cfg: Config) -> list[CheckResult]:
     results += _check_where(cfg)
     results += _check_hotkeys(cfg)
     results.append(_check_tools(cfg))
+    results += _check_toolpaths(cfg)
+    if full:
+        results += _scan_results(cfg)
     return results

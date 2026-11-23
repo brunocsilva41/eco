@@ -1,0 +1,12 @@
+# Fim de linha: scripts do Windows em CRLF; binarios nunca convertidos.
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+*.iss  text eol=crlf
+*.sh   text eol=lf
+*.bmp  binary
+*.ico  binary
+*.png  binary
+*.gif  binary
+*.wav  binary
+*.exe  binary

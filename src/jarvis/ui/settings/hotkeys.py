@@ -1,4 +1,4 @@
-"""Traducao entre o texto de tecla do Qt (``Ctrl+Alt+F12``, ``Esc``, ``PgUp``) e o formato da config do Jarvis
+"""Traducao entre o texto de tecla do Qt (``Ctrl+Alt+F12``, ``Esc``, ``PgUp``) e o formato da config do Eco
 (``ctrl+alt+f12``, ``esc``, ``pageup``). Puro: sem widget, sem disco."""
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _parts(text: str) -> list[str]:
 
 
 def to_config(qt_text: str) -> str:
-    """Texto do KeyCaptureField -> formato da config (minusculo, nomes do Jarvis)."""
+    """Texto do KeyCaptureField -> formato da config (minusculo, nomes do Eco)."""
     return "+".join(_QT_TO_CONFIG.get(p, p) for p in _parts(qt_text))
 
 

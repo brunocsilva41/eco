@@ -2,6 +2,8 @@
 ``FieldRow`` prontas, com o texto usado pela busca. Sem regra de negocio: so leitura de estado e sinais."""
 from __future__ import annotations
 
+import importlib
+import inspect
 import logging
 import platform
 from dataclasses import dataclass
@@ -128,3 +130,33 @@ def details_block() -> list[Block]:
         lbl.setAccessibleName(f"{label}: {value}")
         out.append(Block(FieldRow(label, lbl), f"{label} {value}"))
     return out
+
+
+def external_panel(module: str, controller: SettingsController, text: str) -> list[Block]:
+    """Painel autocontido de outro modulo (``updates_page``, ``cloud_brain_page``): usa a primeira classe de widget
+    definida no modulo cujo nome termina em Panel/Page/Widget e que aceita ``(controller)`` ou nada. Modulo
+    ausente ou com erro vira lista vazia (a pagina segue com os campos do schema) e fica no log."""
+    try:
+        mod = importlib.import_module(f"{__package__}.{module}")
+    except ModuleNotFoundError as exc:
+        if exc.name and exc.name.endswith(module):
+            return []
+        log.warning("painel %s nao carregou: %s", module, exc)
+        return []
+    except Exception as exc:  # noqa: BLE001 (um painel quebrado nao derruba as Configuracoes)
+        log.warning("painel %s nao carregou: %s", module, exc)
+        return []
+    members = sorted(inspect.getmembers(mod, inspect.isclass), key=lambda m: (not m[0].endswith("Panel"), m[0]))
+    for name, cls in members:                                # prefere *Panel (sem titulo nem rolagem propria)
+        if cls.__module__ != mod.__name__ or not issubclass(cls, QWidget) or not name.endswith(("Panel", "Page", "Widget")):
+            continue
+        for args in ((controller,), ()):
+            try:
+                return [Block(cls(*args), text)]
+            except TypeError:
+                continue
+            except Exception as exc:  # noqa: BLE001
+                log.warning("painel %s.%s falhou: %s", module, name, exc)
+                return []
+    return []
+

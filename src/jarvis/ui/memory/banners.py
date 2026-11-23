@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from ..kit import InlineBanner
+from ..kit.visibility import set_shown
 
 
 class BannerSlot(QWidget):
@@ -31,8 +33,18 @@ class BannerSlot(QWidget):
         banner.dismissed.connect(self.clear)
         self._banner = banner
         self._lay.addWidget(banner)
-        self.setVisible(True)
+        if self.parentWidget() is None:
+            self._show_when_parented = True          # sem pai: mostrar agora criaria uma janela solta; mostra quando ganhar o pai
+        else:
+            set_shown(self, True)
         return banner
+
+    def event(self, e) -> bool:  # type: ignore[no-untyped-def]
+        if e.type() == QEvent.Type.ParentChange and getattr(self, "_show_when_parented", False) and self.parentWidget() is not None:
+            self._show_when_parented = False
+            if self._banner is not None:
+                self.setVisible(True)
+        return super().event(e)
 
     def _act(self, callback: Callable[[], None]) -> None:
         self.clear()

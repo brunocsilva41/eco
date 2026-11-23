@@ -1,4 +1,4 @@
-"""MemoryPanel: a casca do painel "O que o Jarvis sabe de mim" (faixa de áreas + as três áreas + avisos).
+"""MemoryPanel: a casca do painel "O que o Eco sabe de mim" (faixa de áreas + as três áreas + avisos).
 
 Uso (API pública estável)::
 

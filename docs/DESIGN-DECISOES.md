@@ -1,6 +1,6 @@
 # Decisões de design: base da repaginação (theme + kit)
 
-Direção: `OpenBot\Shared\jarvis\DESIGN.md`. Skill: antislop, modo DURING (core + antislop-ui), declarado pelo dono na tarefa. Código: `src/jarvis/ui/theme.py`, `ui/strings.py`, `ui/kit/`. Galeria: `python -m jarvis.ui.kit.gallery`.
+Direção: `capturas/DESIGN.md`. Skill: antislop, modo DURING (core + antislop-ui), declarado pelo dono na tarefa. Código: `src/jarvis/ui/theme.py`, `ui/strings.py`, `ui/kit/`. Galeria: `python -m jarvis.ui.kit.gallery`.
 
 ## Design Read
 Ferramenta de controle pessoal, usada todo dia por uma pessoa só, em linguagem de painel de instrumentos: sóbria, densa na medida, legível a 1 m. **Dials: ENERGY 2 / RHYTHM 2 / MOTION 1.**
@@ -105,7 +105,7 @@ Bloco 4: C-1 a C-5, R-05, R-11, R-15, R-16 (sem buzzwords), R-20, R-21 (escuro p
 Só offscreen; fonte Segoe UI Variable ausente nesta máquina (usou Segoe UI); DPI real por monitor, leitor de tela, hover real com mouse, e navegação completa por teclado não foram testados.
 
 ## Tela: Gravador de voz
-Código: `src/jarvis/ui/recorder/` (fachada `ui/recorder_window.py`). Prints: `Shared/jarvis/ui-prints/gravador/<estado>-<tema>-<escala>.png`.
+Código: `src/jarvis/ui/recorder/` (fachada `ui/recorder_window.py`). Prints: `capturas/ui-prints/gravador/<estado>-<tema>-<escala>.png`.
 
 **Design Read:** ferramenta de uso diário, tarefa única e repetitiva (ler, gravar, conferir, seguir), linguagem de painel de instrumentos. Dials ENERGY 2 / RHYTHM 2 / MOTION 1. Decisão da tela: "gravei bem esta frase e posso ir para a próxima?".
 
@@ -123,7 +123,7 @@ Código: `src/jarvis/ui/recorder/` (fachada `ui/recorder_window.py`). Prints: `S
 **N-11:** `start_recording(preconfirmed=índice)`: o "Tentar de novo" guarda, no próprio fechamento do aviso, o índice cuja substituição já foi confirmada; só esse índice pula a pergunta. Trocar de item (`_leave_item`) apaga o aviso e a ação; se o item mudar enquanto a lista de microfones é relida, nada grava. Qualquer outro arquivo existente sempre passa por ConfirmDialog.
 
 **Delivery Gate**
-- Bloco 1: R-02 PASS (grep de travessão em `recorder/*.py` e fachada: 0; o "−" de dB é sinal de menos). R-03 PASS com ressalva (mínimo 900x620 sem corte, miolo rolável; ver prints `ocioso-minimo`; só offscreen). R-17/18/36/38 PASS (os números são medidos da gravação; nada inventado; frases são as do arquivo do Bruno). R-23 PASS (nenhum asset criado). R-24/26 PASS (todo botão tem ação real; Anterior/Próxima/Pular/Ouvir/Regravar/Gravar ligados ao controlador). R-25 PASS (só tokens do tema, pares já medidos). R-27 PASS (vazio, carregando, erro). R-28 N/A. R-32 PASS com ressalva (Tab em ordem, Espaço/Enter/Esc/setas/O/R/P, foco do kit; navegação real não testada). R-33 PASS. R-34 PASS (prints nos dois temas). R-35 PARCIAL (executado offscreen com microfone e som simulados, sem erros; cliques reais não feitos). R-37 PASS. R-39 PASS com ressalva (accessibleName/Description em tudo; leitor de tela não testado). R-40 N/A.
+- Bloco 1: R-02 PASS (grep de travessão em `recorder/*.py` e fachada: 0; o "−" de dB é sinal de menos). R-03 PASS com ressalva (mínimo 900x620 sem corte, miolo rolável; ver prints `ocioso-minimo`; só offscreen). R-17/18/36/38 PASS (os números são medidos da gravação; nada inventado; frases são as do arquivo do usuário). R-23 PASS (nenhum asset criado). R-24/26 PASS (todo botão tem ação real; Anterior/Próxima/Pular/Ouvir/Regravar/Gravar ligados ao controlador). R-25 PASS (só tokens do tema, pares já medidos). R-27 PASS (vazio, carregando, erro). R-28 N/A. R-32 PASS com ressalva (Tab em ordem, Espaço/Enter/Esc/setas/O/R/P, foco do kit; navegação real não testada). R-33 PASS. R-34 PASS (prints nos dois temas). R-35 PARCIAL (executado offscreen com microfone e som simulados, sem erros; cliques reais não feitos). R-37 PASS. R-39 PASS com ressalva (accessibleName/Description em tudo; leitor de tela não testado). R-40 N/A.
 - Bloco 2: R-01/R-13 PASS (um glow, o indicador). R-04 PASS (ícones do kit relevantes: gravar, parar, ouvir, pular). R-06, R-07, R-08, R-10, R-12, R-22 PASS. R-09 PASS (só chips de estado). R-14 PASS (um Card). R-19 PASS (movimento 120 a 180 ms; laço só no indicador).
 - Bloco 3: dials declarados; foco único por estado; acento só em Gravar/Próxima, seleção, anel e gravação; motivo = marcador âmbar + numerais tabulares + tecla escrita no botão.
 - Bloco 4: C-1 a C-5, R-05, R-11, R-15, R-16, R-20, R-21, R-29, R-30, R-31 PASS.
@@ -131,9 +131,9 @@ Código: `src/jarvis/ui/recorder/` (fachada `ui/recorder_window.py`). Prints: `S
 **Não verificado (gravador):** microfone e som reais (simulados nas capturas), DPI por monitor real, leitor de tela, hover e teclado reais. Ressalva visual: a legenda "Saturado" do LevelMeter (componente do kit) é cortada em "Satura" na largura mínima; corrigir exige editar o kit, fora do escopo.
 
 ## Tela: Painel de memória
-Código: `src/jarvis/ui/memory/` (vista, modelo, controlador); fachada `ui/memory_panel.py`. Prints: `Shared\jarvis\ui-prints\memoria\` (78 PNGs, 100/150/200%, escuro e claro, dados fictícios em banco temporário).
+Código: `src/jarvis/ui/memory/` (vista, modelo, controlador); fachada `ui/memory_panel.py`. Prints: `capturas/ui-prints\memoria\` (78 PNGs, 100/150/200%, escuro e claro, dados fictícios em banco temporário).
 
-**Design Read:** ferramenta de controle pessoal, para uma pessoa que quer ver, corrigir e apagar o que o Jarvis guarda, no painel de instrumentos do DESIGN.md. Dials ENERGY 2 / RHYTHM 3 / MOTION 1 (esta tela varia mais que as Configurações: três áreas com composições diferentes).
+**Design Read:** ferramenta de controle pessoal, para uma pessoa que quer ver, corrigir e apagar o que o Eco guarda, no painel de instrumentos do DESIGN.md. Dials ENERGY 2 / RHYTHM 3 / MOTION 1 (esta tela varia mais que as Configurações: três áreas com composições diferentes).
 
 **Decisões (motivo em uma linha):**
 - Navegação por faixa horizontal de texto com sublinhado âmbar só na área aberta: estado, e diferente da coluna lateral das Configurações.
@@ -153,10 +153,10 @@ Código: `src/jarvis/ui/memory/` (vista, modelo, controlador); fachada `ui/memor
 - Bloco 3: dials declarados; um foco por tela (Adicionar, Restaurar, Fazer cópia); espaço estrutural; acento só em primário, aba atual, item atual e foco; motivo de identidade = marcador âmbar + ícones chanfrados + selos ícone e texto.
 - Bloco 4: C-1 a C-5, R-05, R-11, R-15, R-16, R-20, R-21, R-29, R-30, R-31 PASS.
 
-**Não verificado (painel de memória):** uso com o banco real e com o Jarvis em execução; diálogos nativos de salvar arquivo; leitor de tela; DPI real por monitor; navegação por teclado feita à mão; fonte Segoe UI Variable (usou Segoe UI); incorporação dentro da página das Configurações (feita por outro agente).
+**Não verificado (painel de memória):** uso com o banco real e com o Eco em execução; diálogos nativos de salvar arquivo; leitor de tela; DPI real por monitor; navegação por teclado feita à mão; fonte Segoe UI Variable (usou Segoe UI); incorporação dentro da página das Configurações (feita por outro agente).
 
 ## Tela: Configurações
-Código: `src/jarvis/ui/settings/` (vista `window.py`/`pages.py`, modelo `model.py`, controlador `controller.py`, fábrica `fieldfactory.py`, textos `texts.py`). Fachada: `ui/settings_window.py`. Prints: `OpenBot\Shared\jarvis\ui-prints\configuracoes\` (11 páginas + busca, alterações com erro, avisos; escuro e claro; 100, 150 e 200%).
+Código: `src/jarvis/ui/settings/` (vista `window.py`/`pages.py`, modelo `model.py`, controlador `controller.py`, fábrica `fieldfactory.py`, textos `texts.py`). Fachada: `ui/settings_window.py`. Prints: `capturas/ui-prints\configuracoes\` (11 páginas + busca, alterações com erro, avisos; escuro e claro; 100, 150 e 200%).
 
 **Design Read:** painel de ajustes de uso diário por uma pessoa, em linguagem de painel de instrumentos. ENERGY 2 / RHYTHM 2 / MOTION 1.
 
@@ -166,8 +166,8 @@ Decisões (motivo em uma linha):
 - ActionBar só com pendências, com contagem e Salvar bloqueado por erro: a barra só existe quando há decisão a tomar.
 - Selo "Requer reinício" por campo: é um estado real (vale só após reiniciar), por isso fica ao lado do rótulo.
 - Campos protegidos (endereço do modelo, tecla de emergência) com cadeado e motivo, desabilitados: a segurança nunca fica escondida.
-- Banner pós-salvar separa "já vale" de "exige reiniciar" e só oferece Aplicar agora/Reiniciar se o Jarvis estiver aberto: evita botão que não faz nada.
-- Tema escuro/claro/sistema na página Geral, guardado em QSettings e não no config do Jarvis: é gosto da tela, não comportamento do assistente.
+- Banner pós-salvar separa "já vale" de "exige reiniciar" e só oferece Aplicar agora/Reiniciar se o Eco estiver aberto: evita botão que não faz nada.
+- Tema escuro/claro/sistema na página Geral, guardado em QSettings e não no config do Eco: é gosto da tela, não comportamento do assistente.
 - Ferramentas arriscadas aparecem com "Sempre pede confirmação" e o interruptor travado ligado: a regra de segurança é dita, não só aplicada.
 - Busca ignora acento e filtra campos de todas as páginas, esconde páginas sem resultado e mostra estado vazio com ação.
 - Dispositivos de áudio e catálogo de ferramentas carregam em segundo plano ao abrir a página (`run_async`), com estados carregando/erro/vazio.
@@ -177,7 +177,7 @@ Decisões (motivo em uma linha):
 Bloco 1 (todas "não" = PASS)
 - R-02 PASS: grep de travessão em `ui/settings/` e na fachada: 0.
 - R-03 PASS com ressalva: mínimo 960x600, coluna elástica; verificado só offscreen a 100/150/200%.
-- R-17/R-18/R-36/R-38 PASS: nenhum número, depoimento ou alegação inventada; números da tela vêm do config, do catálogo e do estado real do Jarvis.
+- R-17/R-18/R-36/R-38 PASS: nenhum número, depoimento ou alegação inventada; números da tela vêm do config, do catálogo e do estado real do Eco.
 - R-23 PASS: nenhum logotipo, avatar ou imagem criado.
 - R-24/R-26 PASS: toda página da navegação existe; todo botão tem ação (abrir pasta, gravador, salvar, descartar, restaurar, aplicar, reiniciar, recarregar). "Minha voz" depende do parâmetro `set_name` do gravador: sem ele, mostra erro claro.
 - R-25 PASS: cores só dos tokens do tema (tabela de contraste da base, 0 falhas); `grep` de cor hexadecimal no pacote: 0.
@@ -194,4 +194,4 @@ Bloco 2: R-01 PASS (sem gradiente nem glow). R-04 PASS (ícones do kit, sem íco
 Bloco 3: dials declarados; um foco por tela (Salvar âmbar); espaço estrutural; um acento; motivo de identidade = marcador âmbar + ícones chanfrados; Design Read declarado.
 Bloco 4: C-1 a C-5, R-05, R-11, R-15, R-16, R-20, R-21, R-29, R-30, R-31 PASS. Ressalva: o selo "Requer reinício" se repete em muitos campos por ser a realidade do schema.
 
-**Não verificado (Configurações):** gravação real no config.toml, cliques com mouse, Jarvis em execução (Aplicar agora/Reiniciar), listagem real de dispositivos (os prints usam lista vazia, sem tocar em áudio), diálogos nativos de arquivo, leitor de tela, DPI real por monitor, fonte Segoe UI Variable (usou Segoe UI), integração com o gravador (`set_name`) e com o novo painel de memória.
+**Não verificado (Configurações):** gravação real no config.toml, cliques com mouse, Eco em execução (Aplicar agora/Reiniciar), listagem real de dispositivos (os prints usam lista vazia, sem tocar em áudio), diálogos nativos de arquivo, leitor de tela, DPI real por monitor, fonte Segoe UI Variable (usou Segoe UI), integração com o gravador (`set_name`) e com o novo painel de memória.

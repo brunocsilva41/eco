@@ -1,8 +1,8 @@
-"""Segurança do Jarvis: parada de emergência, confirmação Sim/Não, tratamento de conteúdo não confiável.
+"""Segurança do Eco: parada de emergência, confirmação Sim/Não, tratamento de conteúdo não confiável.
 
 - `EmergencyStop`: tecla global que cancela TUDO (agente, ferramentas, fala), solta mouse/teclado
-  e fica registrada no log. Depois o Jarvis volta ao repouso.
-- `ConfirmationBroker`: pede Sim/Não ao Bruno por voz, tecla OU texto. Sem resposta = NÃO.
+  e fica registrada no log. Depois o Eco volta ao repouso.
+- `ConfirmationBroker`: pede Sim/Não ao usuário por voz, tecla OU texto. Sem resposta = NÃO.
   Por voz a resposta é ESTRITA: "sim" / "confirmo" / "autorizo" / "não" (até 3 palavras); em ações RISKY só vale
   "confirmo" ou "autorizo" (um "sim" solto, falado por qualquer um, não basta). Fala durante a própria pergunta é ignorada.
 - `wrap_untrusted`: marca texto da tela/web como DADO; instruções dentro dele nunca são obedecidas.

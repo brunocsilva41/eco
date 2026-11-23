@@ -1,0 +1,15 @@
+{
+  "_comentario": "Binarios nativos do motor de escuta na GPU (whisper.cpp v1.9.5 compilado com Vulkan + shim eco_whisper/jarvis_whisper.dll). Compilar exige Visual Studio Build Tools + Vulkan SDK (src/build_whispercpp.ps1 e native/build_shim.ps1), entao o CI NAO recompila: baixa este pacote da release 'deps-whispercpp-v1.9.5' DESTE repositorio e confere o SHA-256 abaixo antes de usar. Para atualizar: recompile localmente, zip, publique como asset da release de deps e troque o hash aqui (revisao em Pull Request).",
+  "whispercpp": {
+    "upstream": "https://github.com/ggml-org/whisper.cpp",
+    "tag": "v1.9.5",
+    "commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+    "license": "MIT (LICENSE-whisper.cpp.txt dentro do pacote)",
+    "release_tag": "deps-whispercpp-v1.9.5",
+    "asset": "eco-whispercpp-vulkan-v1.9.5-win-x64.zip",
+    "sha256": "e9a072f8eb3f7acd8549072dbe0447748dbfb99e89f1c1445a5a3d5ffe1566c9",
+    "size": 15148243,
+    "dest": "bin/whispercpp-vulkan",
+    "shim_source_sha256": "734ad667015e78275c54024d1aad8a42d283df058804cd9602850171d51c8601"
+  }
+}

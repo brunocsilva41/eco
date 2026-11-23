@@ -81,6 +81,7 @@ QComboBox::drop-down {{ border: none; width: {SPACE.xl + SPACE.xs}px; }}
 QComboBox::down-arrow {{ image: none; width: 0; height: 0; }}
 QComboBox QAbstractItemView {{ background: {p.raised}; color: {p.text}; border: {SIZE.border}px solid {p.border_strong};
   outline: 0; selection-background-color: {p.pressed}; selection-color: {p.text}; padding: {SPACE.xs}px; }}
+QComboBox QAbstractItemView:focus {{ border: {SIZE.border}px solid {p.border_strong}; }}
 QComboBox QAbstractItemView::item {{ min-height: {_MIN_H}px; padding: 0 {_PAD_H}px; border-radius: {RADIUS.sm}px; }}
 QMenu {{ background: {p.raised}; border: {SIZE.border}px solid {p.border_strong}; padding: {SPACE.xs}px; }}
 QMenu::item {{ padding: {_PAD_V + 2}px {SPACE.lg}px; border-radius: {RADIUS.sm}px; }}

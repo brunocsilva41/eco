@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QScrollArea, QS
 
 from ..config import ROOT, ConfigError, load
 from ..ui.kit.base import Label, set_a11y
+from ..ui.kit import screenfit
 from ..ui.kit.buttons import Button
 from ..ui.settings.prefs import UiPrefs
 from ..ui.theme import SIZE, SPACE, ThemeManager
@@ -22,6 +23,7 @@ from . import strings as S
 from .manifest import load_manifest
 from .pages_audio import AudioPage, DoctorPage, DonePage, HotkeysPage, PermissionsPage, VadPage, VoicePage
 from .pages_core import HardwarePage, ModelsPage, WelcomePage
+from .pages_prepare import PreparePage
 from .state import STEPS, SetupState, app_version, read_install_info
 from .widgets import Ctx, Page, StepRail, ask_confirm
 
@@ -29,7 +31,7 @@ log = logging.getLogger("jarvis.setup")
 
 MIN_W = SIZE.nav_width + SIZE.reading_width + SPACE.xl * 2 + SIZE.target
 MIN_H = SIZE.target * 20
-_PAGES = {"welcome": WelcomePage, "hardware": HardwarePage, "models": ModelsPage, "audio": AudioPage, "voice": VoicePage,
+_PAGES = {"welcome": WelcomePage, "hardware": HardwarePage, "prepare": PreparePage, "models": ModelsPage, "audio": AudioPage, "voice": VoicePage,
           "vad": VadPage, "hotkeys": HotkeysPage, "permissions": PermissionsPage, "doctor": DoctorPage, "done": DonePage}
 _NO_HEADER = ("welcome", "done")
 
@@ -45,6 +47,7 @@ class WizardWindow(QWidget):
         self.setWindowFlag(Qt.WindowType.Window, True)
         self.setWindowTitle(S.WINDOW_TITLE_REPAIR if ctx.repair else S.WINDOW_TITLE)
         self.setMinimumSize(MIN_W, MIN_H)
+        screenfit.install(self, (MIN_W, MIN_H))                 # cabe em monitor pequeno / escala 150-200%
         self.resize(MIN_W + SIZE.target * 3, MIN_H + SIZE.target * 3)
         set_a11y(self, self.windowTitle())
 
@@ -200,17 +203,17 @@ class WizardWindow(QWidget):
 
 
 def launch_jarvis(root: Path = ROOT) -> None:
-    """Abre o Jarvis sem janela de console e desacoplado do assistente."""
+    """Abre o Eco sem janela de console e desacoplado do assistente."""
     flags = 0x00000008 | 0x00000200 | 0x08000000           # DETACHED_PROCESS | NEW_PROCESS_GROUP | NO_WINDOW
-    pyw = root / "Jarvis.pyw"
+    pyw = root / "Eco.pyw"
     try:
         if pyw.is_file():
             exe = Path(sys.executable).with_name("pythonw.exe")
             subprocess.Popen([str(exe), "-I", "-X", "utf8", str(pyw)], cwd=str(root), creationflags=flags, close_fds=True)
         else:
-            subprocess.Popen(["cmd", "/c", str(root / "Jarvis.cmd"), "run"], cwd=str(root), creationflags=flags, close_fds=True)
+            subprocess.Popen(["cmd", "/c", str(root / "Eco.cmd"), "run"], cwd=str(root), creationflags=flags, close_fds=True)
     except OSError as exc:
-        log.warning("não consegui abrir o Jarvis: %s", exc)
+        log.warning("não consegui abrir o Eco: %s", exc)
 
 
 def build_ctx(repair: bool, root: Path = ROOT, demo: bool = False) -> Ctx:

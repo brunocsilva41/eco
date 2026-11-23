@@ -18,7 +18,7 @@ Versoes: piper-tts 1.8.0, onnxruntime 1.32.0, numpy 2.5.5. Nada foi instalado no
 | RTF (total/duracao) | 0,060 | 0,054 | 0,064 |
 
 Observacoes: as 20 frases tem uma sentenca cada, entao primeiro chunk = total; em textos longos o primeiro audio sai apos a 1a sentenca. O tempo ate o primeiro audio inclui fonemizacao (espeak). Medicao de uma rodada so, sem repeticoes; a variacao entre rodadas nao foi medida. Tempo de carga do modelo nao medido.
-Qualidade, naturalidade e erros de pronuncia: NAO avaliados; precisa de escuta do Bruno (os WAV estao prontos).
+Qualidade, naturalidade e erros de pronuncia: NAO avaliados; precisa de escuta do usuário (os WAV estao prontos).
 Licenca: piper-tts e GPL-3.0-or-later (metadados do pacote). Licenca da voz faber: ver MODEL_CARD no repositorio (nao verificada por mim).
 
 ## Alternativas (nao medidas)

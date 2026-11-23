@@ -27,7 +27,7 @@ def _forget(window: RecorderWindow) -> None:
 def open_recorder(cfg: Config, parent: QWidget | None = None, set_name: str = "frases") -> RecorderWindow:
     """Abre (ou traz a frente, se ja aberta) a janela do gravador no conjunto ``set_name``.
 
-    ``set_name``: "frases" (as frases do Bruno) ou "jarvis" (amostras da palavra Jarvis); outro valor levanta
+    ``set_name``: "frases" (as frases do usuário) ou "eco" (amostras da palavra Eco); outro valor levanta
     ``ValueError``. Se a janela ja estiver aberta, troca de conjunto (a menos que esteja gravando). Exige um
     ``QApplication`` ativo; a janela e mantida viva ate ser fechada (nao e preciso guardar o retorno).
     """

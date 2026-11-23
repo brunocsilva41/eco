@@ -1,4 +1,4 @@
-"""Gravador de voz do Jarvis (frases para medir o STT e amostras da futura palavra de ativação).
+"""Gravador de voz do Eco (frases para medir o STT e amostras da futura palavra de ativação).
 
 Camadas (a lógica não importa Qt; a interface vive em ``jarvis.ui.recorder``, com a fachada ``jarvis.ui.recorder_window``):
 
@@ -16,13 +16,13 @@ Como programa independente (``python -m jarvis record``)::
     from jarvis.config import load
     from jarvis.ui.recorder_window import main_recorder
 
-    raise SystemExit(main_recorder(load(), set_name="frases"))      # ou "jarvis"
+    raise SystemExit(main_recorder(load(), set_name="frases"))      # ou "eco"
 
 A partir das Configurações (seção "Minha voz"), com um ``QApplication`` já em execução::
 
     from jarvis.ui.recorder_window import open_recorder
 
-    window = open_recorder(cfg, parent=self, set_name="jarvis")   # reutiliza a janela se já estiver aberta
+    window = open_recorder(cfg, parent=self, set_name="eco")   # reutiliza a janela se já estiver aberta
 
-Saídas: frases em ``tests/audio_bruno/NN.wav``; palavra de ativação em ``<data>/wakeword/jarvis/NNN.wav``.
+Saídas: frases em ``tests/audio_usuario/NN.wav``; palavra de ativação em ``<data>/wakeword/eco/NNN.wav``.
 """

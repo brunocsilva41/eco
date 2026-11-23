@@ -57,9 +57,29 @@ def animate(owner: QObject, start: float, end: float, ms: int, on_value: Callabl
     anim.valueChanged.connect(lambda v: on_value(float(v)))
     if on_done:
         anim.finished.connect(on_done)
-    anim.finished.connect(anim.deleteLater)
+    # Quem chama guarda a ULTIMA animacao e depois chama ``.stop()`` nela (toggle, barra de progresso, barra de acoes...).
+    # Se ela se apagasse sozinha ao terminar (deleteLater no finished), esse ``.stop()`` levantava RuntimeError ("already
+    # deleted") e a 2a mudanca do interruptor nunca chegava ao formulario. Entao as animacoes ja paradas deste dono sao
+    # apagadas so QUANDO uma nova comeca (a anterior ja nao e a "ultima"); a ultima fica valida ate la.
+    pool: list = owner.__dict__.setdefault("_kit_anims", []) if hasattr(owner, "__dict__") else []
+    keep = []
+    for old in pool:
+        if _anim_valid(old) and old.state() == QVariantAnimation.State.Running:
+            keep.append(old)
+        elif _anim_valid(old):
+            old.deleteLater()
+    keep.append(anim)
+    pool[:] = keep
     anim.start()
     return anim
+
+
+def _anim_valid(anim: object) -> bool:
+    try:
+        from shiboken6 import isValid
+        return bool(isValid(anim))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def paint_focus_ring(painter: QPainter, rect: QRectF, radius: float, *, gap_color: str | None = None) -> None:
@@ -132,9 +152,49 @@ class ElidedLabel(QLabel):
         sh.setWidth(QFontMetrics(self.font()).horizontalAdvance(self._full) + 2)
         return sh
 
+    def set_highlight(self, words: list[str]) -> None:
+        """Destaque de busca (palavras sem acento/maiuscula) no trecho visivel."""
+        self._words = list(words)
+        self.update()
+
     def paintEvent(self, _e: QPaintEvent) -> None:
         p = QPainter(self)
         p.setFont(self.font())
         p.setPen(QColor(pal().text_muted))
-        elided = QFontMetrics(self.font()).elidedText(self._full, Qt.TextElideMode.ElideRight, self.width())
+        fm = QFontMetrics(self.font())
+        elided = fm.elidedText(self._full, Qt.TextElideMode.ElideRight, self.width())
         p.drawText(self.rect(), int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), elided)
+        words = getattr(self, "_words", [])
+        if not words:
+            return
+        import unicodedata
+
+        def fold(c: str) -> str:
+            b = "".join(x for x in unicodedata.normalize("NFD", c.casefold()) if not unicodedata.combining(x))
+            return b[:1] if b else c
+
+        folded = "".join(fold(c) for c in elided)
+        marks = [False] * len(elided)
+        for w in words:
+            w = "".join(fold(c) for c in w)
+            i = folded.find(w) if w else -1
+            while i >= 0:
+                for j in range(i, i + len(w)):
+                    marks[j] = True
+                i = folded.find(w, i + len(w))
+        pl = pal()
+        y = (self.height() - fm.height()) // 2
+        i = 0
+        while i < len(elided):
+            if not marks[i]:
+                i += 1
+                continue
+            j = i
+            while j < len(elided) and marks[j]:
+                j += 1
+            x = fm.horizontalAdvance(elided[:i])
+            w = fm.horizontalAdvance(elided[i:j])
+            p.fillRect(x, y, w, fm.height(), QColor(pl.accent))
+            p.setPen(QColor(pl.on_accent))
+            p.drawText(x, y + fm.ascent(), elided[i:j])
+            i = j

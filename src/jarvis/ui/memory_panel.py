@@ -1,4 +1,4 @@
-"""Fachada de compatibilidade do painel "O que o Jarvis sabe de mim".
+"""Fachada de compatibilidade do painel "O que o Eco sabe de mim".
 
 O painel foi repaginado e mora no pacote ``jarvis.ui.memory`` (vista, modelo e controlador). Este módulo só
 reexporta a API pública, que continua estável::

@@ -1,4 +1,4 @@
-"""Ícone do Jarvis na bandeja do sistema (área de notificação) com menu de contexto.
+"""Ícone do Eco na bandeja do sistema (área de notificação) com menu de contexto.
 
 Vive no MESMO processo da Ilha (que já tem Qt): custo extra ~0. Cada ação é um callback opcional entregue por quem cria o
 controlador; o que não tiver callback não aparece no menu. Nomes do menu em pt-BR, no tom de um aplicativo profissional.
@@ -59,7 +59,8 @@ class _Bridge(QObject):
 
 class TrayController(QObject):
     """Callbacks aceitos (todos opcionais): settings(), quit(), reveal(), toggle_visible(), set_listen_mode(mode: 'open'|'push'),
-    set_mute(on: bool), set_size(size: 'compact'|'medium'|'large'), set_position(mode: str), toggle_pin()."""
+    set_mute(on: bool), set_size(size: 'compact'|'medium'|'large'), set_position(mode: str), toggle_pin(),
+    check_updates() (fluxo completo de atualização; sem ele, só consulta e abre a página da versão)."""
 
     def __init__(self, app: QApplication, *, version: str = "", callbacks: dict[str, Callable] | None = None,
                  check_updates: Callable[[], object] | None = None) -> None:
@@ -72,7 +73,7 @@ class TrayController(QObject):
         self._muted = False
         self._open = False
         self._tray = QSystemTrayIcon(make_icon(), app)
-        self._tray.setToolTip("Jarvis")
+        self._tray.setToolTip("Eco")
         self._tray.activated.connect(self._on_activated)
         self._menu = QMenu()
         self._build_menu()
@@ -105,13 +106,14 @@ class TrayController(QObject):
 
     def _build_menu(self) -> None:
         m = self._menu
-        head = m.addAction(f"Jarvis {self._version}".strip())
+        head = m.addAction(f"Eco {self._version}".strip())
         head.setEnabled(False)
         m.addSeparator()
         self._act(m, "Abrir Configurações", "settings")
+        self._act(m, "Abrir o Terminal", "terminal")
         self._act(m, "Mostrar a Ilha", "reveal")
         if any(k in self._cb for k in ("set_size", "set_position", "toggle_pin", "toggle_visible")):
-            ilha = m.addMenu("Ilha do Jarvis")
+            ilha = m.addMenu("Ilha do Eco")
             self._act(ilha, "Exibir ou ocultar", "toggle_visible")
             self._act(ilha, "Fixar na tela", "toggle_pin", checkable=True)
             self._choice_menu(ilha, "Tamanho", "set_size", [("compact", "Compacto"), ("medium", "Médio"), ("large", "Expandido")])
@@ -122,13 +124,13 @@ class TrayController(QObject):
         self._open_act = self._act(m, "Escuta contínua", "set_listen_mode_toggle", checkable=True)
         self._mute_act = self._act(m, "Silenciar microfone", "set_mute", checkable=True)
         m.addSeparator()
-        if self._check is not None:
+        if self._check is not None or "check_updates" in self._cb:
             a = m.addAction("Verificar atualizações…")
             a.triggered.connect(self.check_updates)
-        about = m.addAction("Sobre o Jarvis")
+        about = m.addAction("Sobre o Eco")
         about.triggered.connect(self._about)
         m.addSeparator()
-        self._act(m, "Encerrar o Jarvis", "quit")
+        self._act(m, "Encerrar o Eco", "quit")
 
     # ------------------------------------------------------------------ estado
     def show(self) -> None:
@@ -141,7 +143,7 @@ class TrayController(QObject):
         self._tray.hide()
 
     def set_status(self, text: str, *, muted: bool | None = None, listening: bool | None = None) -> None:
-        self._tray.setToolTip(f"Jarvis · {text}" if text else "Jarvis")
+        self._tray.setToolTip(f"Eco · {text}" if text else "Eco")
         if muted is not None:
             self._muted = muted
             if self._mute_act is not None:
@@ -169,13 +171,17 @@ class TrayController(QObject):
                 cb()
 
     def _about(self) -> None:
-        self.notify("Jarvis", f"Assistente de voz local. Versão {self._version or 'de desenvolvimento'}.")
+        self.notify("Eco", f"Assistente de voz local. Versão {self._version or 'de desenvolvimento'}.")
 
     def check_updates(self) -> None:
+        cb = self._cb.get("check_updates")             # fluxo completo (verificar, pop-up, baixar, instalar)
+        if cb is not None:
+            cb()
+            return
         if self._check is None:
             return
-        self.notify("Jarvis", "Verificando atualizações…")
-        threading.Thread(target=lambda: self._bridge.update_result.emit(self._check()), name="jarvis-updates", daemon=True).start()
+        self.notify("Eco", "Verificando atualizações…")
+        threading.Thread(target=lambda: self._bridge.update_result.emit(self._check()), name="eco-updates", daemon=True).start()
 
     def _on_update_result(self, info: object) -> None:
         err = getattr(info, "error", "")

@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
 from ...config import Config, ConfigError
+from ..kit import screenfit
 from ..theme import SIZE, SPACE, ThemeManager
 from .panel import MemoryPanel
 from .texts import tr
@@ -51,6 +52,7 @@ def open_memory(cfg: Config | None = None, parent: QWidget | None = None) -> Mem
     panel.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
     panel.setMinimumSize(*MIN_SIZE)
     panel.resize(*OPEN_SIZE)
+    screenfit.install(panel, MIN_SIZE)                        # cabe em monitor pequeno / escala 150-200%
     _window = panel
     panel.show()
     panel.raise_()

@@ -15,7 +15,7 @@ Contrato de threads
   vez (a segunda espera até 1 s e então levanta ``PlaybackError``).
 * ``stop()``, ``close()`` e ``speaking`` são thread-safe e podem ser chamados de qualquer thread.
 * Callback do PortAudio: só lê a fila, escreve no buffer de saída e atualiza contadores.
-* Cada reprodução cria uma thread daemon ("jarvis-speaker-monitor", ~40 Hz) que observa o
+* Cada reprodução cria uma thread daemon ("eco-speaker-monitor", ~40 Hz) que observa o
   ``CancelToken``/``stop()`` (para reagir mesmo se a thread chamadora estiver presa esperando o
   próximo trecho do iterador) e publica o evento ``level`` {source:'tts'}. Ela é sempre encerrada e
   juntada no ``finally`` que fecha o stream.
@@ -152,7 +152,7 @@ class _OutputSession:
                     pass
             raise PlaybackError(f"não consegui abrir a saída de áudio {self._device.label} a {self.rate} Hz: {exc}") from exc
         self._stream = stream
-        self._monitor = threading.Thread(target=self._monitor_loop, name="jarvis-speaker-monitor", daemon=True)
+        self._monitor = threading.Thread(target=self._monitor_loop, name="eco-speaker-monitor", daemon=True)
         self._monitor.start()
 
     def close(self) -> None:

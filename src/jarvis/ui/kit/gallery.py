@@ -42,7 +42,7 @@ class GalleryWindow(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Kit de componentes do Jarvis")
+        self.setWindowTitle("Kit de componentes do Eco")
         self.resize(_WIN_W, _WIN_H)
         self.pages: list[Page] = build_pages()
         side = QWidget()
@@ -186,7 +186,7 @@ def _render_child(out_dir: Path, themes: list[Mode]) -> None:
         QApplication.processEvents()
         _save(win.grab(), out_dir / f"{prefix}-janela.png")
         _save(_stitch(_focus_frames(win)), out_dir / f"{prefix}-foco-e-interacao.png")
-        dlg = ConfirmDialog(win, title="Apagar esta memória", message="Ela deixa de existir para o Jarvis.",
+        dlg = ConfirmDialog(win, title="Apagar esta memória", message="Ela deixa de existir para o Eco.",
                             target="Lembrar que a reunião de quinta começa às 14h.", destructive=True,
                             confirm_text="Apagar", require_word="APAGAR")
         dlg.show()
@@ -214,7 +214,7 @@ def render_gallery_prints(out_dir: str | Path, scales: tuple[float, ...] = (1.0,
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Galeria do kit de UI do Jarvis")
+    ap = argparse.ArgumentParser(description="Galeria do kit de UI do Eco")
     ap.add_argument("--prints", metavar="DIR", help="gera capturas offscreen (use QT_SCALE_FACTOR no ambiente)")
     ap.add_argument("--themes", default="dark,light")
     ns = ap.parse_args()

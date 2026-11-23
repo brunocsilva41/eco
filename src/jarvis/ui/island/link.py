@@ -1,4 +1,4 @@
-"""Lado do NÚCLEO da ligação com a Ilha (sem Qt: este módulo roda dentro do processo do Jarvis).
+"""Lado do NÚCLEO da ligação com a Ilha (sem Qt: este módulo roda dentro do processo do Eco).
 
 A Ilha é um PROCESSO FILHO (`python -I -X utf8 -c ... island --child`). A conversa é JSON por linha nos pipes
 stdin/stdout do filho (sem rede, sem soquete):
@@ -9,15 +9,15 @@ stdin/stdout do filho (sem rede, sem soquete):
     Ilha -> núcleo:  {"c": "confirm"|"mute"|"stop"|"settings"|"ready"|"pin"|"listen_mode"|"ui_mode"|"quit", ...}
                      settings pode trazer "section"; pin: {"on": bool} (salvar em ui.island_pinned); listen_mode:
                      {"mode": "open"|"push"}; ui_mode: {"mode": "docked"|"floating"|"dock_right"|"dock_left"} (ui.island_mode);
-                     quit: encerrar o Jarvis (menu da bandeja)
+                     quit: encerrar o Eco (menu da bandeja)
 
 A mensagem "config" ({"mode","float_gap_px","autohide","hide_delay_s","hover_reveal","pinned","opacity","side_y_pct",
 "hotkeys":{yes,no,stop,mute,talk,yolo,open_listen}})
 vai no início de cada partida do filho e de novo a cada `config_applied` (mudança ao vivo nas Configurações).
 
 Garantias: o núcleo NUNCA espera a Ilha (fila limitada: descarta níveis antigos primeiro; o gravador de pipe é
-uma thread própria); se o filho morrer, reinicia com espera crescente e número limitado de tentativas (o Jarvis
-segue normalmente sem a Ilha); se o Jarvis morrer, o pipe fecha e o filho encerra sozinho. Textos são truncados e
+uma thread própria); se o filho morrer, reinicia com espera crescente e número limitado de tentativas (o Eco
+segue normalmente sem a Ilha); se o Eco morrer, o pipe fecha e o filho encerra sozinho. Textos são truncados e
 mascarados antes de sair do núcleo (nada de senha, digitação, conteúdo de arquivo ou de memória).
 """
 from __future__ import annotations
@@ -319,7 +319,7 @@ class IslandLink:
             self.restarts += 1
             if self.restarts > MAX_RESTARTS:
                 self.gave_up = True
-                log.error("a Ilha caiu %d vezes; desisti de reiniciar (o Jarvis segue sem ela)", MAX_RESTARTS)
+                log.error("a Ilha caiu %d vezes; desisti de reiniciar (o Eco segue sem ela)", MAX_RESTARTS)
                 return
             self._stop.wait(BACKOFF_S[min(self.restarts - 1, len(BACKOFF_S) - 1)])
 

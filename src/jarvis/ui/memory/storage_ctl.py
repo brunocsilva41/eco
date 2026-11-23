@@ -67,14 +67,14 @@ class StorageController(QObject):
     # --- cópia e exportação
     def backup(self) -> None:
         d, n = tr().dialogs, tr().notices
-        picked = choose_save_path(self._view, d.backup_title, f"jarvis-backup-{time.strftime('%Y%m%d-%H%M')}.db",
+        picked = choose_save_path(self._view, d.backup_title, f"eco-backup-{time.strftime('%Y%m%d-%H%M')}.db",
                                   d.backup_filter, (".db", ".sqlite", ".sqlite3"), ".db")
         if picked is not None:
             self._ctl.submit(lambda mem: mem.backup_to(picked), lambda p: self._ctl.notify("ok", n.backup_title, f"{p}. {n.backup_note}"))
 
     def export_all(self) -> None:
         d, n = tr().dialogs, tr().notices
-        picked: Path | None = choose_save_path(self._view, d.export_all_title, f"jarvis-dados-{time.strftime('%Y%m%d')}.json",
+        picked: Path | None = choose_save_path(self._view, d.export_all_title, f"eco-dados-{time.strftime('%Y%m%d')}.json",
                                                d.export_all_filter, (".json",), ".json")
         if picked is not None:
             self._ctl.submit(lambda mem: mem.export_all_json(picked),

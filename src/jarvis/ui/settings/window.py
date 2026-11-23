@@ -38,7 +38,7 @@ from .texts import T, plural
 
 log = logging.getLogger(__name__)
 
-MIN_WIDTH = SIZE.nav_width + SIZE.reading_width
+MIN_WIDTH = SIZE.nav_width + max(SIZE.reading_width, 680)   # as páginas mais largas (nuvem, modelo) exigem ~650 px de conteúdo sem rolagem horizontal
 MIN_HEIGHT = SIZE.target * 19
 DEFAULT_WIDTH = MIN_WIDTH + SIZE.target * 5
 DEFAULT_HEIGHT = SIZE.target * 24
@@ -126,6 +126,34 @@ class SettingsWindow(QWidget):
         self._refresh_state()
         self._refresh_emergency()
 
+    # ------------------------------------------------------------------ tela pequena / escala alta
+    def _fit_to_screen(self) -> None:
+        """Faz a janela caber na area util do monitor onde esta (tela pequena ou escala 150/200%): o tamanho minimo encolhe,
+        a janela nunca passa da area e a barra Salvar/Descartar nunca fica fora da tela."""
+        scr = self.screen()
+        if scr is None:
+            return
+        avail = scr.availableGeometry()
+        frame_w = max(0, self.frameGeometry().width() - self.width())
+        frame_h = max(0, self.frameGeometry().height() - self.height())
+        max_w, max_h = max(320, avail.width() - frame_w), max(240, avail.height() - frame_h)
+        self.setMinimumSize(min(MIN_WIDTH, max_w), min(MIN_HEIGHT, max_h))
+        w, h = min(self.width(), max_w), min(self.height(), max_h)
+        if (w, h) != (self.width(), self.height()):
+            self.resize(w, h)
+        fg = self.frameGeometry()
+        x = min(max(fg.x(), avail.left()), max(avail.left(), avail.right() - fg.width() + 1))
+        y = min(max(fg.y(), avail.top()), max(avail.top(), avail.bottom() - fg.height() + 1))
+        if (x, y) != (fg.x(), fg.y()):
+            self.move(x, y)
+
+    def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]  # noqa: N802
+        super().showEvent(event)
+        if not getattr(self, "_fitted", False):
+            self._fitted = True
+            self._fit_to_screen()
+            QTimer.singleShot(0, self._fit_to_screen)          # de novo depois que o Windows aplicou a moldura final
+
     # ------------------------------------------------------------------ montagem
     def _build(self) -> None:
         root = QHBoxLayout(self)
@@ -137,7 +165,7 @@ class SettingsWindow(QWidget):
         right.setSpacing(0)
         self.banners = Banners()
         self.stack = QStackedWidget()
-        self.bar = ActionBar()
+        self.bar = ActionBar(show_when_clean=True)
         right.addWidget(self.banners)
         right.addWidget(self.stack, 1)
         right.addWidget(self.bar)
@@ -239,6 +267,7 @@ class SettingsWindow(QWidget):
             item = self.nav.item(i)
             if item is not None:
                 item.setHidden(bool(query) and counts[key] == 0)
+            self.nav.set_hits(key, counts[key] if query else None)
         self._drop_empty()
         if not query:
             self.summary.hide()

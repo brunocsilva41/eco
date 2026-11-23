@@ -28,7 +28,7 @@ from . import schema, tomlio
 log = logging.getLogger(__name__)
 
 BACKUPS_KEPT = 5
-HEADER = ("Configuração do Jarvis (gerada pela tela de Configurações; pode editar à mão).\n"
+HEADER = ("Configuração do Eco (gerada pela tela de Configurações; pode editar à mão).\n"
           "Só aparece o que difere do padrão. NUNCA coloque senhas, PINs ou tokens aqui.")
 
 

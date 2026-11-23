@@ -16,7 +16,7 @@ from typing import Any
 
 from .win.keys import KeyError_, parse_combo
 
-ROOT = Path(__file__).resolve().parents[2]          # F:\Jarvis
+ROOT = Path(__file__).resolve().parents[2]          # F:\Eco
 CONFIG_FILE = ROOT / "config.toml"
 
 # processos onde o agente NUNCA digita (equivaleria a executar comandos). A config só pode ACRESCENTAR.
@@ -155,6 +155,25 @@ class ToolsCfg:
 
 
 @dataclass(frozen=True)
+class ToolPathsCfg:
+    """Onde está cada programa de apoio. VAZIO = o Eco procura sozinho (PATH, instalação padrão, pasta do Eco).
+    Caminho de REDE (\\\\servidor\\...) nunca é aceito. Quem valida/descobre é `jarvis.core.toolpaths`."""
+    whispercpp_dir: str = ""                         # pasta do whisper.cpp (jarvis_whisper.dll)
+    ffmpeg: str = ""
+    git: str = ""
+    powershell: str = ""                             # pwsh.exe ou powershell.exe
+    git_bash: str = ""                               # bash.exe do Git for Windows (nunca o do WSL)
+    python: str = ""                                 # python.exe de apoio (só para o Terminal/ferramentas; o Eco roda no dele)
+    ollama: str = ""
+    lmstudio: str = ""
+    opencode: str = ""
+    antigravity: str = ""                            # agy.exe
+    claude: str = ""
+    codex: str = ""
+    copilot: str = ""
+
+
+@dataclass(frozen=True)
 class MemoryCfg:
     enabled: bool = True                             # False = "modo sem histórico": nada é gravado em disco
     idle_minutes: int = 30                           # inatividade que abre uma nova conversa (0 = nunca)
@@ -172,10 +191,17 @@ class ContextCfg:
     summary_max_tokens: int = 350                    # tamanho do resumo estruturado
 
 
+def _default_docs_root() -> str:
+    """Pasta padrão em Documentos: `Eco`; se só existir a antiga `Jarvis` (instalações anteriores), continua nela."""
+    base = Path.home() / "Documents"
+    old, new = base / "Jarvis", base / "Eco"
+    return str(old if old.exists() and not new.exists() else new)
+
+
 @dataclass(frozen=True)
 class FilesCfg:
     """Ferramentas de arquivos: só dentro das raízes abaixo; apagar vai sempre para a Lixeira."""
-    roots: tuple[str, ...] = (str(Path.home() / "Documents" / "Jarvis"),)    # raízes permitidas (pastas)
+    roots: tuple[str, ...] = (_default_docs_root(),)    # raízes permitidas (pastas)
     max_read_kb: int = 256
     max_write_kb: int = 512
     undo_keep: int = 20                              # operações que "desfaz" consegue reverter
@@ -192,7 +218,7 @@ class LogsCfg:
 @dataclass(frozen=True)
 class UiCfg:
     tray_enabled: bool = True                        # ícone na bandeja do sistema com menu (vive no processo da Ilha)
-    island_enabled: bool = True                      # mostra a Ilha (janela no topo da tela) enquanto o Jarvis roda
+    island_enabled: bool = True                      # mostra a Ilha (janela no topo da tela) enquanto o Eco roda
     island_mode: str = "docked"                      # "docked" (topo) | "floating" (pílula afastada do topo) | "dock_right" | "dock_left" (trilho lateral)
     island_pinned: bool = False                      # alfinete: fixada = nunca esconde sozinha (a Ilha devolve o estado ao núcleo)
     island_opacity: float = 0.92                     # 0.35..1.0: opacidade do fundo (vidro); o contraste do texto é garantido pela Ilha
@@ -201,6 +227,54 @@ class UiCfg:
     island_autohide: bool = True                     # escondida por padrão: aparece com o mouse no topo, F9/ouvindo, confirmação, erro
     island_hide_delay_s: float = 3.0                 # some sozinha depois deste tempo em repouso
     island_hover_reveal: bool = True                 # mouse no centro do topo da tela revela a Ilha
+
+
+@dataclass(frozen=True)
+class UpdatesCfg:
+    enabled: bool = True                             # verificação automática de novas versões (desligada = só pelo menu da bandeja)
+    check_on_start: bool = True                      # verifica ao iniciar o Eco
+    interval_hours: int = 12                         # e a cada N horas (1..168)
+    channel: str = "stable"                          # "stable" (só versões finais) | "prerelease" (inclui pré-lançamentos)
+    repo: str = "brunocsilva41/eco"         # dono/repositório no GitHub (privado ou público)
+    auto_install: bool = False                       # oferece "Instalar automaticamente" já no pop-up; nunca instala sem hash válido
+
+
+@dataclass(frozen=True)
+class BrainCfg:
+    """Cérebro: o modelo LOCAL é o padrão. A nuvem (via ACP, o agente usa o próprio login) é opt-in e cai para o local."""
+    kind: str = "local"                              # "local" | "cloud"
+    agent: str = "opencode"                          # opencode | antigravity | claude | codex | copilot
+    fallback_local: bool = True                      # nuvem indisponível/erro/sem login -> responde com o modelo local
+    request_timeout_s: float = 90.0                  # tempo máximo de um pedido à nuvem (10..600)
+    startup_timeout_s: float = 45.0                  # tempo máximo para iniciar o agente (5..300)
+    use_tools: bool = True                           # o agente pode usar as ferramentas do Eco (MCP em loopback, mesmas travas)
+    builtin_tools: str = "deny"                      # ferramentas PRÓPRIAS do agente (shell, editar arquivos): "deny" | "ask"
+    consent_screen: tuple[str, ...] = ()             # agentes autorizados a ver a tela/janelas (por padrão nenhum: só texto)
+    consent_memory: tuple[str, ...] = ()             # agentes autorizados a ler/gravar memória e conversas
+    consent_files: tuple[str, ...] = ()              # agentes autorizados a usar as ferramentas de arquivos
+    consent_terminal: tuple[str, ...] = ()           # agentes autorizados a pedir comandos ao terminal integrado (sempre com confirmação forte)
+    action_modes: dict[str, str] = field(default_factory=dict)   # agente -> o que ele pode fazer no PC: deny | confirm | normal (padrão: confirm)
+    models: dict[str, str] = field(default_factory=dict)         # agente -> modelo (vazio = o do próprio agente; o Eco troca se ele falhar)
+
+
+TERMINAL_ALLOWED_DEFAULT: tuple[str, ...] = (       # só leitura: rodam sem perguntar no modo "allowlist" (comando simples, sem ; & | > `)
+    "git status", "git log", "git diff", "git branch", "git show", "git remote -v", "git rev-parse", "git describe",
+    "git ls-files", "git --version", "dir", "ls", "pwd", "cd", "Get-ChildItem", "Get-Location", "where", "hostname",
+    "python --version", "node --version", "npm --version")
+
+
+@dataclass(frozen=True)
+class TerminalCfg:
+    """Terminal integrado: o Eco roda comandos de linha de comando (git etc.). DESLIGADO por padrão."""
+    mode: str = "off"                                # off | confirm (sempre pergunta) | allowlist (lista roda direto, o resto pergunta) | free (sem perguntar; só liberado à mão no painel Terminal, por tempo)
+    shell: str = "powershell"                        # powershell | cmd | bash (Git Bash)
+    roots: tuple[str, ...] = (_default_docs_root(),)   # pastas onde os comandos podem rodar
+    allowed_commands: tuple[str, ...] = TERMINAL_ALLOWED_DEFAULT
+    blocked_extra: tuple[str, ...] = ()              # trechos de texto que SEMPRE bloqueiam o comando (além da lista fixa)
+    timeout_s: int = 120                             # tempo máximo de um comando; passou disso, o Eco o encerra (10..3600)
+    max_output_kb: int = 256                         # quanto da saída fica guardado para o painel (16..4096)
+    result_chars: int = 3000                         # quanto da saída volta ao modelo (200..8000)
+    free_minutes: int = 15                           # duração do modo livre depois de liberado no painel (1..120)
 
 
 @dataclass(frozen=True)
@@ -219,6 +293,10 @@ class Config:
     files: FilesCfg = field(default_factory=FilesCfg)
     logs: LogsCfg = field(default_factory=LogsCfg)
     ui: UiCfg = field(default_factory=UiCfg)
+    updates: UpdatesCfg = field(default_factory=UpdatesCfg)
+    brain: BrainCfg = field(default_factory=BrainCfg)
+    terminal: TerminalCfg = field(default_factory=TerminalCfg)
+    toolpaths: ToolPathsCfg = field(default_factory=ToolPathsCfg)
 
 
 def assert_loopback(host: str) -> None:
@@ -279,7 +357,7 @@ def _build(cls: type, raw: dict[str, Any], where: str, errors: list[str]) -> Any
     for name, value in raw.items():
         if name not in known:
             if _SECRET_KEY.search(name):             # só chaves DESCONHECIDAS com cara de segredo (max_tokens etc. são campos normais)
-                errors.append(f"{where}{name}: o Jarvis não guarda senhas, PINs nem tokens na configuração")
+                errors.append(f"{where}{name}: o Eco não guarda senhas, PINs nem tokens na configuração")
             else:
                 errors.append(f"{where}{name}: opção desconhecida")
             continue
@@ -318,6 +396,7 @@ def _norm_combo(text: str, label: str, problems: list[str]) -> str | None:
         return None
 
 
+_CLOUD_AGENTS = ("opencode", "antigravity", "claude", "codex", "copilot")
 _LANG = re.compile(r"^[a-z]{2}$")
 _COMPUTE = {"int8", "int8_float32", "int8_float16", "float32", "float16", "default"}
 
@@ -403,6 +482,34 @@ def validate(cfg: Config) -> list[str]:
         p.append("safety.permission_mode deve ser 'balanced' ou 'strict'")
     if not 1 <= s.yolo_minutes <= 240:
         p.append("safety.yolo_minutes fora de 1..240")
+    up = cfg.updates
+    if not 1 <= up.interval_hours <= 168:
+        p.append("updates.interval_hours fora de 1..168")
+    if up.channel not in ("stable", "prerelease"):
+        p.append("updates.channel deve ser 'stable' ou 'prerelease'")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", up.repo):
+        p.append("updates.repo deve ser 'dono/repositorio'")
+    b = cfg.brain
+    if b.kind not in ("local", "cloud"):
+        p.append("brain.kind deve ser 'local' ou 'cloud'")
+    if b.agent not in ("opencode", "antigravity", "claude", "codex", "copilot"):
+        p.append("brain.agent deve ser opencode, antigravity, claude, codex ou copilot")
+    if b.builtin_tools not in ("deny", "ask"):
+        p.append("brain.builtin_tools deve ser 'deny' ou 'ask'")
+    if not 10 <= b.request_timeout_s <= 600:
+        p.append("brain.request_timeout_s fora de 10..600")
+    if not 5 <= b.startup_timeout_s <= 300:
+        p.append("brain.startup_timeout_s fora de 5..300")
+    for ag, mode in b.action_modes.items():
+        if ag not in _CLOUD_AGENTS or mode not in ("deny", "confirm", "normal"):
+            p.append(f"brain.action_modes: {ag}={mode!r} inválido (agentes: {', '.join(_CLOUD_AGENTS)}; modos: deny, confirm, normal)")
+    for ag in b.models:
+        if ag not in _CLOUD_AGENTS:
+            p.append(f"brain.models: agente desconhecido {ag!r}")
+    for label, ids in (("consent_screen", b.consent_screen), ("consent_memory", b.consent_memory), ("consent_files", b.consent_files)):
+        bad = [x for x in ids if x not in ("opencode", "antigravity", "claude", "codex", "copilot")]
+        if bad:
+            p.append(f"brain.{label}: agente desconhecido {bad}")
     u = cfg.ui
     if u.island_mode not in ("docked", "floating", "dock_right", "dock_left"):
         p.append("ui.island_mode deve ser 'docked', 'floating', 'dock_right' ou 'dock_left'")
@@ -444,7 +551,7 @@ def validate(cfg: Config) -> list[str]:
         if n:
             hk_norm.add(n)
             if n in reserved:
-                p.append(f"apps.hotkeys: {h!r} é uma tecla de segurança do Jarvis e não pode ser liberada ao agente")
+                p.append(f"apps.hotkeys: {h!r} é uma tecla de segurança do Eco e não pode ser liberada ao agente")
     for i, h in enumerate(cfg.apps.hotkeys_confirm):
         n = _norm_combo(h, f"apps.hotkeys_confirm[{i}]", p)
         if n and n not in hk_norm:
@@ -483,10 +590,10 @@ def validate(cfg: Config) -> list[str]:
         pf = [os.environ.get(v, "").lower().rstrip("\\") + "\\" for v in ("ProgramFiles", "ProgramFiles(x86)") if os.environ.get(v)]
         if len(rp.parts) <= 1 or low.startswith(sysroot) or any(low.startswith(x) for x in pf) \
                 or any(low.startswith(x) or x.startswith(low) for x in protected):
-            p.append(f"files.roots: {r!r} é uma pasta protegida (raiz do disco, Windows, Program Files ou pasta do Jarvis)")
+            p.append(f"files.roots: {r!r} é uma pasta protegida (raiz do disco, Windows, Program Files ou pasta do Eco)")
             continue
         # Pastas sensíveis: o perfil INTEIRO (ou acima), AppData, ProgramData, Inicializar, .ssh, .aws, .gnupg e qualquer
-        # pasta que as contenha. A raiz precisa estar ESTRITAMENTE dentro de uma subpasta do perfil (ex.: Documents\Jarvis).
+        # pasta que as contenha. A raiz precisa estar ESTRITAMENTE dentro de uma subpasta do perfil (ex.: Documents\Eco).
         env = os.environ
         home_s = env.get("USERPROFILE") or str(Path.home())
         sens_raw = [str(Path(home_s) / n) for n in ("AppData", ".ssh", ".aws", ".gnupg")]
@@ -502,12 +609,95 @@ def validate(cfg: Config) -> list[str]:
         pieces = low.split("\\")
         if any(h.startswith(low) for h in homes):
             p.append(f"files.roots: {r!r} é o perfil do usuário inteiro (ou uma pasta acima dele); use uma subpasta, "
-                     "como Documents\\Jarvis")
+                     "como Documents\\Eco")
         elif any(low.startswith(x) or x.startswith(low) for x in sens) \
                 or any(c in (".ssh", ".aws", ".gnupg") for c in pieces) \
                 or "\\programs\\startup\\" in low or "\\programs\\inicializar\\" in low:
             p.append(f"files.roots: {r!r} é uma pasta sensível (AppData, ProgramData, Inicializar, .ssh, .aws, .gnupg "
                      "ou uma pasta que as contenha)")
+    p += _terminal_problems(cfg)
+    p += _toolpath_problems(cfg)
+    return p
+
+
+def is_network_path(text: str) -> bool:
+    """Caminho UNC (\\\\servidor\\pasta ou //servidor/pasta) ou unidade de rede mapeada. Nunca aceito para programas e modelos."""
+    t = text.strip().strip('"')
+    if t.startswith("\\\\") or t.startswith("//"):
+        return True
+    if len(t) >= 2 and t[1] == ":" and os.name == "nt":
+        try:
+            import ctypes
+            return ctypes.windll.kernel32.GetDriveTypeW(t[:2] + "\\") == 4          # DRIVE_REMOTE
+        except (AttributeError, OSError):
+            return False
+    return False
+
+
+def _toolpath_problems(cfg: Config) -> list[str]:
+    p: list[str] = []
+    for f in fields(cfg.toolpaths):
+        v = getattr(cfg.toolpaths, f.name)
+        if v and is_network_path(v):
+            p.append(f"toolpaths.{f.name}: caminho de rede não é aceito ({v!r}); copie para uma pasta do seu computador")
+    for label, v in (("paths.llama_bin", cfg.paths.llama_bin), ("paths.models", cfg.paths.models), ("paths.data", cfg.paths.data),
+                     ("llm.model", cfg.llm.model), ("stt.gpu_model", cfg.stt.gpu_model), ("stt.model_dir", cfg.stt.model_dir),
+                     ("tts.voice_onnx", cfg.tts.voice_onnx), ("tts.voice_json", cfg.tts.voice_json)):
+        if is_network_path(str(v)):
+            p.append(f"{label}: caminho de rede não é aceito ({str(v)!r}); copie para uma pasta do seu computador")
+    return p
+
+
+def _terminal_problems(cfg: Config) -> list[str]:
+    """Regras do terminal integrado: modo/shell válidos, limites e pastas (mesma proteção das pastas de arquivos)."""
+    t, p = cfg.terminal, []
+    if t.mode not in ("off", "confirm", "allowlist", "free"):
+        p.append("terminal.mode deve ser 'off', 'confirm', 'allowlist' ou 'free'")
+    if t.shell not in ("powershell", "cmd", "bash"):
+        p.append("terminal.shell deve ser 'powershell', 'cmd' ou 'bash'")
+    if not 10 <= t.timeout_s <= 3600:
+        p.append("terminal.timeout_s fora de 10..3600")
+    if not 16 <= t.max_output_kb <= 4096:
+        p.append("terminal.max_output_kb fora de 16..4096")
+    if not 200 <= t.result_chars <= 8000:
+        p.append("terminal.result_chars fora de 200..8000")
+    if not 1 <= t.free_minutes <= 120:
+        p.append("terminal.free_minutes fora de 1..120")
+    if any(not x.strip() for x in t.allowed_commands) or any(not x.strip() for x in t.blocked_extra):
+        p.append("terminal: allowed_commands e blocked_extra não aceitam itens vazios")
+    bad = [x for x in cfg.brain.consent_terminal if x not in _CLOUD_AGENTS]
+    if bad:
+        p.append(f"brain.consent_terminal: agente desconhecido {bad}")
+    env = os.environ
+    sysroot = env.get("SystemRoot", r"C:\Windows")
+    pf = [env[v] for v in ("ProgramFiles", "ProgramFiles(x86)", "ProgramData") if env.get(v)]
+    home = env.get("USERPROFILE") or str(Path.home())
+    sens = [str(Path(home) / n) for n in ("AppData", ".ssh", ".aws", ".gnupg", ".config")] + \
+           [env[v] for v in ("APPDATA", "LOCALAPPDATA") if env.get(v)]
+    protected = [cfg.paths.root, cfg.paths.data, cfg.paths.logs]
+
+    def key(x: str | Path) -> str:
+        try:
+            return str(Path(x).resolve()).lower().rstrip("\\") + "\\"
+        except OSError:
+            return str(x).lower().rstrip("\\") + "\\"
+
+    for r in t.roots:
+        rp = Path(r)
+        if not rp.is_absolute():
+            p.append(f"terminal.roots: {r!r} deve ser um caminho absoluto")
+            continue
+        low = key(rp)
+        if len(rp.parts) <= 1:
+            p.append(f"terminal.roots: {r!r} é a raiz de um disco")
+        elif key(sysroot) and (low.startswith(key(sysroot)) or key(sysroot).startswith(low)) or any(low.startswith(key(x)) for x in pf):
+            p.append(f"terminal.roots: {r!r} é uma pasta do sistema (Windows, Program Files ou ProgramData)")
+        elif key(home).startswith(low):
+            p.append(f"terminal.roots: {r!r} é o perfil do usuário inteiro (ou acima dele); use uma subpasta, como Documents\\Eco")
+        elif any(low.startswith(key(x)) or key(x).startswith(low) for x in sens) or "\\programs\\eco\\" in low or "\\programs\\jarvis\\" in low:
+            p.append(f"terminal.roots: {r!r} é uma pasta sensível (AppData, .ssh, .aws, .gnupg, .config ou o Eco instalado)")
+        elif any(low.startswith(key(x)) or key(x).startswith(low) for x in protected):
+            p.append(f"terminal.roots: {r!r} contém ou está dentro da pasta do próprio Eco (código, dados ou logs)")
     return p
 
 

@@ -115,7 +115,7 @@ def _conv(v, p: QPainter, W: int, y0: int, n: int, line_h: int = 18) -> None:
     x_text = PAD + 48
     wtxt = W - x_text - PAD - 6
     rows: list[tuple[str, str, str]] = []
-    for role, s in ((S.you, v.transcript), (S.jarvis, v.reply)):
+    for role, s in ((S.you, v.transcript), (S.eco, v.reply)):
         if not s:
             continue
         for i, ln in enumerate(wrap(s, wtxt, TYPE.small)):
@@ -128,7 +128,7 @@ def _conv(v, p: QPainter, W: int, y0: int, n: int, line_h: int = 18) -> None:
     for i, (role, ln, c) in enumerate(rows[max(0, end - n):end]):
         y = y0 + i * line_h
         if role:
-            text(p, role, PAD, y, 44, line_h, TYPE.caption, T.accent() if role == S.jarvis else pal.text_muted, TYPE.semibold)
+            text(p, role, PAD, y, 44, line_h, TYPE.caption, T.accent() if role == S.eco else pal.text_muted, TYPE.semibold)
         text(p, ln, x_text, y, wtxt, line_h, TYPE.small, c)
     if max_scroll > 0:
         track = n * line_h

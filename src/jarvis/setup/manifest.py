@@ -15,7 +15,7 @@ class ManifestError(RuntimeError):
 
 @dataclass(frozen=True)
 class FileEntry:
-    path: str                       # relativo à raiz do Jarvis, com "/" (ex.: models/silero/silero_vad.onnx)
+    path: str                       # relativo à raiz do Eco, com "/" (ex.: models/silero/silero_vad.onnx)
     size: int
     sha256: str
     urls: tuple[str, ...]

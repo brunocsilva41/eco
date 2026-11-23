@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class IslandStrings:
-    window_name: str = "Ilha do Jarvis"
+    window_name: str = "Ilha do Eco"
     state_idle: str = "Em repouso"
     state_listening: str = "Ouvindo"
     state_transcribing: str = "Transcrevendo"
@@ -20,7 +20,7 @@ class IslandStrings:
     mute_btn: str = "Silenciar microfone"
     settings: str = "Configurações"
     you: str = "Você"
-    jarvis: str = "Jarvis"
+    eco: str = "Eco"
     context: str = "Contexto {pct}%"
     acting_prefix: str = "Executando: {what}"
     yolo: str = "YOLO {t}"
@@ -57,7 +57,7 @@ class IslandStrings:
     listen: str = "Escuta aberta"
     listen_off: str = "Escuta por tecla"
     listen_on_name: str = "Escuta aberta ligada. Clique para voltar a falar só com a tecla"
-    listen_off_name: str = "Escuta aberta desligada. Clique para o Jarvis escutar sem apertar botão"
+    listen_off_name: str = "Escuta aberta desligada. Clique para o Eco escutar sem apertar botão"
     listen_open_line: str = "Escuta aberta: é só falar"
     pinned_name: str = "Ilha fixada na tela"
     pinned_chip: str = "Fixada"

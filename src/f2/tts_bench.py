@@ -7,7 +7,7 @@ import sys, time, wave, json, statistics as st
 from pathlib import Path
 import numpy as np
 
-ROOT = Path(r"F:\Jarvis")
+ROOT = Path(r"F:\Eco")
 FRASES = ROOT / "tests" / "frases_pt.txt"
 
 def stats(xs):

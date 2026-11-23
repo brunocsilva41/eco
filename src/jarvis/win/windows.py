@@ -32,7 +32,7 @@ DWMWA_CLOAKED: Final = 14
 PROCESS_QUERY_LIMITED_INFORMATION: Final = 0x1000
 GW_OWNER: Final = 4
 
-OWN_WINDOW_MESSAGE: Final = "Essa é uma janela do próprio Jarvis; mexa nela você mesmo."
+OWN_WINDOW_MESSAGE: Final = "Essa é uma janela do próprio Eco; mexa nela você mesmo."
 DIALOG_CLASS: Final = "#32770"       # classe padrão dos diálogos do Windows (Salvar como, Abrir, Imprimir, avisos)
 # Títulos típicos de diálogos de arquivo/impressão, sem acento e em minúsculas (comparação com `fold`).
 _DIALOG_TITLES: Final = frozenset({
@@ -274,10 +274,10 @@ def is_dialog_window(hwnd_or_info: "int | WindowInfo") -> bool:
 
 
 def is_own_process_window(hwnd_or_info: "int | WindowInfo", cfg: "Config") -> bool:
-    """True se a janela é do próprio Jarvis (Configurações, Gravador, Painel de memória...).
+    """True se a janela é do próprio Eco (Configurações, Gravador, Painel de memória...).
 
     Vale se (a) o PID é o deste processo, OU (b) o executável está dentro de `<raiz do projeto>\\venv`, OU
-    (c) o título começa com "Jarvis" e o processo é python/pythonw (cobre o relançador do venv). Se a janela
+    (c) o título começa com "Eco" e o processo é python/pythonw (cobre o relançador do venv). Se a janela
     não pode ser lida, devolve False (não há como afirmar); quem age deve ter outras guardas.
     """
     info = hwnd_or_info if isinstance(hwnd_or_info, WindowInfo) else describe_window(int(hwnd_or_info))
@@ -295,7 +295,7 @@ def is_own_process_window(hwnd_or_info: "int | WindowInfo", cfg: "Config") -> bo
         except (OSError, ValueError):
             log.debug("não consegui comparar o executável da janela 0x%X com o venv", info.hwnd, exc_info=True)
     name = (info.process or "").casefold()
-    return fold(info.title).startswith("jarvis") and bool(_PYTHON_EXE.match(name))
+    return fold(info.title).startswith("eco") and bool(_PYTHON_EXE.match(name))
 
 
 def _is_foreground(hwnd: int) -> bool:

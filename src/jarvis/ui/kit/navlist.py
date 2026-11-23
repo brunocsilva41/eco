@@ -11,6 +11,7 @@ from . import icons
 from .base import paint_focus_ring, strs, watch_theme
 
 _KEY, _ERR, _CHG, _ICON = Qt.ItemDataRole.UserRole, Qt.ItemDataRole.UserRole + 1, Qt.ItemDataRole.UserRole + 2, Qt.ItemDataRole.UserRole + 3
+_HIT = Qt.ItemDataRole.UserRole + 4              # resultados da busca nesta pagina (None = sem busca)
 _ROW_H = SIZE.target + SPACE.sm
 _MARK_W = 3
 _SMALL = SIZE.icon - 2
@@ -41,6 +42,17 @@ class _NavDelegate(QStyledItemDelegate):
         right = r.right() - SPACE.sm
         g.setFont(make_font(TYPE.small))
         fm = QFontMetrics(g.font())
+        hits = index.data(_HIT)
+        if hits is not None:                       # contador da busca: pilula com o numero de campos que casaram
+            txt = str(int(hits))
+            w = fm.horizontalAdvance(txt) + SPACE.md
+            pill = QRectF(right - w, mid - (fm.height() + 2) / 2, w, fm.height() + 2)
+            g.setBrush(QColor(p.accent if int(hits) else p.pressed))
+            g.drawRoundedRect(pill, pill.height() / 2, pill.height() / 2)
+            g.setPen(QColor(p.on_accent if int(hits) else p.text_muted))
+            g.drawText(pill, int(Qt.AlignmentFlag.AlignCenter), txt)
+            g.setPen(Qt.PenStyle.NoPen)
+            right -= w + SPACE.sm
         for role, icon_name, color in ((_ERR, "error", p.error), (_CHG, "edit", p.text_muted)):
             n = int(index.data(role) or 0)
             if n:
@@ -110,6 +122,13 @@ class NavList(QListWidget):
             item.setData(_ERR, errors)
             item.setData(_CHG, changes)
             self._describe(item)
+            self.viewport().update()
+
+    def set_hits(self, key: str, hits: int | None) -> None:
+        """Mostra (ou, com None, esconde) o contador de resultados da busca no item."""
+        item = self._item(key)
+        if item is not None:
+            item.setData(_HIT, hits)
             self.viewport().update()
 
     def _item(self, key: str) -> QListWidgetItem | None:

@@ -1,6 +1,6 @@
-"""Gravador de voz ("Minha voz") do Jarvis: vista, modelo e controlador sobre ``jarvis.recording`` e o kit de UI.
+"""Gravador de voz ("Minha voz") do Eco: vista, modelo e controlador sobre ``jarvis.recording`` e o kit de UI.
 
-Uso: ``open_recorder(cfg, parent=None, set_name="frases"|"jarvis")`` abre (ou traz a frente) a janela dentro de um
+Uso: ``open_recorder(cfg, parent=None, set_name="frases"|"eco")`` abre (ou traz a frente) a janela dentro de um
 ``QApplication`` ja ativo; ``main_recorder(cfg, set_name=...)`` roda como programa proprio. Fachada de
 compatibilidade: ``jarvis.ui.recorder_window``.
 """

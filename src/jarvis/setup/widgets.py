@@ -152,7 +152,7 @@ class StepRail(QFrame):
         head = QVBoxLayout()
         head.setContentsMargins(SPACE.lg, 0, SPACE.lg, SPACE.lg)
         head.setSpacing(0)
-        brand = Label("Jarvis", "title")
+        brand = Label("Eco", "title")
         head.addWidget(brand)
         head.addWidget(Label(S.W_VERSION.format(v=version), "caption"))
         lay.addLayout(head)

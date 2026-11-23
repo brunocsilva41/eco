@@ -15,7 +15,7 @@ sistema; no WASAPI compartilhado a taxa precisa bater com a do mixer, o que reso
 exclusivo, falha com frequência); só por índice explícito.
 
 Limitação conhecida: o PortAudio lê a lista de dispositivos uma vez por processo. Aparelhos
-conectados depois de iniciar o Jarvis só aparecem após reiniciá-lo.
+conectados depois de iniciar o Eco só aparecem após reiniciá-lo.
 
 Contrato de threads: funções sem estado, seguras para chamar de qualquer thread. Nada aqui abre
 stream, microfone ou toca som: só consulta.
@@ -170,7 +170,7 @@ def resolve_device(spec: DeviceSpec, kind: Kind) -> AudioDevice:
                         "pode estar reiniciando; usando %s mesmo assim", label, capable[0].label)
         if kind == "output":
             # O PortAudio fixa "o padrão" na inicialização; o Mapeador de som (MME) e o driver primário (DirectSound) seguem o
-            # padrão ATUAL do Windows a cada abertura de saída: trocar de fone/caixa/monitor funciona sem reiniciar o Jarvis.
+            # padrão ATUAL do Windows a cada abertura de saída: trocar de fone/caixa/monitor funciona sem reiniciar o Eco.
             for marker in ("sound mapper", "mapeador de som", "driver de som primario", "primary sound driver"):
                 follow = [d for d in usable if marker in fold(d.name)]
                 if follow:

@@ -1,0 +1,84 @@
+name: Site (GitHub Pages)
+
+# Publica a pasta site/ no MESMO repositorio. Dispara quando site/** muda na master, quando uma release e publicada por uma
+# pessoa, manualmente, e pelo workflow de Release (eventos criados com GITHUB_TOKEN nao disparam outros workflows,
+# entao o Release chama este por workflow_dispatch). releases.json e SEMPRE regenerado da release real mais recente.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "site/**"
+      - "tools/ci/gen_releases_json.py"
+      - ".github/workflows/pages.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Montar o site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: releases.json a partir da release real (nunca inventado)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p work
+          found=""
+          # a release pode ter acabado de ser publicada: espera os assets por ate ~5 min
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if gh release view --repo "$REPO" --json tagName,publishedAt,isPrerelease,assets > work/rel.json 2>/dev/null; then
+              TAG="$(python3 -c "import json;print(json.load(open('work/rel.json'))['tagName'])")"
+              VER="${TAG#v}"
+              if gh release download "$TAG" --repo "$REPO" --pattern "Eco-Setup-${VER}.exe.sha256" --dir work --clobber 2>/dev/null; then
+                found="$TAG"; break
+              fi
+            else
+              break
+            fi
+            echo "assets ainda não disponíveis, aguardando 30 s..."; sleep 30
+          done
+          if [ -n "$found" ]; then
+            python3 -I tools/ci/gen_releases_json.py --repo "$REPO" --release-json work/rel.json \
+              --sha-file "work/Eco-Setup-${found#v}.exe.sha256" --out site/releases.json
+          else
+            echo "::notice::Nenhuma release com instalador Eco ainda: o site mostra 'Em breve'."
+            python3 -I tools/ci/gen_releases_json.py --repo "$REPO" --none --out site/releases.json
+          fi
+          python3 -c "import json;d=json.load(open('site/releases.json'));print({k:d[k] for k in ('version','date','size_bytes','url','channel')})"
+      - name: Conferir o site
+        run: |
+          test -f site/index.html
+          test -f site/.nojekyll
+          if grep -RInE 'https?://(cdn|fonts|ajax|unpkg|code)\.' site --include=*.html --include=*.css --include=*.js; then
+            echo "::error::o site não pode carregar recursos de CDNs externos"; exit 1
+          fi
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: Publicar no Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

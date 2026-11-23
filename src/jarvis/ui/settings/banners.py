@@ -106,7 +106,7 @@ class Banners(QWidget):
             col.addWidget(self._actions)
 
     def set_runtime(self, rt: Runtime | None) -> None:
-        """O Jarvis fechou depois de salvar: some 'Aplicar agora' e 'Reiniciar'."""
+        """O Eco fechou depois de salvar: some 'Aplicar agora' e 'Reiniciar'."""
         if rt is None and self._actions is not None:
             self._actions.hide()
 

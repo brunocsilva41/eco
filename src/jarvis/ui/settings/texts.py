@@ -20,7 +20,7 @@ def plural(n: int, one: str, many: str) -> str:
 
 @dataclass(frozen=True)
 class Window:
-    title: str = "Jarvis: Configurações"
+    title: str = "Eco: Configurações"
     heading: str = "Configurações"
     nav_name: str = "Categorias de configuração"
     emergency_caption: str = "Tecla de emergência"
@@ -60,16 +60,16 @@ class Banner:
     saved: str = "Configurações salvas."
     reset_done: str = "Padrões restaurados."
     nothing: str = "Nada mudou em relação ao que já estava gravado."
-    next_open: str = "Valem na próxima vez que o Jarvis abrir: {items}."
+    next_open: str = "Valem na próxima vez que o Eco abrir: {items}."
     pending: str = "Já aguardavam reinício: {items}."
-    live_after: str = "Valem assim que o Jarvis recarregar: {items}."
-    needs_restart: str = "Exigem reiniciar o Jarvis: {items}."
-    running: str = "O Jarvis está aberto agora."
-    closed: str = "O Jarvis está fechado. Tudo vale na próxima vez que ele abrir."
+    live_after: str = "Valem assim que o Eco recarregar: {items}."
+    needs_restart: str = "Exigem reiniciar o Eco: {items}."
+    running: str = "O Eco está aberto agora."
+    closed: str = "O Eco está fechado. Tudo vale na próxima vez que ele abrir."
     apply_now: str = "Aplicar agora"
-    restart: str = "Reiniciar o Jarvis"
-    apply_sent: str = "Pedido enviado. O Jarvis recarrega em instantes."
-    restart_sent: str = "Pedido enviado. O Jarvis reabre sozinho só se foi aberto pelo Jarvis.cmd."
+    restart: str = "Reiniciar o Eco"
+    apply_sent: str = "Pedido enviado. O Eco recarrega em instantes."
+    restart_sent: str = "Pedido enviado. O Eco reabre sozinho só se foi aberto pelo Eco.cmd."
     more: str = "e mais {n}"
     dismiss: str = "Dispensar aviso"
     disk_what: str = "O arquivo de configuração mudou no disco"
@@ -87,7 +87,7 @@ class Banner:
     write_disk: str = "O disco devolveu um erro: {detail}."
     write_other: str = "Aconteceu um erro inesperado: {detail}."
     write_todo: str = "Suas alterações continuam na tela. Resolva o problema e salve de novo."
-    request_what: str = "Não consegui avisar o Jarvis"
+    request_what: str = "Não consegui avisar o Eco"
     request_todo: str = "Confira se ele está aberto e tente de novo."
     general_what: str = "Há um problema que envolve mais de um campo"
     general_todo: str = "Corrija os valores citados."
@@ -106,8 +106,8 @@ class Dialogs:
     close_message: str = "Elas serão perdidas. Alterados:"
     close_confirm: str = "Descartar e fechar"
     close_cancel: str = "Continuar editando"
-    restart_title: str = "Reiniciar o Jarvis?"
-    restart_message: str = "O Jarvis fecha e abre de novo. Qualquer fala ou ação em andamento é interrompida."
+    restart_title: str = "Reiniciar o Eco?"
+    restart_message: str = "O Eco fecha e abre de novo. Qualquer fala ou ação em andamento é interrompida."
     restart_confirm: str = "Reiniciar"
     reload_title: str = "Recarregar do disco?"
     reload_message: str = "As alterações não salvas desta tela serão perdidas."
@@ -118,7 +118,7 @@ class Dialogs:
 class Yolo:
     title: str = "Modo YOLO"
     badge: str = "Sem confirmações"
-    intro: str = "Desliga TODAS as confirmações por {minutes} minutos. Depois o Jarvis volta ao normal sozinho."
+    intro: str = "Desliga TODAS as confirmações por {minutes} minutos. Depois o Eco volta ao normal sozinho."
     facts: tuple[str, ...] = (
         "As travas duras continuam: pastas protegidas, Lixeira em vez de apagar de vez e terminais bloqueados.",
         "Só liga por clique aqui ou pelo atalho do teclado. Nunca por voz, nem por pedido do modelo.",
@@ -126,16 +126,16 @@ class Yolo:
     )
     on_button: str = "Ativar modo YOLO"
     off_button: str = "Desativar YOLO"
-    on_tip: str = "Pede ao Jarvis para entrar no modo YOLO (você confirma antes)."
-    off_tip: str = "Pede ao Jarvis para sair do modo YOLO agora."
-    running: str = "Jarvis em execução"
-    not_running: str = "Jarvis não está rodando"
-    not_running_why: str = "Abra o Jarvis para ligar ou desligar o modo YOLO por aqui."
-    sent_on: str = "Pedido enviado. O Jarvis avisa quando o modo YOLO ligar."
-    sent_off: str = "Pedido enviado. O Jarvis avisa quando o modo YOLO desligar."
-    failed: str = "Não consegui enviar o pedido ao Jarvis. Confira se a pasta de dados está acessível e tente de novo."
+    on_tip: str = "Pede ao Eco para entrar no modo YOLO (você confirma antes)."
+    off_tip: str = "Pede ao Eco para sair do modo YOLO agora."
+    running: str = "Eco em execução"
+    not_running: str = "Eco não está rodando"
+    not_running_why: str = "Abra o Eco para ligar ou desligar o modo YOLO por aqui."
+    sent_on: str = "Pedido enviado. O Eco avisa quando o modo YOLO ligar."
+    sent_off: str = "Pedido enviado. O Eco avisa quando o modo YOLO desligar."
+    failed: str = "Não consegui enviar o pedido ao Eco. Confira se a pasta de dados está acessível e tente de novo."
     dialog_title: str = "Ativar o modo YOLO?"
-    dialog_message: str = ("Por {minutes} minutos o Jarvis vai agir sem pedir NENHUMA confirmação: abrir, digitar, "
+    dialog_message: str = ("Por {minutes} minutos o Eco vai agir sem pedir NENHUMA confirmação: abrir, digitar, "
                            "mover e fechar coisas. As travas duras continuam valendo.")
     dialog_target: str = "Modo YOLO por {minutes} minutos"
     dialog_confirm: str = "Ativar YOLO"
@@ -179,7 +179,7 @@ class Dictionary:
     program_placeholder: str = "Escolha o programa"
     add: str = "Adicionar programa"
     remove: str = "Remover {name}"
-    empty: str = "Nenhum programa liberado. O Jarvis não abre nada."
+    empty: str = "Nenhum programa liberado. O Eco não abre nada."
     row_name: str = "Nome falado {n}"
     row_program: str = "Programa {n}"
     filter: str = "Programas (*.exe);;Todos os arquivos (*.*)"
@@ -200,17 +200,17 @@ class PathList:
 @dataclass(frozen=True)
 class MyVoice:
     phrases_title: str = "Frases de treino"
-    phrases_body: str = "Leia frases em voz alta para o Jarvis aprender o seu jeito de falar."
+    phrases_body: str = "Leia frases em voz alta para o Eco aprender o seu jeito de falar."
     phrases_button: str = "Gravar minhas frases"
-    wake_title: str = "A palavra Jarvis"
-    wake_body: str = "Grave você dizendo Jarvis para ele reconhecer quando for chamado."
-    wake_button: str = "Gravar a palavra Jarvis"
+    wake_title: str = "A palavra Eco"
+    wake_body: str = "Grave você dizendo Eco para ele reconhecer quando for chamado."
+    wake_button: str = "Gravar a palavra Eco"
     privacy: str = "O microfone só liga quando você clica em gravar dentro do gravador. As gravações ficam só neste computador."
     fail_what: str = "Não consegui abrir o gravador"
     fail_missing: str = "O gravador não está disponível nesta instalação."
     fail_version: str = "Esta versão do gravador ainda não abre direto neste conjunto."
     fail_other: str = "Detalhe: {detail}"
-    fail_todo: str = "Tente de novo. Se continuar, abra o gravador pelo menu do Jarvis."
+    fail_todo: str = "Tente de novo. Se continuar, abra o gravador pelo menu do Eco."
 
 
 @dataclass(frozen=True)
@@ -258,7 +258,7 @@ class Nav:
     llm: str = "Modelo de linguagem"
     tools: str = "Ferramentas e segurança"
     memory: str = "Memória e conversas"
-    knows: str = "O que o Jarvis sabe de mim"
+    knows: str = "O que o Eco sabe de mim"
     files: str = "Arquivos"
     advanced: str = "Avançado"
     about: str = "Sobre"
@@ -308,6 +308,9 @@ class Texts:
 
     def section(self, section_id: str) -> tuple[str, str]:
         return field_texts.SECTIONS.get(section_id, (section_id, ""))
+
+    def section_badge(self, n: int) -> str:
+        return plural(n, "opção", "opções")
 
     def page(self, key: str) -> tuple[str, str]:
         return field_texts.PAGES.get(key, (key, ""))

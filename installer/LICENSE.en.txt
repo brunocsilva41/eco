@@ -1,15 +1,15 @@
-JARVIS - USAGE NOTICE AND LICENSES
+ECO - USAGE NOTICE AND LICENSES
 
-This installer places Jarvis, a Brazilian-Portuguese voice assistant that runs entirely on your computer, in the folder you choose.
+This installer places Eco, a Brazilian-Portuguese voice assistant that runs entirely on your computer, in the folder you choose.
 
 [Privacy]
-Jarvis does not send your voice, conversations or screen to the internet. The internet is only used to download the AI models (once, over HTTPS, verified by SHA-256). The model server listens on 127.0.0.1 only. The installer does not open ports or change the firewall, does not update drivers, and writes nothing outside the install folder, the shortcuts you choose and (optionally) the "Start with Windows" entry.
+Eco does not send your voice, conversations or screen to the internet. The internet is only used to download the AI models (once, over HTTPS, verified by SHA-256). The model server listens on 127.0.0.1 only. The installer does not open ports or change the firewall, does not update drivers, and writes nothing outside the install folder, the shortcuts you choose and (optionally) the "Start with Windows" entry.
 
 [No warranty]
-Jarvis is provided "as is", without warranty of any kind. It can control your computer through allow-listed tools; read the permission explanations in the setup and use the emergency key (Ctrl+Alt+F12) if anything goes wrong.
+Eco is provided "as is", without warranty of any kind. It can control your computer through allow-listed tools; read the permission explanations in the setup and use the emergency key (Ctrl+Alt+F12) if anything goes wrong.
 
-[Jarvis terms]
-REPLACE THIS BLOCK with the Jarvis terms of use defined by the author before distributing the installer to third parties. Until then, use is restricted to the project owner.
+[Eco terms]
+Eco is distributed under the MIT License (Copyright (c) 2026 brunocsilva41). You may use, copy, modify and distribute the software, provided the copyright notice and this permission notice are kept. The software is provided "as is", without warranty of any kind. The full text is in the LICENSE file of the repository: https://github.com/brunocsilva41/eco/blob/master/LICENSE. Third-party components keep their own licenses (see below).
 
 [Third-party components and licenses]
 - llama.cpp (Vulkan backend): MIT

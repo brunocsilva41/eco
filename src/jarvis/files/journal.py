@@ -72,7 +72,7 @@ class UndoResult:
 
 @dataclass(frozen=True)
 class UndoPreview:
-    """O que `undo_last()` faria agora (somente leitura): serve para perguntar ao Bruno ANTES de desfazer."""
+    """O que `undo_last()` faria agora (somente leitura): serve para perguntar ao usuário ANTES de desfazer."""
     entry_id: str
     op: str                              # criar | editar | copiar | mover | apagar
     src: str | None
@@ -308,8 +308,8 @@ class UndoJournal:
     def peek_last(self) -> UndoPreview | None:
         """O que `undo_last()` desfaria agora, sem nenhum efeito colateral (nada é gravado, movido ou apagado).
 
-        Também informa as entradas mais novas já marcadas como "manual" (ex.: um `apagar` que o Jarvis já avisou
-        que só a Lixeira restaura): `undo_last` as pula, e quem pergunta ao Bruno precisa dizer isso.
+        Também informa as entradas mais novas já marcadas como "manual" (ex.: um `apagar` que o Eco já avisou
+        que só a Lixeira restaura): `undo_last` as pula, e quem pergunta ao usuário precisa dizer isso.
         """
         with self._lock:
             entries = self._entries()

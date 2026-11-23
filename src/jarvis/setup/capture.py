@@ -1,7 +1,7 @@
 """Capturas offscreen de TODAS as telas do assistente (desenvolvimento). Nunca grava no config.toml real nem no disco real:
 o estado vai para uma pasta temporária e nenhuma página sai com `on_leave(True)`.
 
-    Jarvis.cmd setup --capture PASTA [--theme dark|light]      (use QT_SCALE_FACTOR=1.5 para 150%)
+    Eco.cmd setup --capture PASTA [--theme dark|light]      (use QT_SCALE_FACTOR=1.5 para 150%)
 """
 from __future__ import annotations
 
@@ -78,6 +78,34 @@ def run_capture(out: Path, theme: str = "dark") -> int:
     win.show_page("hardware")
     win.pages["hardware"].show_results(hardware.run_all(ROOT, 3.5))
     shot("hardware")
+
+    # 2b preparar o computador: checagem REAL deste PC, e os estados que não aparecem aqui (falta VC++, baixando, instalado)
+    from . import prereqs, strings as S
+    win.show_page("prepare")
+    pp = win.pages["prepare"]
+    real = prereqs.run_checks(ROOT, man, list(state.components), ram_gb=16.0)
+    pp.show_items(real)
+    shot("preparar-real")
+    sim = [i for i in real if i.key not in ("vcruntime", "models")]
+    sim.insert(1, prereqs.Item("vcruntime", "Biblioteca do Visual C++", "fail", "faltam: vcruntime140.dll, msvcp140.dll",
+                               "O servidor do modelo precisa dela. É gratuita e vem do site oficial da Microsoft.", "install_vcredist",
+                               "Baixar e instalar (Microsoft)"))
+    sim.append(prereqs.Item("models", "Modelos, voz e escuta", "fail", "faltam 4 de 10 arquivo(s), 486 MB",
+                            "Cada arquivo é conferido por SHA-256 e o download continua de onde parou.", "download_models",
+                            "Baixar o que falta (486 MB)"))
+    pp.show_items(sim)
+    shot("preparar-faltando")
+    pp._begin(S.P_DL_OFFICIAL.format(name=prereqs.VCREDIST.name))
+    pp._on_progress("", 11_000_000, 25_600_000, 6_400_000)
+    shot("preparar-baixando")
+    pp._end()
+    pp.prog_card.setVisible(False)
+    pp._banner("ok", S.P_INSTALLED.format(name=prereqs.VCREDIST.name, what="instalado"))
+    shot("preparar-instalado")
+    pp._banner("error", "A assinatura digital do instalador NÃO é válida (HashMismatch). Ele foi apagado e não será executado.")
+    shot("preparar-assinatura-invalida")
+    pp.items = []
+    pp.show_items(real)
 
     # 3 modelos: pendente, baixando, sem internet, tudo certo
     ctx.root = tmp                       # raiz vazia: mostra "falta baixar" (demo não grava estado em lugar nenhum)

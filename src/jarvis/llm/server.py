@@ -2,8 +2,8 @@
 
 Segurança: só escuta em loopback (validado) e exige uma CHAVE DE API aleatória por execução (`--api-key`), guardada só
 na memória deste processo; outro programa local ou página web não consegue usar o modelo. Um servidor desconhecido na
-porta NÃO é adotado: o Jarvis só fala com o servidor que ele mesmo iniciou.
-Limpeza: o processo filho entra num Job Object do Windows com KILL_ON_JOB_CLOSE; se o Jarvis morrer (até por falha), o
+porta NÃO é adotado: o Eco só fala com o servidor que ele mesmo iniciou.
+Limpeza: o processo filho entra num Job Object do Windows com KILL_ON_JOB_CLOSE; se o Eco morrer (até por falha), o
 Windows encerra o servidor e a VRAM é liberada. Se o Job Object não puder ser criado, a partida FALHA (não há órfão).
 Supervisão: uma thread verifica o processo; se morrer, reinicia (no máximo 3 vezes em 10 minutos) e avisa por evento.
 """
@@ -179,8 +179,8 @@ class LlamaServer:
         if self.is_running():
             return
         if health_ok(c.host, c.port):
-            raise ServerError(f"a porta {c.port} já tem outro servidor de modelo rodando que o Jarvis não iniciou. "
-                              "Feche-o ou mude llm.port; o Jarvis não usa servidores desconhecidos.")
+            raise ServerError(f"a porta {c.port} já tem outro servidor de modelo rodando que o Eco não iniciou. "
+                              "Feche-o ou mude llm.port; o Eco não usa servidores desconhecidos.")
         self._stopping.clear()
         self._life = CancelToken()                     # o stop() cancela este token e interrompe qualquer partida em curso
         try:
@@ -270,7 +270,7 @@ class LlamaServer:
             conn.close()
         if status not in (401, 403):
             raise ServerError(f"o servidor na porta {c.port} aceitou uma chave inválida (resposta {status}); "
-                              "não é o llama-server do Jarvis. Recuso usar.")
+                              "não é o llama-server do Eco. Recuso usar.")
 
     def _wait_ready(self, proc: subprocess.Popen[bytes], cancel: CancelToken) -> None:
         c = self._cfg.llm
@@ -300,7 +300,7 @@ class LlamaServer:
             self._restarts = [t for t in self._restarts if now - t < RESTART_WINDOW_S]
             if len(self._restarts) >= RESTART_LIMIT:
                 log.error("llama-server fora do ar (código %s) e já houve %d tentativas; desisto", code, RESTART_LIMIT)
-                self._on_event("llm_dead", "O modelo de linguagem caiu e não voltou. Reinicie o Jarvis.")
+                self._on_event("llm_dead", "O modelo de linguagem caiu e não voltou. Reinicie o Eco.")
                 return
             self._restarts.append(now)
             attempt = len(self._restarts)
@@ -362,7 +362,7 @@ class LlamaServer:
 def _private_dir() -> Path:
     """Pasta temporária no perfil do usuário (o Windows a protege por padrão), nunca dentro de F:\\Jarvis\\logs."""
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(base) / "Jarvis" / "run"
+    return Path(base) / "Eco" / "run"
 
 
 def _rotate(path: Path) -> None:

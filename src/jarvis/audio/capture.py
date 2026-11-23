@@ -15,7 +15,7 @@ Contrato de threads
 * Esta classe não cria threads próprias.
 
 Áudio recebido antes da chamada é descartado no início de cada captura (``flush_backlog``). Para ignorar
-também o eco da fala/pergunta do próprio Jarvis, ``listen_utterance(not_before=t)`` descarta todo bloco
+também o eco da fala/pergunta do próprio Eco, ``listen_utterance(not_before=t)`` descarta todo bloco
 capturado antes de ``t`` (``time.monotonic()``): cada bloco é carimbado no callback com a hora de chegada
 (erro ~ latência de entrada, dezenas de ms). O app deve esperar o fim da fala (``Voice.idle_since()`` /
 ``Speaker.idle_since()``) e passar esse instante, mais uma margem para o eco da sala.
@@ -381,7 +381,7 @@ class Microphone:
         Retorna None se cancelado, se o microfone foi fechado, ou se estourou ``max_wait_s``.
 
         ``not_before`` (``time.monotonic()``): todo áudio capturado antes desse instante é descartado
-        (eco da fala/pergunta do Jarvis e sobras do buffer). Pode estar no futuro (fim da fala + margem);
+        (eco da fala/pergunta do Eco e sobras do buffer). Pode estar no futuro (fim da fala + margem);
         nesse caso ``max_wait_s`` conta a partir dele. Com o microfone MUDO a chamada espera (sem
         busy-loop) até desmutar, cancelar ou vencer ``max_wait_s``; só então devolve None.
         """

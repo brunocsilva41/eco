@@ -229,7 +229,7 @@ class RecordingSession:
 
 # ---------------------------------------------------------------------- conjuntos prontos
 def sentences_set(cfg: Config, phrasebook: PhraseBook | None = None) -> RecordingSet:
-    """20 frases de ``tests/frases_pt.txt``, 20 s cada, saída ``tests/audio_bruno/NN.wav``.
+    """20 frases de ``tests/frases_pt.txt``, 20 s cada, saída ``tests/audio_usuario/NN.wav``.
 
     Se ``phrasebook`` vier de fora (a interface compartilha o mesmo objeto para editar), é usado como está.
     Levanta ``PhraseError`` se o arquivo existir e não puder ser lido.
@@ -241,13 +241,13 @@ def sentences_set(cfg: Config, phrasebook: PhraseBook | None = None) -> Recordin
         title="Frases",
         phrases=book.phrases,
         duration_s=SENTENCES_DURATION_S,
-        out_dir=tests_dir / "audio_bruno",
+        out_dir=tests_dir / "audio_usuario",
         instruction="Leia a frase abaixo em voz alta, em tom natural.",
         phrases_file=book.path,
     )
 
 
-def wakeword_set(cfg: Config, word: str = "jarvis", count: int = WAKEWORD_DEFAULT_COUNT,
+def wakeword_set(cfg: Config, word: str = "eco", count: int = WAKEWORD_DEFAULT_COUNT,
                  duration_s: float = WAKEWORD_DURATION_S) -> RecordingSet:
     """Base para amostras da palavra de ativação: ``count`` amostras de ``duration_s`` s em
     ``<cfg.paths.data>/wakeword/<word>/NN.wav``. Sem texto livre (lista fixa, não editável)."""

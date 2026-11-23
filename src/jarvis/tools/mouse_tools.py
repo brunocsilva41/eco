@@ -1,7 +1,7 @@
 """Mouse por posição: `clicar_na_tela` e `rolar_tela`, sobre o que o modelo VIU em `ver_tela`.
 
 Coordenadas relativas 0..1000 (o sistema nativo do Qwen-VL): independem da resolução e do reescalonamento da imagem.
-Guardas: exige uma `ver_tela` recente; recusa janelas do próprio Jarvis, janelas de segurança/senha, diálogos e botões que
+Guardas: exige uma `ver_tela` recente; recusa janelas do próprio Eco, janelas de segurança/senha, diálogos e botões que
 aprovam algo (Salvar, OK, Executar...): para esses o caminho é `clicar_controle`, que pede confirmação. Confere de novo a
 janela sob o ponto imediatamente antes de clicar.
 """
@@ -159,7 +159,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if info.hwnd != want_hwnd:
             return ToolResult(False, "O ponto achado está fora da janela em foco (outra janela por cima ou mudou); não cliquei.")
         if win.is_own_process_window(info, cfg):
-            return ToolResult(False, "O ponto achado é uma janela do próprio Jarvis; não cliquei.")
+            return ToolResult(False, "O ponto achado é uma janela do próprio Eco; não cliquei.")
         if (info.process or "").lower() in _NEVER_CLICK:
             return ToolResult(False, f"O ponto achado é {info.process}, uma janela de segurança ou de senhas; não clico ali.")
         if win.is_dialog_window(info):
@@ -191,7 +191,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if info is None or info.hwnd != want_hwnd:
             return None, "O ponto achado está fora da janela em foco; não mexi.", None
         if win.is_own_process_window(info, cfg):
-            return None, "O ponto achado é uma janela do próprio Jarvis; não mexi.", None
+            return None, "O ponto achado é uma janela do próprio Eco; não mexi.", None
         if (info.process or "").lower() in _NEVER_CLICK:
             return None, f"O ponto achado é {info.process}, uma janela de segurança ou de senhas; não mexo ali.", None
         if win.is_dialog_window(info):
@@ -268,7 +268,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if info is None:
             return ToolResult(False, "Não há janela nesse ponto (área de trabalho ou janela sem título); não cliquei.")
         if win.is_own_process_window(info, cfg):
-            return ToolResult(False, "Esse ponto é uma janela do próprio Jarvis; não cliquei.")
+            return ToolResult(False, "Esse ponto é uma janela do próprio Eco; não cliquei.")
         if (info.process or "").lower() in _NEVER_CLICK:
             return ToolResult(False, f"Esse ponto é {info.process}, uma janela de segurança ou de senhas; não clico ali.")
         if win.is_dialog_window(info):
@@ -313,7 +313,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
                 return ToolResult(False, _NEED_SHOT)
         info = win.window_at(*at) if at is not None else win.foreground_window()
         if info is not None and win.is_own_process_window(info, cfg):
-            return ToolResult(False, "Essa é uma janela do próprio Jarvis; não rolei.")
+            return ToolResult(False, "Essa é uma janela do próprio Eco; não rolei.")
         where = f"{info.process} ({info.title[:40]})" if info is not None else "a janela em foco"
         return Prepared(text=f"Rolar {args['direcao']} em {where}", state=at)
 
@@ -332,7 +332,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
     registry.register(ToolSpec(
         name="clicar_em",
         description=("Clica com o MOUSE em algo que você descreve em palavras ('o botão 7 da calculadora', 'o ícone de salvar', "
-                     "'o link Entrar'). O Jarvis olha a tela, acha o alvo sozinho e clica. Use quando clicar_controle não achar "
+                     "'o link Entrar'). O Eco olha a tela, acha o alvo sozinho e clica. Use quando clicar_controle não achar "
                      "o controle ou quando só dá para ver na tela. Prefira esta a clicar_na_tela."),
         parameters={"type": "object", "properties": {
             "descricao": {"type": "string", "minLength": 2, "maxLength": 120,

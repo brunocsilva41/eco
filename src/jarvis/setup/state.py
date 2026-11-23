@@ -14,7 +14,7 @@ from typing import Any
 
 from ..config import ROOT
 
-STEPS = ("welcome", "hardware", "models", "audio", "voice", "vad", "hotkeys", "permissions", "doctor", "done")
+STEPS = ("welcome", "hardware", "prepare", "models", "audio", "voice", "vad", "hotkeys", "permissions", "doctor", "done")
 DEFAULT_COMPONENTS = ("vision", "voice", "stt_small")
 
 

@@ -12,7 +12,7 @@ Data: 2026-11-19. Fase 2, parte STT. Medicao PARCIAL (limite de ~30 min): ver "N
 - Fontes consultadas em 2026-11-19: https://huggingface.co/api/models?author=Systran&search=faster-whisper (lista Systran: tiny/base/small/medium/large-v1/v2/v3, distil; NAO ha turbo no Systran); utils.py do faster-whisper instalado.
 
 ## Metodo
-- Audio: `F:\Jarvis\tests\audio_piper\01..06.wav` (voz sintetica Piper, 22 kHz, duracao media ~2,1 s inferida de tempo/RTF). SO as 6 primeiras frases por configuracao (3 para o medium), por causa do tempo. Audio SINTETICO nao e a voz do Bruno: o WER abaixo e teste de fumaça, NAO o WER real. Com 6 frases (~44 palavras) um erro a mais muda o WER em ~2 pontos: resultados de WER sao muito ruidosos.
+- Audio: `F:\Jarvis\tests\audio_piper\01..06.wav` (voz sintetica Piper, 22 kHz, duracao media ~2,1 s inferida de tempo/RTF). SO as 6 primeiras frases por configuracao (3 para o medium), por causa do tempo. Audio SINTETICO nao e a voz do usuário: o WER abaixo e teste de fumaça, NAO o WER real. Com 6 frases (~44 palavras) um erro a mais muda o WER em ~2 pontos: resultados de WER sao muito ruidosos.
 - Tempo = so `transcribe()` + consumo dos segmentos (decodificacao do WAV fora da medicao; 1 transcricao de aquecimento descartada). RTF = tempo / duracao do audio. `language="pt"`, `condition_on_previous_text=False`.
 - RAM: RSS apos carga e pico (`peak_wset`, inclui a carga) via psutil, um processo por modelo/threads.
 - WER: minusculas, pontuacao removida, "%" -> "por cento", Levenshtein por palavras. Numeros por extenso vs algarismos contam como erro (ex.: "3" vs "tres").
@@ -46,7 +46,7 @@ Observacoes (so o medido):
 
 ## Nao medido / limites
 - Grade completa pedida (3 modelos x threads 8/12/24 x beam 1/5 x vad on/off) NAO foi feita: apenas as linhas da tabela. medium e turbo so com 12 threads, beam 1, vad off; turbo beam 5 / vad e threads 8/24 nao medidos; medium com 3 frases.
-- WER real (voz do Bruno) nao medido. Audio SAPI (`tests\audio_sapi\`, voz Microsoft Maria Desktop pt-BR, 20 WAVs gerados por mim) existe mas nao foi usado.
+- WER real (voz do usuário) nao medido. Audio SAPI (`tests\audio_sapi\`, voz Microsoft Maria Desktop pt-BR, 20 WAVs gerados por mim) existe mas nao foi usado.
 - Frases 7-20 do Piper nao foram transcritas (so 1-6).
 
 ## Comandos
@@ -57,8 +57,8 @@ F:\Jarvis\venv\Scripts\python.exe F:\Jarvis\src\f2\dl_whisper.py small medium la
 F:\Jarvis\venv\Scripts\python.exe -I F:\Jarvis\src\f2\stt_bench.py --model small --threads 12 --beams 1 5 --vads 0 1 --audio-dir F:\Jarvis\tests\audio_piper --tag piper --limit 20
 # grade completa (demorada)
 F:\Jarvis\venv\Scripts\python.exe -I F:\Jarvis\src\f2\stt_bench.py --grid --audio-dir F:\Jarvis\tests\audio_piper --tag piper
-# WER real: gravar (precisa do Bruno) e depois medir
-F:\Jarvis\venv\Scripts\python.exe -I F:\Jarvis\src\f2\record_bruno.py
-F:\Jarvis\venv\Scripts\python.exe -I F:\Jarvis\src\f2\stt_bench.py --grid --audio-dir F:\Jarvis\tests\audio_bruno --tag bruno
+# WER real: gravar (precisa do usuário) e depois medir
+F:\Jarvis\venv\Scripts\python.exe -I F:\Jarvis\src\f2\record_usuario.py
+F:\Jarvis\venv\Scripts\python.exe -I F:\Jarvis\src\f2\stt_bench.py --grid --audio-dir F:\Jarvis\tests\audio_usuario --tag bruno
 ```
-Scripts: `src\f2\stt_bench.py`, `src\f2\record_bruno.py` (nao executado), `src\f2\dl_whisper.py`. Arquivos auxiliares em tests\: `stt_results_piper.jsonl` (inclui hipoteses), `stt_test.jsonl`, `run_reduced.sh`, `bench_*.log`.
+Scripts: `src\f2\stt_bench.py`, `src\f2\record_usuario.py` (nao executado), `src\f2\dl_whisper.py`. Arquivos auxiliares em tests\: `stt_results_piper.jsonl` (inclui hipoteses), `stt_test.jsonl`, `run_reduced.sh`, `bench_*.log`.

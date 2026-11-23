@@ -59,6 +59,12 @@ CATEGORIES: tuple[Category, ...] = (
         _S("llm_net", ("llm.port", "llm.host", "llm.request_timeout_s", "llm.startup_timeout_s"), 2),
         _S("vision", ("vision.max_side_px", "vision.jpeg_quality"), 2),
     )),
+    Category("cloud", "cloud", (schema.G_CLOUD,), (
+        _S("cloud_panel", custom="cloud_panel"),
+        _S("cloud_choose", ("brain.kind", "brain.agent", "brain.fallback_local", "brain.use_tools", "brain.builtin_tools")),
+        _S("cloud_privacy", ("brain.action_modes", "brain.consent_screen", "brain.consent_memory", "brain.consent_files", "brain.models")),
+        _S("cloud_limits", ("brain.request_timeout_s", "brain.startup_timeout_s"), 2),
+    )),
     Category("tools", "shield", (schema.G_SEC, schema.G_TOOLS), (
         _S("emergency", ("safety.emergency_hotkey",)),
         _S("permissions", ("safety.permission_mode", "safety.yolo_hotkey", "safety.yolo_minutes"), custom="permissions"),
@@ -66,6 +72,17 @@ CATEGORIES: tuple[Category, ...] = (
         _S("apps", ("apps.launch", "apps.hotkeys", "apps.hotkeys_confirm")),
         _S("typing", ("safety.max_typed_chars", "safety.typing_allowed_processes",
                       "safety.typing_denied_extra", "safety.typing_allowed_titles", "safety.typing_confirm"), 2),
+    )),
+    Category("terminal", "terminal", (schema.G_TERM,), (
+        _S("term_mode", ("terminal.mode", "terminal.shell", "terminal.timeout_s", "terminal.free_minutes")),
+        _S("term_where", ("terminal.roots",)),
+        _S("term_rules", ("terminal.allowed_commands", "terminal.blocked_extra", "brain.consent_terminal"), 2),
+        _S("term_output", ("terminal.max_output_kb", "terminal.result_chars"), 2),
+    )),
+    Category("toolpaths", "search", (schema.G_PATHS,), (
+        _S("tp_system", ("toolpaths.git", "toolpaths.git_bash", "toolpaths.powershell", "toolpaths.python", "toolpaths.ffmpeg")),
+        _S("tp_ai", ("toolpaths.ollama", "toolpaths.lmstudio", "toolpaths.whispercpp_dir")),
+        _S("tp_agents", ("toolpaths.opencode", "toolpaths.antigravity", "toolpaths.claude", "toolpaths.codex", "toolpaths.copilot")),
     )),
     Category("memory", "memory", (schema.G_MEM,), (
         _S("mem_basic", ("memory.enabled", "memory.model_can_remember", "memory.recall_top_k", "memory.idle_minutes")),
@@ -83,6 +100,11 @@ CATEGORIES: tuple[Category, ...] = (
         _S("logs", ("logs.level", "logs.max_mb", "logs.keep_files")),
         _S("config_file", custom="config_file"),
         _S("reset", level=2, custom="reset"),
+    )),
+    Category("updates", "refresh", (schema.G_UPD,), (
+        _S("upd_panel", custom="updates_panel"),
+        _S("upd_check", ("updates.enabled", "updates.check_on_start", "updates.interval_hours", "updates.channel")),
+        _S("upd_install", ("updates.auto_install", "updates.repo"), 2),
     )),
     Category("about", "info", (), (
         _S("status", custom="status"),

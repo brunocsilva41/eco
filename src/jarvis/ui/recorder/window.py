@@ -8,6 +8,7 @@ from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QVBoxLayout, QWidget
 
 from ...config import Config
+from ..kit import screenfit
 from .controller import RecorderController
 from .model import check_set_name
 from .services import Services
@@ -18,11 +19,11 @@ log = logging.getLogger(__name__)
 
 MIN_SIZE = (900, 620)          # menor tamanho sem corte (pedido do dono, DESIGN.md)
 DEFAULT_SIZE = (1120, 800)
-_SETTINGS_ORG, _SETTINGS_APP, _GEOMETRY_KEY = "Jarvis", "Gravador", "geometry"
+_SETTINGS_ORG, _SETTINGS_APP, _GEOMETRY_KEY = "Eco", "Gravador", "geometry"
 
 
 class RecorderWindow(QWidget):
-    """Janela de topo. ``set_name``: "frases" ou "jarvis" (``ValueError`` se for outro).
+    """Janela de topo. ``set_name``: "frases" ou "eco" (``ValueError`` se for outro).
 
     Teclado: Espaco grava/para, Enter proxima, Esc cancela a gravacao ou fecha, setas navegam, O/R/P ouvem,
     regravam e pulam. Espaco e Enter agem no botao focado (Tab) e, sem botao focado, na acao da tela.
@@ -37,6 +38,7 @@ class RecorderWindow(QWidget):
         self.setWindowFlag(Qt.WindowType.Window, True)
         self.setWindowTitle(T.window.title)
         self.setMinimumSize(*MIN_SIZE)
+        screenfit.install(self, MIN_SIZE)                    # cabe em monitor pequeno / escala 150-200%
         self._settings = settings or QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         if not self._restore_geometry():
             self.resize(*DEFAULT_SIZE)
@@ -56,7 +58,7 @@ class RecorderWindow(QWidget):
         return self._controller.is_recording
 
     def show_set(self, set_name: str) -> bool:
-        """Troca para "frases" ou "jarvis". False se nao der agora (gravando); ``ValueError`` se o nome for invalido."""
+        """Troca para "frases" ou "eco". False se nao der agora (gravando); ``ValueError`` se o nome for invalido."""
         check_set_name(set_name)
         if set_name == self._view.current_set():
             return True

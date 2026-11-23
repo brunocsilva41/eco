@@ -346,7 +346,7 @@ def _conversation(v, p: QPainter, W: int) -> None:
     x_text = T.PAD + 48
     wtxt = W - x_text - T.PAD - 6
     rows: list[tuple[str, str, str]] = []
-    for role, s in ((S.you, v.transcript), (S.jarvis, v.reply)):
+    for role, s in ((S.you, v.transcript), (S.eco, v.reply)):
         if not s:
             continue
         for i, ln in enumerate(wrap(s, wtxt, TYPE.small)):
@@ -360,7 +360,7 @@ def _conversation(v, p: QPainter, W: int) -> None:
     for i, (role, ln, c) in enumerate(rows[max(0, end - n):end]):
         y = T.L_TEXT_Y + i * T.L_LINE_H
         if role:
-            text(p, role, T.PAD, y, 44, T.L_LINE_H, TYPE.caption, T.accent() if role == S.jarvis else pal.text_muted, TYPE.semibold)
+            text(p, role, T.PAD, y, 44, T.L_LINE_H, TYPE.caption, T.accent() if role == S.eco else pal.text_muted, TYPE.semibold)
         text(p, ln, x_text, y, wtxt, T.L_LINE_H, TYPE.small, c)
     if max_scroll > 0:
         track = n * T.L_LINE_H

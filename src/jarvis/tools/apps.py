@@ -191,7 +191,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
     ))
     registry.register(ToolSpec(
         name="listar_apps_permitidos",
-        description="Diz quais aplicativos o Jarvis pode abrir. Use quando perguntarem o que ele consegue abrir.",
+        description="Diz quais aplicativos o Eco pode abrir. Use quando perguntarem o que ele consegue abrir.",
         parameters={"type": "object", "properties": {}, "additionalProperties": False},
         risk=Risk.READ,
         handler=listar_apps_permitidos,

@@ -45,7 +45,7 @@ def check_arch() -> Check:
     m = platform.machine().upper()
     if m in ("AMD64", "X86_64"):
         return Check("arch", "Processador", "ok", f"64 bits ({m})")
-    return Check("arch", "Processador", "fail", f"arquitetura {m}", "O Jarvis precisa de Windows x64.")
+    return Check("arch", "Processador", "fail", f"arquitetura {m}", "O Eco precisa de Windows x64.")
 
 
 def check_ram() -> Check:
@@ -57,7 +57,7 @@ def check_ram() -> Check:
     detail = f"{total:.1f} GB instalados"
     if total < MIN_RAM_GB - 0.6:             # 12 GB físicos aparecem como ~11,9
         return Check("ram", "Memória (RAM)", "warn", detail,
-                     f"O recomendado é {GOOD_RAM_GB:.0f} GB (mínimo {MIN_RAM_GB:.0f}). O Jarvis pode ficar lento ou travar.")
+                     f"O recomendado é {GOOD_RAM_GB:.0f} GB (mínimo {MIN_RAM_GB:.0f}). O Eco pode ficar lento ou travar.")
     return Check("ram", "Memória (RAM)", "ok", detail + (" (ótimo)" if total >= GOOD_RAM_GB - 0.6 else ""))
 
 
@@ -117,7 +117,7 @@ def check_gpu(llama_bin: Path | None = None) -> list[Check]:
         out.append(Check("gpu", "Placa de vídeo (Vulkan)", status, f"{name}, {vram / 1024:.1f} GB de memória de vídeo", hint))
     else:
         why = err or "nenhuma GPU com Vulkan encontrada"
-        hint = ("Sem Vulkan o Jarvis cai para a CPU (bem mais lento). Instale o driver de vídeo mais recente do fabricante "
+        hint = ("Sem Vulkan o Eco cai para a CPU (bem mais lento). Instale o driver de vídeo mais recente do fabricante "
                 "(AMD, NVIDIA ou Intel) pelo site oficial; este assistente não mexe em drivers.")
         if not vk_dll.is_file():
             hint = "vulkan-1.dll não está no Windows: " + hint
@@ -170,7 +170,7 @@ def check_display() -> Check:
 
 
 def check_runtime() -> Check:
-    """O Python embutido: confirma que o Jarvis roda sem depender do Python do sistema."""
+    """O Python embutido: confirma que o Eco roda sem depender do Python do sistema."""
     exe = Path(sys.executable)
     own = (ROOT / "runtime").exists() and str(exe).lower().startswith(str(ROOT).lower())
     return Check("runtime", "Programa", "ok", f"Python {platform.python_version()} " + ("embutido na instalação" if own else "do ambiente de desenvolvimento"))

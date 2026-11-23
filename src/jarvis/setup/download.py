@@ -139,7 +139,7 @@ class Downloader:
         self.cancel = cancel or threading.Event()
         self.timeout = timeout_s
         self._opener = _opener()
-        self._ua = f"JarvisSetup/{app_version(root)}"
+        self._ua = f"EcoSetup/{app_version(root)}"
         self._overall_total = 0
         self._overall_done = 0
         self._speed = 0.0
@@ -339,7 +339,7 @@ def http_incomplete() -> type[BaseException]:
 
 
 # ----------------------------------------------------------------------------- pacote offline
-OFFLINE_NAMES = ("Jarvis-Modelos", "Jarvis-Models", "jarvis-modelos")
+OFFLINE_NAMES = ("Eco-Modelos", "Eco-Models", "eco-modelos")
 
 
 def default_offline_candidates(extra: Iterable[Path] = ()) -> list[Path]:

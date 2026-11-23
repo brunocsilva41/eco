@@ -34,7 +34,7 @@ class Common:
 @dataclass(frozen=True)
 class Fields:
     restart_required: str = "Requer reinício"
-    restart_hint: str = "A mudança só vale depois de reiniciar o Jarvis."
+    restart_hint: str = "A mudança só vale depois de reiniciar o Eco."
     locked: str = "Protegido"
     modified: str = "Alterado"
     error_prefix: str = "Erro"
@@ -55,8 +55,8 @@ class Bar:
     save_busy: str = "Salvando..."
 
     def pending(self, n: int) -> str:
-        return "Nenhuma alteração pendente" if n == 0 else (
-            "1 alteração pendente" if n == 1 else f"{n} alterações pendentes")
+        return "Sem alterações" if n == 0 else (
+            "1 alteração" if n == 1 else f"{n} alterações")
 
     def errors(self, n: int) -> str:
         return "1 erro para corrigir" if n == 1 else f"{n} erros para corrigir"

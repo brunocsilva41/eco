@@ -1,4 +1,4 @@
-"""Painel "O que o Jarvis sabe de mim" (memórias, conversas, armazenamento e privacidade).
+"""Painel "O que o Eco sabe de mim" (memórias, conversas, armazenamento e privacidade).
 
 Pacote com vista, modelo e controlador (nenhum arquivo passa de 400 linhas):
 

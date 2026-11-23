@@ -1,4 +1,4 @@
-# Configuração do Jarvis. Tudo é opcional: o que não estiver aqui usa o padrão de src/jarvis/config.py.
+# Configuração do Eco. Tudo é opcional: o que não estiver aqui usa o padrão de src/jarvis/config.py.
 # NUNCA coloque senhas, PINs ou tokens neste arquivo.
 
 # log_level = "INFO"            # DEBUG | INFO | WARNING | ERROR
@@ -32,4 +32,4 @@ ctx = 12288
 # "chrome" = "chrome.exe"
 
 [tts]
-length_scale = 1.11          # 0,9x da velocidade padrao (Bruno achou a fala rapida demais)
+length_scale = 1.11          # 0,9x da velocidade padrao (ajustado por preferência)

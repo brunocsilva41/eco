@@ -86,7 +86,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return problem
         assert target is not None
         if win.is_own_process_window(target, ctx.cfg):
-            log.warning("focar_janela recusado: janela do próprio Jarvis")
+            log.warning("focar_janela recusado: janela do próprio Eco")
             return ToolResult(False, win.OWN_WINDOW_MESSAGE)
         if ctx.cancel.cancelled:
             return ToolResult(False, "Cancelado.")
@@ -133,7 +133,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             return problem
         assert target is not None
         if win.is_own_process_window(target, ctx.cfg):
-            log.warning("fechar_janela recusado: janela do próprio Jarvis")
+            log.warning("fechar_janela recusado: janela do próprio Eco")
             return ToolResult(False, win.OWN_WINDOW_MESSAGE)
         proc = target.process or "programa desconhecido"
         return Prepared(

@@ -1,7 +1,7 @@
 """Atalho sem janela de console (usado pelos atalhos, pelo Iniciar com o Windows e pelo instalador).
 
-Sem argumentos: abre o assistente de configuração se ele ainda não foi concluído; senão roda o Jarvis (e o sobe de novo se as
-Configurações pedirem reinício, código 75). Com argumentos (settings, setup --repair, ...): repassa ao Jarvis.
+Sem argumentos: abre o assistente de configuração se ele ainda não foi concluído; senão roda o Eco (e o sobe de novo se as
+Configurações pedirem reinício, código 75). Com argumentos (settings, setup --repair, ...): repassa ao Eco.
 """
 import json
 import os
@@ -10,7 +10,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PY = os.path.join(ROOT, "runtime", "python", "python.exe")
-BOOT = os.path.join(ROOT, "jarvis_boot.py")
+BOOT = os.path.join(ROOT, "eco_boot.py")
 NO_WINDOW = 0x08000000
 
 

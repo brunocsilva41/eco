@@ -46,6 +46,7 @@ _BODIES: dict[str, str] = {
     "alert": _p("M12 4L21 19.5H3Z", "M12 10V14", "M12 16.5V17.5"),
     "ok": '<circle cx="12" cy="12" r="8.5"/>' + _p("M8 12.5L11 15.5L16.5 9.5"),
     "error": _p("M8.5 3.5H15.5L20.5 8.5V15.5L15.5 20.5H8.5L3.5 15.5V8.5Z", "M9 9L15 15", "M15 9L9 15"),
+    "cloud": _p("M7 18H17.5A3.5 3.5 0 0 0 17.5 11A5.5 5.5 0 0 0 7 12A3 3 0 0 0 7 18Z"),
     "info": '<circle cx="12" cy="12" r="8.5"/>' + _p("M12 11V16", "M12 8V9"),
     "search": '<circle cx="10.5" cy="10.5" r="6"/>' + _p("M15 15L20 20"),
     "record": '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" ' + _FILLED + "/>",
@@ -64,6 +65,9 @@ _BODIES: dict[str, str] = {
     "check": _p("M5 12.5L10 17.5L19 7"),
     "chevron_down": _p("M6 9.5L12 15.5L18 9.5"),
     "keyboard": _p("M3.5 6.5H20.5V17.5H3.5Z", "M7 10H7.5", "M10.5 10H11", "M14 10H14.5", "M17 10H17.5", "M8 14H16"),
+    "terminal": _p("M3.5 5.5H20.5V18.5H3.5Z", "M7 9.5L10 12L7 14.5", "M12 15H17"),
+    "copy": _p("M8.5 8.5H19.5V19.5H8.5Z", "M15.5 8.5V4.5H4.5V15.5H8.5"),
+    "play": _p("M8 5.5L18 12L8 18.5Z"),
 }
 NAMES: tuple[str, ...] = tuple(_BODIES)
 

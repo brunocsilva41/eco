@@ -1,6 +1,6 @@
-"""Grava as 20 frases de F:\\Jarvis\\tests\\frases_pt.txt com a voz do Bruno (para o WER real).
-Usa o dispositivo de entrada padrao (o microfone padrão do Windows). Salva 16 kHz mono em tests\\audio_bruno\\NN.wav.
-Uso: venv\\Scripts\\python.exe -I src\\f2\\record_bruno.py [--device N] [--seconds 12] [--from 1]
+"""Grava as 20 frases de F:\\Jarvis\\tests\\frases_pt.txt com a voz do usuário (para o WER real).
+Usa o dispositivo de entrada padrao (o microfone padrão do Windows). Salva 16 kHz mono em tests\\audio_usuario\\NN.wav.
+Uso: venv\\Scripts\\python.exe -I src\\f2\\record_usuario.py [--device N] [--seconds 12] [--from 1]
 Por frase: ENTER inicia; ENTER de novo para; depois ENTER aceita ou 'r' regrava; 'q' sai.
 """
 import argparse
@@ -11,8 +11,8 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
-ROOT = Path(r"F:\Jarvis")
-OUT = ROOT / "tests" / "audio_bruno"
+ROOT = Path(r"F:\Eco")
+OUT = ROOT / "tests" / "audio_usuario"
 SR = 16000
 
 
@@ -53,7 +53,7 @@ def main():
             w.setframerate(SR)
             w.writeframes(audio.tobytes())
         i += 1
-    print("Fim. Rode: stt_bench.py --grid --audio-dir tests\\audio_bruno --tag bruno")
+    print("Fim. Rode: stt_bench.py --grid --audio-dir tests\\audio_usuario --tag bruno")
 
 
 if __name__ == "__main__":

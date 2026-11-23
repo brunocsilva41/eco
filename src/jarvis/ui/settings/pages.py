@@ -14,10 +14,12 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from jarvis.settings import schema
 
 from ..kit.base import Label
-from ..kit.layout import FieldRow, Section
+from ..kit.cards import SectionCard
+from ..kit.layout import FieldRow
 from ..theme import SPACE
 from .binder import FieldBinder
-from .blocks import (Block, config_file_block, details_block, permissions_block, paths_block, reset_block, status_block, theme_block)
+from .blocks import (Block, config_file_block, details_block, external_panel, permissions_block, paths_block, reset_block,
+                     status_block, theme_block)
 from .categories import Category, SectionSpec, sections_for
 from .controller import SettingsController
 from .controls import DeviceCombo
@@ -25,7 +27,7 @@ from .fieldfactory import build_control, is_stacked
 from .loaders import load_tools
 from .page_base import PageBase
 from .prefs import UiPrefs
-from .searching import matches
+from .searching import fold, matches
 from .texts import T
 from .tools_panel import KEY_CONFIRM, KEY_DISABLED, ToolsPanel
 
@@ -33,7 +35,7 @@ from .tools_panel import KEY_CONFIRM, KEY_DISABLED, ToolsPanel
 @dataclass
 class _Item:
     widget: QWidget
-    section: Section
+    section: SectionCard
     text: str
 
 
@@ -44,11 +46,15 @@ class SettingsPage(PageBase):
         super().__init__(cat.key)
         self._ctl, self._binder, self._prefs = controller, binder, prefs
         self._items: list[_Item] = []
-        self._sections: list[Section] = []
+        self._sections: list[SectionCard] = []
         self._rows: dict[str, FieldRow] = {}
+        self._row_section: dict[str, SectionCard] = {}
+        self._section_id: dict[int, str] = {}
+        self._searching = False
+        self._resting: dict[int, bool] = {}               # estado das secoes antes da busca (voltam ao limpar)
         self._lazy: list[Callable[[], None]] = []
         self._yolo: QWidget | None = None
-        self._section_by_id: dict[str, Section] = {}
+        self._section_by_id: dict[str, SectionCard] = {}
         for spec in sections_for(cat):
             self._add_section(spec)
         self.finish()
@@ -56,9 +62,17 @@ class SettingsPage(PageBase):
     # ---- montagem
     def _add_section(self, sec: SectionSpec) -> None:
         title, desc = T.section(sec.id)
-        section = Section(title, desc, level=sec.level)  # type: ignore[arg-type]
+        collapsible = sec.level == 2 and sec.custom != "reset"
+        saved = self._prefs.section_expanded(self.key, sec.id) if collapsible else None
+        count = sum(1 for k in sec.keys if k not in (KEY_DISABLED, KEY_CONFIRM) or sec.custom != "tools")
+        badge = T.section_badge(count) if collapsible and count else ""
+        section = SectionCard(title, desc, collapsible=collapsible, expanded=bool(saved), badge=badge)
+        if collapsible:
+            section.toggled.connect(lambda v, sid=sec.id: self._remember(sid, v))
         self._sections.append(section)
         self._section_by_id[sec.id] = section
+        self._section_id[id(section)] = sec.id
+        self.col.addSpacing(SPACE.lg)
         self.col.addWidget(section)
         after = sec.custom == "permissions"            # campos primeiro, depois o cartao do YOLO
         if not after:
@@ -71,25 +85,42 @@ class SettingsPage(PageBase):
             self._add_blocks(sec, section, title)
         if sec.custom == "tools":
             self._add_tools(section, title)
+        if not section._rows:                               # painel externo ausente: nada a mostrar, sem cartao vazio
+            self.col.removeWidget(section)
+            self._sections.remove(section)
+            self._section_by_id.pop(sec.id, None)
+            section.deleteLater()
 
-    def _add_blocks(self, sec: SectionSpec, section: Section, title: str) -> None:
+    def _remember(self, section_id: str, value: bool) -> None:
+        if not self._searching:
+            self._prefs.set_section_expanded(self.key, section_id, value)
+
+    def _add_blocks(self, sec: SectionSpec, section: SectionCard, title: str) -> None:
         for block in self._custom(sec):
             section.add(block.widget)
+            if callable(getattr(block.widget, "ensure_loaded", None)):
+                self._lazy.append(block.widget.ensure_loaded)         # painel externo monta o conteudo ao abrir a pagina
             self._items.append(_Item(block.widget, section, f"{self.title} {title} {block.text}"))
 
-    def _add_field(self, section: Section, section_title: str, spec: schema.FieldSpec) -> None:
+    def _add_field(self, section: SectionCard, section_title: str, spec: schema.FieldSpec) -> None:
         control = build_control(spec, self._ctl.model.current.get(spec.key))
         row = FieldRow(T.label(spec), control, help=T.help(spec), restart_required=spec.apply == schema.RESTART,
-                       locked_reason=T.locked(spec), stacked=is_stacked(spec))
-        self._binder.attach(spec, control, row.set_error)
+                       locked_reason=T.locked(spec), stacked=is_stacked(spec), wrap_help=True)
+        def show_error(message: str | None, _row: FieldRow = row, _sec: SectionCard = section) -> None:
+            _row.set_error(message)
+            if message:
+                _sec.set_expanded(True, animated=False)          # erro nunca fica escondido num grupo recolhido
+
+        self._binder.attach(spec, control, show_error)
         section.add(row)
         self._rows[spec.key] = row
+        self._row_section[spec.key] = section
         if isinstance(control, DeviceCombo):
             self._lazy.append(control.ensure_loaded)
         text = f"{self.title} {section_title} {T.label(spec)} {T.help(spec)} {T.locked(spec)}"
         self._items.append(_Item(row, section, text))
 
-    def _add_tools(self, section: Section, section_title: str) -> None:
+    def _add_tools(self, section: SectionCard, section_title: str) -> None:
         err = Label("", "help", wrap=True)
         err.set_state("error")
         err.hide()
@@ -130,20 +161,37 @@ class SettingsPage(PageBase):
             return paths_block(self._ctl)
         if sec.custom == "details":
             return details_block()
+        if sec.custom == "updates_panel":
+            return external_panel("updates_page", self._ctl, f"{self.title} versão atualização verificar instalar")
+        if sec.custom == "cloud_panel":
+            return external_panel("cloud_brain_page", self._ctl, f"{self.title} nuvem agente opencode claude codex copilot")
         return []
 
     # ---- contrato com a janela
     def filter(self, query: str) -> int:
         shown = 0
         visible_sections: set[int] = set()
+        words = fold(query).split()
         for item in self._items:
             ok = matches(query, item.text)
             item.widget.setVisible(ok)
+            setter = getattr(item.widget, "set_highlight", None)
+            if callable(setter):
+                setter(words if ok else [])
             if ok:
                 shown += 1
                 visible_sections.add(id(item.section))
+        if words and not self._searching:                    # entrou em busca: guarda o estado para devolver depois
+            self._searching = True
+            self._resting = {id(s): s.expanded() for s in self._sections}
         for section in self._sections:
             section.setVisible(id(section) in visible_sections)
+            if self._searching and section.is_collapsible():
+                want = bool(words) and id(section) in visible_sections or (not words and self._resting.get(id(section), False))
+                section.set_expanded(want, animated=False, emit=False)
+        if not words:
+            self._searching = False
+            self._resting = {}
         return shown
 
     def ensure_loaded(self) -> None:
@@ -154,6 +202,9 @@ class SettingsPage(PageBase):
         row = self._rows.get(key)
         if row is None:
             return
+        section = self._row_section.get(key)
+        if section is not None:
+            section.set_expanded(True, animated=False)
         self.ensureWidgetVisible(row)
         row.control.setFocus(Qt.FocusReason.OtherFocusReason)
 
@@ -162,7 +213,9 @@ class SettingsPage(PageBase):
         section = self._section_by_id.get(section_id)
         if section is None:
             return False
+        section.set_expanded(True, animated=False)
         self.ensureWidgetVisible(section, 0, SPACE.xl)
         if section_id == "permissions" and self._yolo is not None:
             self._yolo.focus_primary()                       # type: ignore[attr-defined]
         return True
+

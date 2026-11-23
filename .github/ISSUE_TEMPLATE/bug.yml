@@ -1,0 +1,22 @@
+name: Relatar um erro
+description: Algo no Eco não funciona como deveria
+labels: ["bug"]
+body:
+  - type: textarea
+    id: o-que
+    attributes: { label: O que aconteceu, description: "Descreva o problema e o que você esperava." }
+    validations: { required: true }
+  - type: textarea
+    id: passos
+    attributes: { label: Passos para reproduzir }
+    validations: { required: true }
+  - type: input
+    id: versao
+    attributes: { label: Versão do Eco, placeholder: "ex.: 0.2.0" }
+    validations: { required: true }
+  - type: textarea
+    id: ambiente
+    attributes: { label: "Ambiente", description: "Windows, placa de vídeo e driver, memória, microfone. Resultado de `Eco.cmd doctor` ajuda muito." }
+  - type: textarea
+    id: logs
+    attributes: { label: "Logs (sem dados pessoais)", description: "Remova nomes, caminhos pessoais e qualquer segredo antes de colar." }

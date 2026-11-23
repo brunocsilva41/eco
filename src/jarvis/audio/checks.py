@@ -118,7 +118,7 @@ def _check_host_apis() -> CheckResult:
     detail = "; ".join(f"{a}: {inputs[a]} entrada(s), {outputs[a]} saída(s)" for a in apis) or "nenhuma"
     if not [a for a in apis if "wdm" not in a.lower()]:
         return CheckResult("APIs de áudio", False,
-                           f"só aparecem APIs WDM-KS ({detail}). O Jarvis prefere MME/WASAPI/DirectSound: reinicie o "
+                           f"só aparecem APIs WDM-KS ({detail}). O Eco prefere MME/WASAPI/DirectSound: reinicie o "
                            "programa e confira o serviço 'Áudio do Windows' no item acima")
     return CheckResult("APIs de áudio", True, detail)
 

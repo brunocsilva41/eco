@@ -2,7 +2,7 @@
 import json, re, urllib.request
 
 URL = "http://127.0.0.1:8089/v1/chat/completions"
-SYSTEM = ("Você é o Jarvis, assistente de voz do Bruno, em português do Brasil. "
+SYSTEM = ("Você é o Eco, assistente de voz do usuário, em português do Brasil. "
           "Responda curto (no máximo 2 frases), natural para ser falado, sem markdown nem emojis.")
 _END = re.compile(r"(?<=[.!?…])\s+|\n+")
 

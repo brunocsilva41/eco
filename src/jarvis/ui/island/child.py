@@ -1,8 +1,8 @@
-"""Processo FILHO da Ilha (`Jarvis.cmd island --child`): janela Qt + leitura dos eventos do núcleo por stdin.
+"""Processo FILHO da Ilha (`Eco.cmd island --child`): janela Qt + leitura dos eventos do núcleo por stdin.
 
 Protocolo em `link.py`. Os eventos viram chamadas diretas de um barramento LOCAL minimo (`_DirectBus`: sem threads,
 sem importar o EventBus do núcleo) e a `IslandBridge` de sempre os aplica na janela (o mesmo caminho do demo). Os
-níveis de áudio (30 Hz) vão direto para o `LevelFeed`. O filho encerra quando o stdin fecha (o Jarvis morreu ou
+níveis de áudio (30 Hz) vão direto para o `LevelFeed`. O filho encerra quando o stdin fecha (o Eco morreu ou
 encerrou) ou quando recebe `quit`. Nada além do protocolo é escrito no stdout (o `print` acidental vai para o stderr).
 
 Leve de propósito: só QtCore/QtGui/QtWidgets, sem numpy, sem ThemeManager.apply (stylesheet), prioridade
@@ -68,6 +68,57 @@ def _find_action(menu, text: str):  # type: ignore[no-untyped-def]
     return None
 
 
+def _wire_updates(tray, send, flow: dict) -> None:  # type: ignore[no-untyped-def]
+    """Atualização automática: verificação ao iniciar e a cada N horas, pop-up de nova versão e menu da bandeja."""
+    from PySide6.QtCore import QTimer
+    from ..update_dialog import UpdateDialog
+    from ..update_flow import UpdateScheduler, UpdateSession
+    from ...core import updater
+
+    session = UpdateSession(tray, quit_cb=lambda: send({"c": "quit"}))
+    dlg: dict[str, Any] = {}
+
+    def show(info) -> None:  # type: ignore[no-untyped-def]
+        if "w" not in dlg:
+            dlg["w"] = UpdateDialog(session)
+        dlg["w"].show_info(info)
+
+    def on_checked(info, manual: bool) -> None:  # type: ignore[no-untyped-def]
+        if not manual:
+            return
+        if info.error:
+            tray.notify("Atualizações", f"Não consegui verificar: {info.error}. {info.hint}".strip())
+        elif info.available:
+            show(info)
+        else:
+            tray.notify("Atualizações", f"Você já está na versão mais recente ({info.current}).")
+
+    session.checked.connect(on_checked)
+    sched = UpdateScheduler(session, tray)
+
+    def on_auto(info) -> None:  # type: ignore[no-untyped-def]
+        tray.notify("Atualização disponível", f"Eco {info.latest} (você tem {info.current}).")
+        show(info)
+
+    sched.notify.connect(on_auto)
+    flow["check"] = lambda: (tray.notify("Eco", "Verificando atualizações…"), session.check(manual=True))
+    flow["session"], flow["sched"] = session, sched
+    sched.start()
+
+    def after_update() -> None:
+        try:
+            from ... import config as cfgmod
+            res = updater.consume_install_result(cfgmod.load().paths.data)
+        except Exception:  # noqa: BLE001
+            return
+        if res:
+            ok = int(res.get("code", 1)) == 0
+            tray.notify("Eco atualizado" if ok else "A atualização não terminou",
+                        f"Agora na versão {res.get('version', '')}." if ok else str(res.get("message", "")))
+
+    QTimer.singleShot(4000, after_update)
+
+
 def build_tray(app, send, win):  # type: ignore[no-untyped-def]
     """Liga o icone da bandeja (``ui/tray.py``). ``win`` None = modo so-bandeja (sem janela da Ilha). Devolve (tray, sig)."""
     from ..tray import TrayController
@@ -78,6 +129,7 @@ def build_tray(app, send, win):  # type: ignore[no-untyped-def]
 
     cbs: dict[str, Any] = {
         "settings": lambda: send({"c": "settings", "section": "general"}),
+        "terminal": lambda: send({"c": "terminal"}),
         "quit": lambda: send({"c": "quit"}),
         "set_listen_mode_toggle": lambda on: send({"c": "listen_mode", "mode": "open" if on else "push"}),
         "set_mute": lambda on: send({"c": "mute", "on": bool(on)}),
@@ -88,7 +140,10 @@ def build_tray(app, send, win):  # type: ignore[no-untyped-def]
             send({"c": "ui_mode", "mode": mode})
         cbs.update({"reveal": win.reveal, "toggle_visible": win.toggle_visible, "toggle_pin": win.set_pinned,
                     "set_size": win.set_size_name, "set_position": set_position})
+    flow: dict[str, Any] = {}
+    cbs["check_updates"] = lambda: flow["check"]()                 # «Verificar atualizações…» usa o fluxo completo
     tray = TrayController(app, version=updates.current_version(), callbacks=cbs, check_updates=updates.check)
+    _wire_updates(tray, send, flow)
     sig = _TraySig()
     st = {"muted": False, "yolo": False, "state": "idle"}
 
@@ -184,7 +239,7 @@ def main_island_child(tray_only: bool = False) -> int:
                     continue
         except (OSError, ValueError):
             pass
-        _quit.requested.emit()                    # EOF: o Jarvis acabou -> a Ilha também
+        _quit.requested.emit()                    # EOF: o Eco acabou -> a Ilha também
 
     threading.Thread(target=reader, name="island-stdin", daemon=True).start()
     code = app.exec()

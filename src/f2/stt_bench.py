@@ -11,7 +11,7 @@ Modelos baixados por src\\f2\\dl_whisper.py em models\\whisper\\hf_<nome>.
 import argparse, json, subprocess, sys, time
 from pathlib import Path
 
-ROOT = Path(r"F:\Jarvis")
+ROOT = Path(r"F:\Eco")
 MODELS_DIR = ROOT / "models" / "whisper"
 FRASES = ROOT / "tests" / "frases_pt.txt"
 

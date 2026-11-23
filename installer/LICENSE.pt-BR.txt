@@ -1,15 +1,15 @@
-JARVIS - AVISO DE USO E LICENÇAS
+ECO - AVISO DE USO E LICENÇAS
 
-Este instalador coloca o Jarvis, um assistente de voz em português do Brasil que roda inteiramente no seu computador, na pasta que você escolher.
+Este instalador coloca o Eco, um assistente de voz em português do Brasil que roda inteiramente no seu computador, na pasta que você escolher.
 
 [Privacidade]
-O Jarvis não envia sua voz, suas conversas nem sua tela para a internet. A internet só é usada para baixar os modelos de IA (uma vez, por HTTPS, com conferência de SHA-256). O servidor do modelo escuta só em 127.0.0.1. O instalador não abre portas nem altera o firewall, não atualiza drivers e não grava nada fora da pasta de instalação, dos atalhos que você escolher e (opcionalmente) da entrada "Iniciar com o Windows".
+O Eco não envia sua voz, suas conversas nem sua tela para a internet. A internet só é usada para baixar os modelos de IA (uma vez, por HTTPS, com conferência de SHA-256). O servidor do modelo escuta só em 127.0.0.1. O instalador não abre portas nem altera o firewall, não atualiza drivers e não grava nada fora da pasta de instalação, dos atalhos que você escolher e (opcionalmente) da entrada "Iniciar com o Windows".
 
 [Sem garantia]
-O Jarvis é fornecido "como está", sem garantia de qualquer tipo. Ele pode controlar o seu computador por meio de ferramentas permitidas; leia as explicações de permissões na configuração e use a tecla de emergência (Ctrl+Alt+F12) se algo sair do esperado.
+O Eco é fornecido "como está", sem garantia de qualquer tipo. Ele pode controlar o seu computador por meio de ferramentas permitidas; leia as explicações de permissões na configuração e use a tecla de emergência (Ctrl+Alt+F12) se algo sair do esperado.
 
-[Termos do Jarvis]
-SUBSTITUA ESTE BLOCO pelos termos de uso do Jarvis definidos pelo autor antes de distribuir o instalador a terceiros. Enquanto isso, o uso é restrito ao proprietário do projeto.
+[Termos do Eco]
+O Eco é distribuído sob a Licença MIT (Copyright (c) 2026 brunocsilva41). Você pode usar, copiar, modificar e distribuir o software, desde que mantenha o aviso de direitos autorais e esta permissão. O software é fornecido "como está", sem garantia de qualquer tipo. O texto completo está no arquivo LICENSE do repositório: https://github.com/brunocsilva41/eco/blob/master/LICENSE. Componentes de terceiros mantêm as suas próprias licenças (veja abaixo).
 
 [Componentes de terceiros e suas licenças]
 - llama.cpp (backend Vulkan): MIT - https://github.com/ggml-org/llama.cpp

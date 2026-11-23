@@ -1,4 +1,4 @@
-Jarvis, abre o bloco de notas.
+Eco, abre o bloco de notas.
 Que horas são agora?
 Abre o Chrome e pesquisa a previsão do tempo para amanhã.
 Fecha essa janela, por favor.
@@ -17,4 +17,4 @@ Desliga o microfone até eu pedir de novo.
 Procura o arquivo relatório financeiro de outubro.
 Explica em duas frases o que é uma placa de vídeo.
 Para tudo o que você está fazendo agora.
-Obrigado, Jarvis, pode descansar.
+Obrigado, Eco, pode descansar.

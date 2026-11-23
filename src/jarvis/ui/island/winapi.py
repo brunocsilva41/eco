@@ -59,7 +59,7 @@ def _set_ex(hwnd: int, add: int = 0, remove: int = 0) -> None:
 
 
 def set_no_activate(hwnd: int) -> None:
-    """A Ilha nunca ativa nem pega foco (o Jarvis digita/clica em outros apps)."""
+    """A Ilha nunca ativa nem pega foco (o Eco digita/clica em outros apps)."""
     _set_ex(hwnd, add=WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)
 
 

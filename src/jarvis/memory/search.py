@@ -15,6 +15,7 @@ from typing import Any, Literal
 
 from ._db import Database, MemoryError_, fts_match, fts_terms, like_escape
 from .sessions import OMITTED
+from ..core.usuario import nome_usuario
 
 log = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ class ConversationSearch:
                 if not rows:
                     return header + " Está vazia."
                 per = max(60, (max_chars - len(header)) // 7)
-                labels = {"user": "Bruno", "assistant": "Jarvis"}
+                labels = {"user": nome_usuario(), "assistant": "Eco"}
 
                 def fmt(r: Any) -> str:
                     return f"{labels[r['role']]}: {_clip(r['content'], per)}"

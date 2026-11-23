@@ -8,7 +8,7 @@ Flags llama.cpp [C: guia Doctor-Shotgun, HF]:
 - `--n-cpu-moe N`: experts na CPU só nas N camadas mais altas; N menor = mais na GPU = mais rápido e menos folga de VRAM. Achar N por tentativa, vendo VRAM a cada execução; `-fit off` ao ajustar.
 - `-b 4096 -ub 4096` recomendado no guia, mas ub maior gasta VRAM de buffer: em 8 GB talvez precise reduzir.
 Relatos [R, GPUs NVIDIA 8GB, não Vulkan/Polaris]: Qwen3-Coder 30B-A3B: --cpu-moe 13 tok/s; --n-cpu-moe 40 ~32 tok/s; RTX 3070 8GB Qwen3.6-35B-A3B: 4 -> 33 tok/s com n-cpu-moe 28.
-Limite real: velocidade depende da largura de banda da RAM. Xeon E5 v4 quad-channel DDR4-2400 ~77 GB/s por soquete (conta minha) [?]; relatos de Gemma 4 26B em Xeon antigo sem GPU: 5–12 tok/s [R]. Quantas canais/MHz o Bruno tem: MEDIR (wmic memorychip).
+Limite real: velocidade depende da largura de banda da RAM. Xeon E5 v4 quad-channel DDR4-2400 ~77 GB/s por soquete (conta minha) [?]; relatos de Gemma 4 26B em Xeon antigo sem GPU: 5–12 tok/s [R]. Quantas canais/MHz o usuário tem: MEDIR (wmic memorychip).
 Com 16 GB de RAM: Windows + app ocupam ~5–6 GB; sobra ~10 GB para experts. Um MoE de ~30B em Q4 (~17–20 GB) NÃO cabe sem swap; só quants 2–3 bits (~10 GB) e com perda de qualidade [R: Pinggy UD-IQ2_XXS 9,93 GB]. Ou seja: 16 GB de RAM é o gargalo, mais que a GPU.
 
 ## 2. Modelos MoE/candidatos

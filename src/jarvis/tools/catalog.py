@@ -15,7 +15,7 @@ from .registry import ToolRegistry
 log = logging.getLogger(__name__)
 
 # módulos de ferramentas, na ordem de registro. Cada um expõe `register(registry, cfg)`; `builtin` expõe `register_all`.
-_MODULES: tuple[str, ...] = ("builtin", "memory_tools", "files_tools")
+_MODULES: tuple[str, ...] = ("builtin", "memory_tools", "files_tools", "terminal_tools")
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-"""Editor de tabela "nome falado -> programa" (aplicativos que o Jarvis pode abrir).
+"""Editor de tabela "nome falado -> programa" (aplicativos que o Eco pode abrir).
 
 Contrato do kit: ``value()`` (dict), ``set_value(d)``, ``valueChanged(dict)``, ``set_invalid(bool)``.
 Cada linha tem o nome falado, o programa (com Procurar) e um botao de remover. Nome repetido marca a linha

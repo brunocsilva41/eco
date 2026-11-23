@@ -26,7 +26,7 @@ __all__ = ["MemoryError_", "Database", "atomic_write", "fts_terms", "fts_match",
 
 
 class MemoryError_(RuntimeError):
-    """Erro de memória com mensagem em português, segura para mostrar/falar ao Bruno."""
+    """Erro de memória com mensagem em português, segura para mostrar/falar ao usuário."""
 
 
 _STOP = frozenset("""a o as os um uma uns umas de da do das dos em no na nos nas por para pra com sem que e eh ou se

@@ -98,7 +98,7 @@ def render(out_dir: Path, scales: tuple[float, ...] = (1.0, 1.5, 2.0)) -> list[P
     out_dir.mkdir(parents=True, exist_ok=True)
     src_root = str(Path(__file__).resolve().parents[3])
     fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
-    with tempfile.TemporaryDirectory(prefix="jarvis-cfg-prints-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="eco-cfg-prints-") as tmp:
         for scale in scales:
             env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR=str(scale), PYTHONPATH=src_root)
             if fonts.is_dir():

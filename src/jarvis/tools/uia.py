@@ -234,7 +234,7 @@ def _resolve_target(job: _Job, query: str, cancel: CancelToken, expect_hwnd: int
                                  untrusted=True)
         return None
     if needs_strong_confirm(target.name) and not needs_strong_confirm(query):
-        # o que o Bruno confirmou foi o nome pedido; o controle achado é outro e aprova algo: peça pelo nome inteiro
+        # o que o usuário confirmou foi o nome pedido; o controle achado é outro e aprova algo: peça pelo nome inteiro
         job.failure = ToolResult(False, f"O controle achado é '{clip(target.name, _NAME_CLIP)}', que pode aprovar "
                                         "uma ação. Peça pelo nome completo para eu confirmar com você.",
                                  untrusted=True)
@@ -327,7 +327,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         return ToolResult(True, f"{len(items)} controles: {text}.", data={"controles": items}, untrusted=True)
 
     def prepare_clicar(ctx: ToolContext, args: dict[str, Any]) -> Prepared | ToolResult:
-        """Fixa a janela em foco AGORA (recusa a do próprio Jarvis) e monta a pergunta com controle e janela."""
+        """Fixa a janela em foco AGORA (recusa a do próprio Eco) e monta a pergunta com controle e janela."""
         query = str(args["nome"]).strip()
         if _is_destructive(query):
             return ToolResult(False, "Isso parece uma ação de excluir, enviar, pagar ou instalar. "
@@ -336,7 +336,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         if info is None:
             return ToolResult(False, "Nenhuma janela identificável está em foco.")
         if win.is_own_process_window(info, ctx.cfg):
-            log.warning("clicar_controle recusado: janela do próprio Jarvis")
+            log.warning("clicar_controle recusado: janela do próprio Eco")
             return ToolResult(False, win.OWN_WINDOW_MESSAGE)
         warn = "ATENÇÃO, este botão pode aprovar uma ação. " if needs_strong_confirm(query) else ""
         where = f"«{clip(info.title, 50)}» ({info.process or 'programa desconhecido'})"

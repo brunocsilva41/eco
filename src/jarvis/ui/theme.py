@@ -1,4 +1,4 @@
-"""Tokens de design do Jarvis (fonte unica) e gerenciador de tema em tempo de execucao.
+"""Tokens de design do Eco (fonte unica) e gerenciador de tema em tempo de execucao.
 
 Tudo que e cor, tamanho, raio, espacamento, fonte ou duracao mora aqui; o resto da UI so le estes
 tokens. Uso::

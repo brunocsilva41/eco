@@ -1,5 +1,5 @@
-"""Base das paginas: coluna de leitura (max 720 px) com titulo e frase de apoio, e o contrato que a janela usa
-(``filter``, ``ensure_loaded``, ``shutdown``, ``scroll_to``). Sem regra de negocio."""
+"""Base das paginas: coluna de leitura (max 720 px) com cabecalho (icone, titulo, frase de apoio) e o contrato
+que a janela usa (``filter``, ``ensure_loaded``, ``shutdown``, ``scroll_to``). Sem regra de negocio."""
 from __future__ import annotations
 
 from typing import Protocol
@@ -7,7 +7,8 @@ from typing import Protocol
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
 
-from ..kit.base import Label, set_a11y
+from ..kit.base import set_a11y
+from ..kit.cards import PageHeader
 from ..theme import SIZE, SPACE
 from .searching import matches
 from .texts import T
@@ -26,6 +27,12 @@ class PageLike(Protocol):
     def scroll_to(self, key: str) -> None: ...
 
 
+def _icon_for(key: str) -> str:
+    from .categories import BY_PAGE
+    cat = BY_PAGE.get(key)
+    return cat.icon if cat is not None else ""
+
+
 class PageBase(QScrollArea):
     """Pagina rolavel: ``self.col`` e o layout vertical da coluna de leitura."""
 
@@ -41,14 +48,11 @@ class PageBase(QScrollArea):
         self.col = QVBoxLayout(column)
         self.col.setContentsMargins(0, 0, 0, 0)
         self.col.setSpacing(0)
-        self.col.addWidget(Label(self.title, "title"))
-        sub = Label(self.subtitle, "help", wrap=True)
-        sub.setVisible(bool(self.subtitle))
-        self.col.addSpacing(SPACE.xs)
-        self.col.addWidget(sub)
+        self.header = PageHeader(self.title, self.subtitle, _icon_for(key))
+        self.col.addWidget(self.header)
         host = QWidget()
         lay = QHBoxLayout(host)
-        lay.setContentsMargins(SPACE.xl, SPACE.xl, SPACE.xl, SPACE.xxl)
+        lay.setContentsMargins(SPACE.xxl, SPACE.xl, SPACE.xxl, SPACE.xxl)
         lay.addWidget(column, _COLUMN_SHARE)
         lay.addStretch(1)
         self.setWidget(host)

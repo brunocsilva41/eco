@@ -24,7 +24,7 @@ from .texts import T
 log = logging.getLogger(__name__)
 
 SET_FRASES = "frases"
-SET_JARVIS = "jarvis"
+SET_JARVIS = "eco"
 SET_NAMES: tuple[str, ...] = (SET_FRASES, SET_JARVIS)
 
 MIN_TAKE_S = 0.5                     # gravacao mais curta que isso nao e salva
@@ -37,7 +37,7 @@ SaveOutcome = Literal["saved", "exists", "failed"]
 
 
 def check_set_name(name: str) -> str:
-    """Valida o nome do conjunto ("frases" ou "jarvis"). Levanta ``ValueError`` com mensagem clara."""
+    """Valida o nome do conjunto ("frases" ou "eco"). Levanta ``ValueError`` com mensagem clara."""
     if name not in SET_NAMES:
         raise ValueError(T.api.invalid_set.format(value=name))
     return name

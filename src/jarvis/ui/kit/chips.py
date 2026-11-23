@@ -125,9 +125,10 @@ class ChipList(QWidget):
     def _rebuild(self) -> None:
         while self._flow.count():
             item = self._flow.takeAt(0)
-            if item is not None and item.widget() is not None and item.widget() is not self._input:
-                item.widget().setParent(None)
-                item.widget().deleteLater()
+            old = item.widget() if item is not None else None
+            if old is not None and old is not self._input:
+                old.setParent(None)
+                old.deleteLater()
         for text in self._items:
             chip = _Chip(text)
             chip.removed.connect(self._remove)

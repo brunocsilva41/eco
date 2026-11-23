@@ -1,4 +1,4 @@
-"""Estado do Jarvis em DUAS camadas, porque voz e agente rodam em threads diferentes:
+"""Estado do Eco em DUAS camadas, porque voz e agente rodam em threads diferentes:
 
 - estado do agente: IDLE -> LISTENING -> TRANSCRIBING -> THINKING <-> ACTING -> IDLE (ou ERROR);
 - fala: um indicador `speaking` independente (a voz fala enquanto o agente ainda pensa/age).

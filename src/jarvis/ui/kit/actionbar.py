@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QVariantAnimation, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QWidget
 
 from ..theme import MOTION, SIZE, SPACE, pal
 from . import icons
 from .base import Label, animate, set_a11y, strs, watch_theme
+from .visibility import set_shown
 from .buttons import Button
 
 
@@ -42,6 +43,7 @@ class ActionBar(QFrame):
         self._err_icon = QLabel()
         self._err_text = Label("", "label")
         self._err_text.set_state("error")
+        self._count.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)   # nunca é comprimido abaixo do texto (sem corte)
         lay.addWidget(self._edit_icon)
         lay.addWidget(self._count)
         lay.addSpacing(SPACE.md)
@@ -62,8 +64,7 @@ class ActionBar(QFrame):
         set_a11y(self, strs().common.save)
         watch_theme(self, self._refresh_icons)
         self.set_changes(0)
-        self.setVisible(show_when_clean)
-
+        set_shown(self, show_when_clean)
     def changes(self) -> int:
         return self._changes
 
@@ -71,9 +72,11 @@ class ActionBar(QFrame):
         self._changes, self._errors = n, errors
         self._count.setText(strs().bar.pending(n))
         self._err_text.setText(strs().bar.errors(errors) if errors else "")
-        self._err_icon.setVisible(errors > 0)
-        self._err_text.setVisible(errors > 0)
-        self._save.setEnabled(errors == 0 and not self._busy)
+        set_shown(self._err_icon, errors > 0)
+        set_shown(self._err_text, errors > 0)
+        clean = n == 0 and errors == 0
+        self._save.setEnabled(errors == 0 and not self._busy and not (clean and self._show_when_clean))
+        self._discard.setEnabled(not self._busy and not (clean and self._show_when_clean))
         self._save.setToolTip(strs().bar.errors(errors) if errors else f"{strs().common.save} (Ctrl+S)")
         set_a11y(self, strs().bar.pending(n), strs().bar.errors(errors) if errors else "")
         self._refresh_icons()
@@ -81,15 +84,15 @@ class ActionBar(QFrame):
 
     def set_busy(self, busy: bool) -> None:
         self._busy = busy
-        for b in (self._reset, self._discard):
-            b.setEnabled(not busy)
-        self._save.setEnabled(not busy and self._errors == 0)
+        self._reset.setEnabled(not busy)
+        self._discard.setEnabled(not busy and not (self._changes == 0 and self._show_when_clean))
+        self._save.setEnabled(not busy and self._errors == 0 and not (self._changes == 0 and self._show_when_clean))
         self._save.setText(strs().bar.save_busy if busy else strs().common.save)
 
     def _refresh_icons(self) -> None:
         p = pal()
         self._edit_icon.setPixmap(icons.pixmap("edit", p.text_muted, SIZE.icon, self))
-        self._edit_icon.setVisible(self._changes > 0)
+        set_shown(self._edit_icon, self._changes > 0)
         self._err_icon.setPixmap(icons.pixmap("error", p.error, SIZE.icon, self))
 
     def _reveal(self, show: bool) -> None:
@@ -100,12 +103,12 @@ class ActionBar(QFrame):
             self._anim.stop()
         if show:
             self.setMaximumHeight(0)
-            self.setVisible(True)
+            set_shown(self, True)
             self._anim = animate(self, 0, self.sizeHint().height(), MOTION.base, lambda v: self.setMaximumHeight(int(v)),
                                  lambda: self.setMaximumHeight(_QWIDGETSIZE_MAX))
         else:
             self._anim = animate(self, self.height(), 0, MOTION.fast, lambda v: self.setMaximumHeight(int(v)), self._finish_hide)
 
     def _finish_hide(self) -> None:
-        self.setVisible(False)
+        set_shown(self, False)
         self.setMaximumHeight(_QWIDGETSIZE_MAX)

@@ -7,7 +7,7 @@ Versões:
 Garantias: cada migração roda em UMA transação (`BEGIN IMMEDIATE`); qualquer falha desfaz tudo e levanta
 `MemoryError_` com mensagem clara, deixando o banco como estava. Antes de migrar um banco que já tem dados,
 é feita uma cópia (API de backup do SQLite) em `<banco>.bak-AAAAMMDD`. Um banco criado por uma versão mais nova
-do Jarvis é recusado (nunca rebaixado).
+do Eco é recusado (nunca rebaixado).
 
 Contrato de threads: chamado só na abertura, antes de a fachada ser entregue a outras threads.
 """
@@ -223,7 +223,7 @@ def _m2_new_schema(conn: sqlite3.Connection) -> None:
                      copied, LEGACY_CONVERSATION_TITLE, redacted)
         conn.execute("DROP TABLE turns")
     if suspicious:
-        log.warning("migração: %d nota(s) antiga(s) parecem conter credenciais; foram mantidas (não perco dados do Bruno), "
+        log.warning("migração: %d nota(s) antiga(s) parecem conter credenciais; foram mantidas (não perco dados do usuário), "
                     "revise e apague com 'esquecer'", suspicious)
     conn.execute("DELETE FROM meta WHERE key='schema'")
 
@@ -238,7 +238,7 @@ def migrate(db: Database) -> int:
         needs_backup = version < LATEST_VERSION and _has_data(conn, version)
     if version > LATEST_VERSION:
         raise MemoryError_(f"o banco de memória é da versão {version}, mais nova que esta ({LATEST_VERSION}); "
-                           "atualize o Jarvis. Não alterei nada.")
+                           "atualize o Eco. Não alterei nada.")
     if version == LATEST_VERSION:
         return version
     backup: Path | None = None

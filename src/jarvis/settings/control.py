@@ -1,10 +1,10 @@
-"""Canal de controle entre a tela de Configurações (outro processo) e o Jarvis em execução, SEM rede e SEM segredos.
+"""Canal de controle entre a tela de Configurações (outro processo) e o Eco em execução, SEM rede e SEM segredos.
 
 Tudo é arquivo dentro de `data/control/`, gravado de forma atômica:
-- `runtime.json`  (escrito pelo Jarvis): pid, hora de início, hash da configuração aplicada e chaves que aguardam reinício;
+- `runtime.json`  (escrito pelo Eco): pid, hora de início, hash da configuração aplicada e chaves que aguardam reinício;
 - `reload.req`    (escrito pela tela): "recarregue o config.toml agora";
-- `restart.req`   (escrito pela tela): "reinicie o Jarvis".
-O Jarvis consulta a pasta uma vez por segundo. Pedidos têm validade curta (60 s) para nunca disparar tarde.
+- `restart.req`   (escrito pela tela): "reinicie o Eco".
+O Eco consulta a pasta uma vez por segundo. Pedidos têm validade curta (60 s) para nunca disparar tarde.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from .tomlio import atomic_write_text
 log = logging.getLogger(__name__)
 
 REQUEST_TTL_S = 60.0
-RESTART_EXIT_CODE = 75                      # Jarvis.cmd reinicia o processo quando recebe este código
+RESTART_EXIT_CODE = 75                      # Eco.cmd reinicia o processo quando recebe este código
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ def _pid_alive(pid: int, started: float) -> bool:
 
 
 def read_runtime(data_dir: Path) -> Runtime | None:
-    """Estado do Jarvis em execução, ou None se não estiver rodando (arquivo ausente, ilegível ou processo morto)."""
+    """Estado do Eco em execução, ou None se não estiver rodando (arquivo ausente, ilegível ou processo morto)."""
     path = control_dir(data_dir) / "runtime.json"
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -85,7 +85,7 @@ def read_runtime(data_dir: Path) -> Runtime | None:
 
 
 def request(data_dir: Path, kind: str) -> None:
-    """Pede 'reload' ou 'restart' ao Jarvis em execução."""
+    """Pede 'reload' ou 'restart' ao Eco em execução."""
     if kind not in ("reload", "restart"):
         raise ValueError(kind)
     atomic_write_text(control_dir(data_dir) / f"{kind}.req", str(time.time()))
@@ -109,8 +109,8 @@ def _yolo_mac(data_dir: Path, kind: str, stamp: str) -> str:
 
 
 def request_yolo(data_dir: Path, on: bool) -> None:
-    """Chamado SOMENTE pelo botão da tela de Configurações (clique do Bruno, com diálogo de confirmação).
-    O pedido é assinado (HMAC) e vale 60 s; o Jarvis ignora pedido sem assinatura válida."""
+    """Chamado SOMENTE pelo botão da tela de Configurações (clique do usuário, com diálogo de confirmação).
+    O pedido é assinado (HMAC) e vale 60 s; o Eco ignora pedido sem assinatura válida."""
     kind = "yolo_on" if on else "yolo_off"
     stamp = str(time.time())
     atomic_write_text(control_dir(data_dir) / f"{kind}.req", f"{stamp}|{_yolo_mac(data_dir, kind, stamp)}")

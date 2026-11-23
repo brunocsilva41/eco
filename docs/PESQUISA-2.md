@@ -1,5 +1,5 @@
 # Pesquisa 2 — modelos com áudio, vídeo e fala rápida (2026-11-18)
-Status: fatos vindos de páginas/relatos; NADA medido na RX 580 do Bruno ainda. [C]=confirmado em fonte primária (doc oficial/model card), [R]=relato/blog, [?]=conflito ou não verificado.
+Status: fatos vindos de páginas/relatos; NADA medido na RX 580 do usuário ainda. [C]=confirmado em fonte primária (doc oficial/model card), [R]=relato/blog, [?]=conflito ou não verificado.
 
 ## Modelos multimodais que o llama.cpp roda (doc oficial docs/multimodal.md) [C]
 - Áudio: Ultravox 0.5 (1B e 8B), Voxtral-Mini-3B-2507, Qwen3-ASR 0.6B/1.7B.

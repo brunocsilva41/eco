@@ -1,4 +1,4 @@
-"""IslandWindow: a Ilha do Jarvis (estilo Dynamic Island). ESCONDIDA por padrao: so aparece quando importa.
+"""IslandWindow: a Ilha do Eco (estilo Dynamic Island). ESCONDIDA por padrao: so aparece quando importa.
 
 Presenca (ver ``_policy``/``_present``): aparece com o mouse na zona do topo (``zone.py``), quando o nucleo entra em
 LISTENING (tecla F9 e, no futuro, palavra de ativacao), em confirmacao (sempre, ate responder), erro/emergencia e em
@@ -432,7 +432,7 @@ class IslandWindow(QWidget):
         if self.muted and self.state is IslandState.IDLE:
             return S.muted
         if self.listen_open and self.state is IslandState.IDLE:
-            return S.state_open                       # escuta aberta: em repouso o Jarvis esta ESCUTANDO
+            return S.state_open                       # escuta aberta: em repouso o Eco esta ESCUTANDO
         return T.state_label(self.state)
 
     def breath(self) -> float:
@@ -643,7 +643,11 @@ class IslandWindow(QWidget):
     def _dim(self, size: IslandSize) -> tuple[int, int]:
         """Dimensoes nativas do corpo no tamanho ``size`` (topo: tokens; dock lateral: layout vertical)."""
         if self.cfg.side:
-            return SD.dims(self, size)
+            w, h = SD.dims(self, size)
+            scr = self.screen() or QGuiApplication.primaryScreen()
+            if scr is not None:                           # monitor 1080p a 200% tem 540 px logicos: o trilho grande (560) nao pode passar da tela
+                h = min(h, max(160, scr.availableGeometry().height() - 2 * self._margin() - 8))
+            return w, h
         return T.SIZES[size]
 
     def _refit(self) -> None:

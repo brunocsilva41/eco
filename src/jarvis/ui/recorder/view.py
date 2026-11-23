@@ -35,7 +35,7 @@ class _TopBar(QWidget):
         row.setSpacing(SPACE.md)
         row.addWidget(Label(w.heading, "title"))
         row.addSpacing(SPACE.lg)
-        self.sets = ComboField([(w.set_frases, "frases"), (w.set_jarvis, "jarvis")])
+        self.sets = ComboField([(w.set_frases, "frases"), (w.set_jarvis, "eco")])
         self.mics = ComboField()
         self.mics.setMinimumContentsLength(SPACE.huge // 2)
         self.mics.setSizeAdjustPolicy(ComboField.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)

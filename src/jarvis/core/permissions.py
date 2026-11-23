@@ -1,6 +1,6 @@
 """Modo de permissões e modo YOLO.
 
-YOLO = sem confirmações. Só pode ser LIGADO por ação manual do Bruno (atalho de teclado físico tratado em app.py);
+YOLO = sem confirmações. Só pode ser LIGADO por ação manual do usuário (atalho de teclado físico tratado em app.py);
 nunca por voz, pelo modelo, por ferramenta, por arquivo de configuração ou pelo canal de controle: por isso o estado
 vive só na memória deste processo, não é persistido (some ao reiniciar) e expira sozinho. Desligar é sempre permitido
 (por voz, atalho, emergência ou expiração). As travas duras dos manipuladores (pastas protegidas, lixeira, terminais

@@ -1,9 +1,9 @@
 """Demonstracao da Ilha (fase I0): ciclo de estados com eventos FALSOS pelo EventBus real + bridge,
 audio SINTETICO, capturas por tamanho e estado, folha de icones do microfone, GIF e medicao.
 
-    Jarvis.cmd island-demo                    # abre a Ilha e cicla os estados (Ctrl+C ou --seconds)
-    Jarvis.cmd island-demo --capture PASTA    # PNG por tamanho x estado, folha de icones e GIF (offscreen)
-    Jarvis.cmd island-demo --measure 8        # mede CPU/RAM por fase (8 s cada)
+    Eco.cmd island-demo                    # abre a Ilha e cicla os estados (Ctrl+C ou --seconds)
+    Eco.cmd island-demo --capture PASTA    # PNG por tamanho x estado, folha de icones e GIF (offscreen)
+    Eco.cmd island-demo --measure 8        # mede CPU/RAM por fase (8 s cada)
 """
 from __future__ import annotations
 
@@ -128,7 +128,7 @@ def _fixture(win: IslandWindow, state: IslandState) -> None:
     else:
         win.set_action("abrir_app", "abrir bloco de notas", "ok", "Bloco de notas aberto")
     if state is IslandState.ERROR:
-        win.set_error("O modelo não respondeu. Reinicie o Jarvis.")
+        win.set_error("O modelo não respondeu. Reinicie o Eco.")
     elif state is IslandState.CONFIRMING:
         win.ask_confirmation(_CONFIRM, 15)
     else:

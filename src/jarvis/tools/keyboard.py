@@ -214,8 +214,8 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
         except KeyError_:
             return ToolResult(False, f"'{raw.strip()[:30]}' não é um atalho válido. Exemplo: ctrl+c.")
         if combo.norm in reserved:
-            log.warning("apertar_atalho recusado: %s é tecla de segurança do Jarvis", combo.norm)
-            return ToolResult(False, f"O atalho {combo.norm} é uma tecla de segurança do Jarvis; não posso apertá-lo.")
+            log.warning("apertar_atalho recusado: %s é tecla de segurança do Eco", combo.norm)
+            return ToolResult(False, f"O atalho {combo.norm} é uma tecla de segurança do Eco; não posso apertá-lo.")
         if combo.norm not in allowed:
             return ToolResult(False, f"O atalho {combo.norm} ainda não está liberado; pedi a sua autorização.",
                               grant={"kind": "hotkey", "value": combo.norm,
@@ -271,7 +271,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             "properties": {"texto": {"type": "string", "minLength": 1, "maxLength": max_chars,
                                      "description": "Texto de uma linha a digitar. Na Calculadora, digite a conta ('12+7=')."},
                            "janela": {"type": "string", "maxLength": 80,
-                                      "description": "Opcional: título (ou parte) da janela onde digitar; o Jarvis a traz para frente antes."}},
+                                      "description": "Opcional: título (ou parte) da janela onde digitar; o Eco a traz para frente antes."}},
             "required": ["texto"],
             "additionalProperties": False,
         },
@@ -291,7 +291,7 @@ def register(registry: ToolRegistry, cfg: Config) -> None:
             "properties": {"atalho": {"type": "string", "minLength": 1, "maxLength": 40,
                                       "description": "Atalho no formato ctrl+c, alt+tab, enter."},
                            "janela": {"type": "string", "maxLength": 80,
-                                      "description": "Opcional: título (ou parte) da janela onde apertar; o Jarvis a traz para frente antes."}},
+                                      "description": "Opcional: título (ou parte) da janela onde apertar; o Eco a traz para frente antes."}},
             "required": ["atalho"],
             "additionalProperties": False,
         },

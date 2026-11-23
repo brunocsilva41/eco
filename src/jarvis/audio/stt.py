@@ -10,7 +10,7 @@ Pontos de projeto:
 
 Contrato de threads e cancelamento
 ----------------------------------
-``Transcriber`` é thread-safe. A decodificação roda numa thread DESCARTÁVEL (daemon, "jarvis-stt-decode"),
+``Transcriber`` é thread-safe. A decodificação roda numa thread DESCARTÁVEL (daemon, "eco-stt-decode"),
 enquanto a thread chamadora espera com polling (50 ms) do ``CancelToken``: ao cancelar, ``transcribe``
 levanta ``Cancelled`` NA HORA, mesmo no meio da decodificação de uma janela (que o CTranslate2 não
 consegue interromper). O resultado de uma execução abandonada é descartado e ela encerra sozinha no
@@ -54,7 +54,7 @@ _QUIET_RMS = 0.008                  # RMS abaixo disso = áudio "silencioso" (ru
 _SHORT_AUDIO_S = 3.0                # áudio "muito curto" para frases típicas de alucinação
 _MODEL_FILE = "model.bin"
 _POLL_S = 0.05
-VOCAB_PROMPT = ("Jarvis, assistente de voz. Comandos: abrir, fechar, clicar, bloco de notas, calculadora, Chrome, volume, "
+VOCAB_PROMPT = ("Eco, assistente de voz. Comandos: abrir, fechar, clicar, bloco de notas, calculadora, Chrome, volume, "
               "captura de tela, área de trabalho.")
 _BASE_TIMEOUT_S = 30.0
 _TIMEOUT_PER_S = 4.0
@@ -205,7 +205,7 @@ class Transcriber:
         """Motor GPU: depois de `seconds` sem uso libera o modelo da VRAM (recarrega em ~2,5 s no próximo uso). 0 = nunca."""
         self._idle_unload_s = max(0.0, float(seconds))
         if self._idle_unload_s and (self._idle_thread is None or not self._idle_thread.is_alive()):
-            self._idle_thread = threading.Thread(target=self._idle_loop, name="jarvis-stt-idle", daemon=True)
+            self._idle_thread = threading.Thread(target=self._idle_loop, name="eco-stt-idle", daemon=True)
             self._idle_thread.start()
 
     def _idle_loop(self) -> None:
@@ -245,7 +245,7 @@ class Transcriber:
                     return gpu
             local = find_local_model(cfg.model_dir)
             if local is None:
-                # o Jarvis roda 100% local: nunca baixa modelo sozinho
+                # o Eco roda 100% local: nunca baixa modelo sozinho
                 raise TranscribeError(
                     f"modelo Whisper não encontrado em {cfg.model_dir}. Baixe o modelo faster-whisper "
                     f"para essa pasta (ou escolha outra em Configurações > Reconhecimento).")
@@ -268,7 +268,9 @@ class Transcriber:
         try:
             from .stt_whispercpp import WhisperCppModel
             root = Path(__file__).resolve().parents[3]
-            model = WhisperCppModel(root / "bin" / "whispercpp-vulkan", Path(cfg.gpu_model), use_gpu=True, threads=2)
+            from ..core import toolpaths                  # pasta personalizada (Configurações > Caminhos dos programas) vale primeiro
+            found = toolpaths.resolve("whispercpp").path
+            model = WhisperCppModel(found or (root / "bin" / "whispercpp-vulkan"), Path(cfg.gpu_model), use_gpu=True, threads=2)
         except Exception as exc:  # noqa: BLE001
             self._gpu_blocked = True
             log.warning("escuta na GPU indisponível (%s); usando a CPU (faster-whisper)", exc)
@@ -283,7 +285,7 @@ class Transcriber:
             segments, info = model.transcribe(
                 samples, language=self._language, beam_size=beam,
                 vad_filter=False, condition_on_previous_text=False,
-                initial_prompt=VOCAB_PROMPT if self._language == "pt" else None)   # vocabulário: "Jarvis" e comandos (WER −2 a −4 pts no base, medido)
+                initial_prompt=VOCAB_PROMPT if self._language == "pt" else None)   # vocabulário: "Eco" e comandos (WER −2 a −4 pts no base, medido)
             job.language = str(getattr(info, "language", None) or "")
             parts: list[str] = []
             for seg in segments:
@@ -368,7 +370,7 @@ class Transcriber:
         try:
             self._wait_abandoned_slot(cancel, deadline)
             worker = threading.Thread(target=self._decode, args=(job, model, samples, beam, duration, rms),
-                                      name="jarvis-stt-decode", daemon=True)
+                                      name="eco-stt-decode", daemon=True)
             try:
                 worker.start()
             except RuntimeError as exc:

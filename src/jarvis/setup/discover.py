@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 SKIP_DIRS = {"windows", "$recycle.bin", "system volume information", "node_modules", ".git", "__pycache__", "winsxs",
              "$windows.~bt", "$windows.~ws", "windowsapps", "recovery", "config.msi", "msocache", "installer", "temp", "tmp",
              "site-packages", "venv", ".venv", "uvcache", "npm-cache", ".npm", ".nuget", "pkgs", "conda", "miniconda3", "anaconda3"}
-LIKELY = ("jarvis", "model", "whisper", "llama", "gguf", "piper", "silero", "huggingface", "lmstudio", "ollama")
+LIKELY = ("eco", "model", "whisper", "llama", "gguf", "piper", "silero", "huggingface", "lmstudio", "ollama")
 PER_ROOT_SECONDS = 12.0           # nenhuma pasta enorme esgota o orçamento das outras
 QUICK_MAX_FILES = 600_000
 QUICK_MAX_SECONDS = 90.0
@@ -46,7 +46,7 @@ def _fixed_drives() -> list[Path]:
 
 
 def _previous_install_dirs() -> list[Path]:
-    """Instalações anteriores do Jarvis registradas no Windows (Inno Setup grava InstallLocation em Uninstall)."""
+    """Instalações anteriores do Eco registradas no Windows (Inno Setup grava InstallLocation em Uninstall)."""
     found: list[Path] = []
     try:
         import winreg
@@ -63,7 +63,7 @@ def _previous_install_dirs() -> list[Path]:
                     except OSError:
                         break
                     i += 1
-                    if "jarvis" not in name.lower():
+                    if "eco" not in name.lower():
                         continue
                     try:
                         with winreg.OpenKey(key, name) as sub:
@@ -87,16 +87,18 @@ def candidate_roots(extra: Iterable[Path] = ()) -> list[Path]:
         roots.append(Path(env))
     roots += _previous_install_dirs()
     roots += [home / "Downloads", home / "Documents", home / "Desktop", home / ".cache" / "huggingface", home / ".lmstudio",
-              home / ".ollama", home / "models", local / "Programs" / "Jarvis", local / "Jarvis",
-              Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming"))) / "Jarvis",
+              home / ".ollama", home / "models", local / "Programs" / "Eco", local / "Eco",
+              local / "Programs" / "Jarvis", local / "Jarvis",      # nome antigo (instalações anteriores)
+              Path(os.environ.get("APPDATA", str(home / "AppData" / "Roaming"))) / "Eco",
+              Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Eco",
               Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Jarvis"]
     for drive in _fixed_drives():
-        roots += [drive / "Jarvis", drive / "models", drive / "Models", drive / "Modelos", drive / "IA", drive / "AI",
-                  drive / "Jarvis-Modelos", drive / "LLM", drive / "llm"]
-        try:                                                                 # primeiro nível: qualquer pasta cujo nome lembra Jarvis/modelos
+        roots += [drive / "Eco", drive / "Jarvis", drive / "models", drive / "Models", drive / "Modelos", drive / "IA", drive / "AI",
+                  drive / "Eco-Modelos", drive / "Jarvis-Modelos", drive / "LLM", drive / "llm"]
+        try:                                                                 # primeiro nível: qualquer pasta cujo nome lembra Eco/modelos
             for e in os.scandir(drive):
                 n = e.name.lower()
-                if e.is_dir(follow_symlinks=False) and n not in SKIP_DIRS and any(k in n for k in ("jarvis", "model", "whisper", "llama", "gguf", "piper")):
+                if e.is_dir(follow_symlinks=False) and n not in SKIP_DIRS and any(k in n for k in ("eco", "model", "whisper", "llama", "gguf", "piper")):
                     roots.append(Path(e.path))
         except OSError:
             continue

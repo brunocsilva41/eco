@@ -1,0 +1,29 @@
+{
+  "_comentario": "Suites que o CI roda (cada uma em processo proprio, QT_QPA_PLATFORM=offscreen, PYTHONUTF8=1, sem GPU/microfone/login/rede de agentes). 'args' vai depois do script. Suites 'ui' rodam em 100% escuro e 150% claro no CI (a bateria completa 100/125/150/200 x claro/escuro roda localmente: tests/ui/run_all.py).",
+  "include": [
+    {"id": "updates", "script": "tests/test_updates.py", "group": "unit", "timeout": 120},
+    {"id": "prepare", "script": "tests/test_prepare.py", "group": "unit", "timeout": 120},
+    {"id": "no_flash", "script": "tests/test_no_flash.py", "group": "unit", "timeout": 180},
+    {"id": "cloud_brain", "script": "tests/test_cloud_brain.py", "group": "unit", "timeout": 300},
+    {"id": "terminal", "script": "tests/test_terminal.py", "group": "unit", "timeout": 300},
+    {"id": "terminal_cloud", "script": "tests/test_terminal_cloud.py", "group": "unit", "timeout": 180},
+    {"id": "ui_settings", "script": "tests/ui/test_settings.py", "group": "ui", "timeout": 600, "variants": [["--scale", "100", "--theme", "dark"], ["--scale", "150", "--theme", "light"]]},
+    {"id": "ui_island", "script": "tests/ui/test_island.py", "group": "ui", "timeout": 400, "variants": [["--scale", "100", "--theme", "dark"], ["--scale", "150", "--theme", "light"]]},
+    {"id": "ui_dialogs", "script": "tests/ui/test_dialogs.py", "group": "ui", "timeout": 200, "variants": [["--scale", "100", "--theme", "dark"], ["--scale", "150", "--theme", "light"]]},
+    {"id": "ui_tray", "script": "tests/ui/test_tray.py", "group": "ui", "timeout": 120, "variants": [["--scale", "100", "--theme", "dark"], ["--scale", "150", "--theme", "light"]]},
+    {"id": "ui_terminal", "script": "tests/ui/test_terminal.py", "group": "ui", "timeout": 300, "variants": [["--scale", "100", "--theme", "dark"], ["--scale", "150", "--theme", "light"]]},
+    {"id": "ui_terminal_settings", "script": "tests/ui/test_terminal_settings.py", "group": "ui", "timeout": 120, "variants": [["--scale", "100", "--theme", "dark"], ["--scale", "150", "--theme", "light"]]},
+    {"id": "ui_setup_prepare", "script": "tests/ui/test_setup_prepare.py", "group": "ui", "timeout": 200, "variants": [["--scale", "100", "--theme", "dark"]]}
+  ],
+  "exclude": [
+    {"script": "tests/acp_live_proof.py", "reason": "usa agentes ACP reais com login do usuario (OpenCode, Antigravity, Claude Code, Codex, Copilot); nao existe no runner"},
+    {"script": "tests/e2e_cloud_voice.py", "reason": "voz ponta a ponta: audio, STT/TTS reais e agentes reais"},
+    {"script": "tests/ui_cloud_prints.py", "reason": "gera capturas, nao valida nada"},
+    {"script": "tests/ui_cloud_island.py", "reason": "gera capturas, nao valida nada"},
+    {"script": "tests/ui/test_windows.py", "reason": "janelas reais e UI Automation do desktop do usuario; o runner nao tem desktop interativo confiavel"},
+    {"script": "tests/ui/test_*.py --native", "reason": "clique real (SendInput) e janelas nativas exigem sessao de desktop interativa; rodam localmente (tests/ui/run_all.py --native) antes de cada release"},
+    {"script": "tests/ui/toplevel_trace.py", "reason": "sonda manual (conta janelas), sem veredito"},
+    {"script": "tests/ui/flash_probe.py", "reason": "sonda manual (janela piscando), sem veredito"},
+    {"script": "tests/bench_*.py / stt_* / run_reduced.sh", "reason": "benchmarks de GPU/CPU e voz; dependem de modelos (GB), GPU Vulkan e microfone"}
+  ]
+}

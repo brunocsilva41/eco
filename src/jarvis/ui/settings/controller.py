@@ -1,4 +1,4 @@
-"""Controlador das Configuracoes: liga o modelo ao ``SettingsStore`` e ao canal de controle do Jarvis.
+"""Controlador das Configuracoes: liga o modelo ao ``SettingsStore`` e ao canal de controle do Eco.
 
 Responsabilidades: validacao ao vivo com debounce, salvar, descartar, restaurar o padrao, aplicar agora e
 reiniciar (``settings.control``), e detectar que o config.toml mudou em disco. Tudo que toca disco ou pode
@@ -227,7 +227,7 @@ class SettingsController(QObject):
         self.diskChanged.emit(False)
 
     def _publish(self, result: SaveResult, reset: bool) -> None:
-        """Le o estado do Jarvis e so entao anuncia o resultado (o banner precisa saber se ele esta aberto)."""
+        """Le o estado do Eco e so entao anuncia o resultado (o banner precisa saber se ele esta aberto)."""
         data = self.cfg.paths.data
 
         def done(rt: Runtime | None) -> None:
@@ -236,25 +236,25 @@ class SettingsController(QObject):
             self.saved.emit(SaveOutcome(result, reset, rt is not None, pending))
 
         def failed(message: str) -> None:
-            log.warning("nao consegui ler o estado do Jarvis: %s", message)
+            log.warning("nao consegui ler o estado do Eco: %s", message)
             self.saved.emit(SaveOutcome(result, reset, False, ()))
 
         run_async(lambda: control.read_runtime(data), self, done, failed)
 
-    # ------------------------------------------------------------------ Jarvis em execucao
+    # ------------------------------------------------------------------ Eco em execucao
     def refresh_runtime(self) -> None:
         data = self.cfg.paths.data
         run_async(lambda: control.read_runtime(data), self, self.runtimeChanged.emit, self._on_task_failed)
 
     def request(self, kind: str) -> None:
-        """Pede ao Jarvis em execucao para recarregar ("reload") ou reiniciar ("restart")."""
+        """Pede ao Eco em execucao para recarregar ("reload") ou reiniciar ("restart")."""
         try:
             control.request(self.cfg.paths.data, kind)
         except (OSError, ValueError) as exc:
-            log.error("nao consegui pedir %s ao Jarvis: %s", kind, exc)
+            log.error("nao consegui pedir %s ao Eco: %s", kind, exc)
             self.requestDone.emit(kind, False, str(exc))
             return
-        log.info("pedido de %s enviado ao Jarvis", kind)
+        log.info("pedido de %s enviado ao Eco", kind)
         self.requestDone.emit(kind, True, "")
 
     # ------------------------------------------------------------------ config.toml mudou em disco

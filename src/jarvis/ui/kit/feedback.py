@@ -7,8 +7,21 @@ from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabe
 from ..theme import MOTION, SIZE, SPACE, pal
 from . import icons
 from .base import Label, animate, set_a11y, strs, watch_theme
+from .visibility import set_shown
 from .buttons import Button
 from .status import STATE_ICON, state_ink
+
+
+def _live_toast(parent: QWidget):  # type: ignore[no-untyped-def]
+    """O toast atual da janela, ou None se nao ha ou se o objeto Qt ja foi apagado (acessar um toast apagado derrubava o app)."""
+    old = parent.property("_jarvis_toast")
+    if old is None or not isinstance(old, Toast):
+        return None
+    try:
+        from shiboken6 import isValid
+        return old if isValid(old) else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 class MessageBlock(QWidget):
@@ -23,7 +36,7 @@ class MessageBlock(QWidget):
         self._why = Label(why, "help", wrap=True)
         self._todo = Label(todo, "body", wrap=True)
         for lbl, text in ((self._what, what), (self._why, why), (self._todo, todo)):
-            lbl.setVisible(bool(text))
+            set_shown(lbl, bool(text))
             lay.addWidget(lbl)
         set_a11y(self, what, " ".join(x for x in (why, todo) if x))
 
@@ -113,8 +126,8 @@ class Toast(QFrame):
     @classmethod
     def show_message(cls, parent: QWidget, state: str, title: str, detail: str = "",
                      timeout_ms: int = MOTION.toast) -> "Toast":
-        old = parent.property("_jarvis_toast")
-        if isinstance(old, Toast):
+        old = _live_toast(parent)
+        if old is not None:
             old.dismiss()
         toast = cls(parent, state, title, detail, timeout_ms)
         parent.setProperty("_jarvis_toast", toast)
@@ -137,6 +150,9 @@ class Toast(QFrame):
         animate(self, 1.0, 0.0, MOTION.fast, self._fx.setOpacity, self._finish)
 
     def _finish(self) -> None:
+        par = self.parentWidget()
+        if par is not None and par.property("_jarvis_toast") is self:
+            par.setProperty("_jarvis_toast", None)           # nunca deixa um ponteiro para um toast que vai ser apagado
         self.hide()
         self.deleteLater()
 

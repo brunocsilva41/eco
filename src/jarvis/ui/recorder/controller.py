@@ -93,7 +93,7 @@ class RecorderController(QObject):
         self.load_set(set_name)
 
     def load_set(self, name: str) -> bool:
-        """Carrega "frases" ou "jarvis" em segundo plano. False se nao der agora (gravando ou salvando)."""
+        """Carrega "frases" ou "eco" em segundo plano. False se nao der agora (gravando ou salvando)."""
         model.check_set_name(name)
         if self._st.recording or self._st.busy:
             self._view.set_sets(self._st.name)

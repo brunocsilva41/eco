@@ -1,6 +1,6 @@
-# Jarvis v0.1.0 - notas da release
+# Eco v0.1.0 - notas da release
 
-Primeira versão do assistente de voz local em pt-BR. Artefato: `Jarvis-Setup-0.1.0.exe` (176,2 MiB, 184.755.225 bytes; SHA-256 `e880837b2b68d851e6cdc5187b5e19690f4078a447acae805a8924a2421dc8ba`,
+Primeira versão do assistente de voz local em pt-BR. Artefato: `Eco-Setup-0.1.0.exe` (176,2 MiB, 184.755.225 bytes; SHA-256 `e880837b2b68d851e6cdc5187b5e19690f4078a447acae805a8924a2421dc8ba`,
 também no arquivo `.exe.sha256`). Os modelos (~3,5 GB) são baixados à parte, com conferência de hash.
 
 ## Destaques
@@ -30,10 +30,10 @@ Windows 10 build 19044+ ou 11, x64; 16 GB de RAM recomendados; GPU com Vulkan (t
 - Taint estrito: depois de ler conteúdo de fora, mais ações pedem confirmação no modo estrito.
 - Memória e histórico em SQLite **não criptografado**.
 - A chave de assinatura do YOLO fica em arquivo: não protege contra malware com o seu usuário.
-- `Jarvis.cmd` não aceita argumentos com espaço entre aspas.
+- `Eco.cmd` não aceita argumentos com espaço entre aspas.
 - Bug conhecido no kit de UI: `ToggleSwitch.hideEvent` usa uma animação já apagada (o assistente usa subclasse protegida).
 - Instalador sem assinatura de código (SmartScreen avisa "editor desconhecido").
-- `piper-tts` é GPL-3.0 e PySide6 é LGPL-3.0: revisar antes de distribuir a terceiros. Licença do Jarvis pendente.
+- `piper-tts` é GPL-3.0 e PySide6 é LGPL-3.0: revisar antes de distribuir a terceiros. Licença do Eco pendente.
 
 ## O que NÃO foi verificado
 - Voz de ponta a ponta com microfone real e latência fim a fim; WER com as gravações do autor (pendente).
@@ -42,5 +42,5 @@ Windows 10 build 19044+ ou 11, x64; 16 GB de RAM recomendados; GPU com Vulkan (t
   `/DOWNLOADMODELS=1`, atualização de versão com mudança de AppId.
 - Teclado e mouse fora da Calculadora e de poucos aplicativos; multi-monitor e DPI por monitor; tela cheia real.
 - Atalho do YOLO apertado de verdade; ação nociva real (apagar) de ponta a ponta; restauração pela Lixeira.
-- Ilha: tamanho grande com dados reais, Jarvis encerrado à força, CPU/RAM com a máquina totalmente livre.
+- Ilha: tamanho grande com dados reais, Eco encerrado à força, CPU/RAM com a máquina totalmente livre.
 - Fonte: `STATUS.md` do desenvolvimento (2026-11-22).

@@ -1,7 +1,7 @@
 """Normalização do texto ANTES de falar (pt-BR): números, horas, datas, dinheiro, unidades, extensões e siglas viram palavras.
 
 O Piper lê dígitos, "14:30", ".exe" e marcas em inglês de forma errada ou comendo palavras. Aqui tudo vira texto por extenso;
-o texto mostrado na tela/transcrição NÃO muda. Pronúncias extras do Bruno: data/pronuncias.json ({"palavra": "como falar"}).
+o texto mostrado na tela/transcrição NÃO muda. Pronúncias extras do usuário: data/pronuncias.json ({"palavra": "como falar"}).
 """
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ _EXT_SPELL = {"exe": "é xis é", "pdf": "pê dê éfe", "txt": "tê xis tê", "
 _EXT = re.compile(r"\.(" + "|".join(sorted(_EXT_SPELL, key=len, reverse=True)) + r")\b", re.I)
 
 _PRON: dict[str, str] = {
-    "jarvis": "Járvis", "windows": "Uíndous", "whatsapp": "Uótsape", "youtube": "Iutúbi", "spotify": "Espotifái",
+    "eco": "Éco", "windows": "Uíndous", "whatsapp": "Uótsape", "youtube": "Iutúbi", "spotify": "Espotifái",
     "photoshop": "Fótoshópi", "chrome": "Cróume", "discord": "Discórdi", "telegram": "Telegrã", "outlook": "Autlúque",
     "excel": "Équicel", "powerpoint": "Páuerpóint", "firefox": "Faiarfóx", "bluetooth": "Blutúfe", "wi-fi": "uai fai",
     "wifi": "uai fai", "usb": "u ésse bê", "cpu": "cê pê u", "gpu": "gê pê u", "ram": "rã", "ok": "ôquei", "ia": "í á",

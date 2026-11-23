@@ -17,20 +17,20 @@ Escopo: 268 arquivos rastreados no HEAD (`47fbf68`) e os 33 commits de todo o hi
 ## Achados
 | # | Local | Tipo | Gravidade | Ação sugerida |
 |---|---|---|---|---|
-| 1 | Todos os commits (autor e committer) | E-mail pessoal do autor (`(e-mail mascarado)`) e usuário `brunocsilva41` | Média (ficará público) | Decisão do dono: aceitar, ou usar o e-mail `noreply` do GitHub nos próximos commits (`git config user.email`). Mudar os antigos exigiria reescrever o histórico (não feito; antes de publicar é o único momento barato) |
+| 1 | Todos os commits (autor e committer) | E-mail pessoal do autor (mascarado) e usuário `brunocsilva41` | Média (ficará público) | Decisão do dono: aceitar, ou usar o e-mail `noreply` do GitHub nos próximos commits (`git config user.email`). Mudar os antigos exigiria reescrever o histórico (não feito; antes de publicar é o único momento barato) |
 | 2 | `src/bench_validate.py` linhas 12-13 (desde `1b0c4b9`) | Caminho `C:\Users\<nome completo>\OpenBot\Shared\...` (nome de usuário do Windows) | Baixa | Em `src\**`, não alterado. Trocar por variável de ambiente/argumento; ou apagar o script de bancada. Fica no histórico |
-| 3 | `src/f2/record_bruno.py` linha 2 | Modelo do microfone/headset pessoal (docstring) e nome de arquivo com o primeiro nome | Baixa | Em `src\**`, só reportado |
+| 3 | `src/f2/record_usuario.py` linha 2 | Modelo do microfone/headset pessoal (docstring) e nome de arquivo com o primeiro nome | Baixa | Em `src\**`, só reportado |
 | 4 | `config.toml` linhas 7-8 | Nome do headset do dono em exemplo comentado | Baixa | Trocar por um exemplo genérico (arquivo fora do meu escopo; decisão do dono) |
-| 5 | `docs/*.md`, `PLANO.md`, `src\**` (docstrings/comentários) | Primeiro nome do dono ("Bruno") em dezenas de linhas; nomes de pastas pessoais `OpenBot\Shared\jarvis\...` em `docs/DESIGN-DECISOES.md` (linhas 3 e 159) e hardware real (CPU/GPU, `F:\Jarvis`) em `PLANO.md` | Baixa | Aceitar ou revisar. O nome aparece como "dono/usuário" no texto; não é segredo |
+| 5 | `docs/*.md`, `PLANO.md`, `src\**` (docstrings/comentários) | Primeiro nome do dono ("usuário") em dezenas de linhas; nomes de pastas pessoais `capturas/...` em `docs/DESIGN-DECISOES.md` (linhas 3 e 159) e hardware real (CPU/GPU, `F:\Eco`) em `PLANO.md` | Baixa | Aceitar ou revisar. O nome aparece como "dono/usuário" no texto; não é segredo |
 | 6 | `src/jarvis/core/auditkey.py`, `src/jarvis/memory/secrets.py` | Falso positivo de busca por "key/secret": código que gera/guarda chave em `data\` e filtro de segredos | Nenhuma | Nenhuma; conferido que não há valor literal |
-| 7 | `installer/Jarvis.iss:222` | Falso positivo de e-mail (`GlobalMemoryStatusEx@kernel32.dll`) | Nenhuma | Nenhuma |
+| 7 | `installer/Eco.iss:222` | Falso positivo de e-mail (`GlobalMemoryStatusEx@kernel32.dll`) | Nenhuma | Nenhuma |
 | 8 | `installer/manifest.json` | URLs de download com hash de revisão (Hugging Face/ModelScope), sem token | Nenhuma | Nenhuma |
 | 9 | `tests/stt_test.jsonl`, `tests/stt_results_piper.jsonl`, `tests/frases_pt.txt` | Frases de teste e transcrições (áudio sintético Piper/SAPI, sem voz do dono) | Nenhuma | Nenhuma |
 
 ## Estado do disco (não rastreado, protegido por `.gitignore`)
 `data\jarvis.db` (conversas e memória reais), `logs\audit.jsonl` e demais logs, `data\control\*.key` (chave do YOLO),
 `bin\` e `models\` (binários), `work\`, `.remotion\`, `@AutomationLog.txt`, `installer\dist|staging|wheels|tools|cache`,
-`tests\audio_piper`, `tests\audio_sapi` e (quando existir) `tests\audio_bruno` (voz do dono). Verificado com
+`tests\audio_piper`, `tests\audio_sapi` e (quando existir) `tests\audio_usuario` (voz do dono). Verificado com
 `git check-ignore -v` por amostra. Atenção: as regras `*.wav`, `*.log` e `*.db` valem para o repositório inteiro.
 
 ## Não verificado
@@ -42,5 +42,5 @@ Escopo: 268 arquivos rastreados no HEAD (`47fbf68`) e os 33 commits de todo o hi
 
 ## Antes do primeiro push (decisões do dono)
 1. Definir o e-mail público dos commits (achado 1) e se aceita o histórico atual.
-2. Decidir sobre o caminho pessoal em `src/bench_validate.py` e o headset em `config.toml`/`record_bruno.py`.
+2. Decidir sobre o caminho pessoal em `src/bench_validate.py` e o headset em `config.toml`/`record_usuario.py`.
 3. Definir a licença (README: PENDENTE) e revisar GPL-3.0 do piper-tts.

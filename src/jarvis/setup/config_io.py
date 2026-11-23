@@ -10,7 +10,7 @@ from ..settings.store import SettingsStore
 from .manifest import Manifest
 
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_RUN_NAME = "Jarvis"
+_RUN_NAME = "Eco"
 
 
 def store() -> SettingsStore:
@@ -50,7 +50,7 @@ def apply_stt_choice(components: list[str], manifest: Manifest) -> None:
 
 # ---------------------------------------------------------------- Iniciar com o Windows (HKCU\...\Run)
 def launcher_command(root: Path = ROOT) -> str | None:
-    pyw = root / "Jarvis.pyw"
+    pyw = root / "Eco.pyw"
     if not pyw.is_file():
         return None
     exe = Path(sys.executable)
@@ -80,7 +80,7 @@ def set_autostart(on: bool, root: Path = ROOT) -> None:
         if on:
             cmd = launcher_command(root)
             if cmd is None:
-                raise OSError("launcher do Jarvis não encontrado")
+                raise OSError("launcher do Eco não encontrado")
             winreg.SetValueEx(k, _RUN_NAME, 0, winreg.REG_SZ, cmd)
         else:
             try:

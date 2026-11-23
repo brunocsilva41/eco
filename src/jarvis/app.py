@@ -1,4 +1,4 @@
-"""Orquestrador do Jarvis: liga áudio, cérebro, agente, segurança e atalhos numa só aplicação.
+"""Orquestrador do Eco: liga áudio, cérebro, agente, segurança e atalhos numa só aplicação.
 
 Threads:
 - principal: laço de entrada (tecla de falar, texto, mudo, supervisão, pedidos de controle); captura e transcreve a fala;
@@ -6,7 +6,7 @@ Threads:
 - voz: síntese + reprodução (voice.py); atalhos: laço de mensagens do Windows (win/hotkeys.py).
 A tecla de emergência cancela o token de sessão (tudo que estiver rodando) e solta mouse/teclado. Cada pedido nasce
 do token de sessão CAPTURADO no momento da fala: se a emergência disparar no meio, o pedido nunca chega a rodar.
-Apertar a tecla de falar durante uma resposta interrompe o Jarvis (barge-in por tecla).
+Apertar a tecla de falar durante uma resposta interrompe o Eco (barge-in por tecla).
 Configuração: `apply_config` aplica na hora o que é seguro (temperatura, timeouts, ferramentas ligadas...) e lista o que
 exige reiniciar; o app em execução também atende `reload`/`restart` pedidos pela tela de Configurações.
 """
@@ -36,6 +36,7 @@ from .llm.client import LlmClient
 from .llm.server import LlamaServer
 from .memory import Memory
 from .safety import ConfirmationBroker, EmergencyStop
+from .brain.acp.cloud import CloudBrain
 from .settings import control
 from .settings.store import SettingsStore
 from .tools import catalog
@@ -55,7 +56,7 @@ RESTART_EXIT = control.RESTART_EXIT_CODE
 
 
 class StartupError(RuntimeError):
-    """Falha que impede o Jarvis de funcionar com segurança; a mensagem lista todos os problemas."""
+    """Falha que impede o Eco de funcionar com segurança; a mensagem lista todos os problemas."""
 
 
 @dataclass
@@ -105,7 +106,7 @@ class JarvisApp:
         cfg = self.cfg
         dpi.ensure_per_monitor_v2()                                     # antes de qualquer captura/coordenada
         logsetup.setup(cfg.paths.logs, cfg.logs)
-        log.info("iniciando o Jarvis (raiz %s)", cfg.paths.root)
+        log.info("iniciando o Eco (raiz %s)", cfg.paths.root)
         self._boot_cfg = cfg                                            # base para saber o que ainda exige reinício
         try:
             self._build(cfg)
@@ -124,13 +125,13 @@ class JarvisApp:
             raise
         control.write_runtime(cfg.paths.data, control.Runtime(os.getpid(), self._started,
                                                               control.config_mtime(cfgmod.CONFIG_FILE), self._pending_restart))
-        log.info("Jarvis pronto. %s para falar; %s para parar tudo.",
+        log.info("Eco pronto. %s para falar; %s para parar tudo.",
                  cfg.safety.talk_key.upper(), cfg.safety.emergency_hotkey.upper())
         if cfg.ui.island_enabled or cfg.ui.tray_enabled:
             self._start_island()
 
     def _start_island(self) -> None:
-        """Lança a Ilha como processo filho (pipes JSON). Qualquer falha aqui só tira a Ilha; o Jarvis segue."""
+        """Lança a Ilha como processo filho (pipes JSON). Qualquer falha aqui só tira a Ilha; o Eco segue."""
         p = self._p
         if p is None:
             return
@@ -144,7 +145,7 @@ class JarvisApp:
             link.start()
             self._island = link
         except Exception:  # noqa: BLE001
-            log.exception("não consegui iniciar a Ilha (o Jarvis continua sem ela)")
+            log.exception("não consegui iniciar a Ilha (o Eco continua sem ela)")
 
     def _island_config(self) -> dict:
         """Aparência e comportamento da Ilha + atalhos REAIS (para as dicas nos botões); reenviado a cada config aplicada."""
@@ -184,6 +185,24 @@ class JarvisApp:
             if now - self._settings_opened_at > 3.0:                    # cliques repetidos não abrem várias janelas
                 self._settings_opened_at = now
                 self.bus.publish("open_settings", section="permissions" if msg.get("section") == "permissions" else "general")
+        elif cmd == "terminal":
+            self._open_terminal()
+
+    def _open_terminal(self) -> None:
+        """Abre o painel Terminal (outro processo; a janela única traz a existente para a frente)."""
+        import subprocess
+        import sys
+        now = time.monotonic()
+        if now - getattr(self, "_terminal_started", 0.0) < 1.5:
+            return
+        self._terminal_started = now
+        code = ("import sys; sys.path.insert(0, r'%s'); from jarvis.__main__ import main; raise SystemExit(main(sys.argv[1:]))"
+                % str(cfgmod.ROOT / "src"))
+        try:
+            from .win.spawn import spawn_gui
+            spawn_gui(["-I", "-X", "utf8", "-c", code, "terminal"], cwd=str(cfgmod.ROOT))
+        except OSError:
+            log.exception("não consegui abrir o painel Terminal")
 
     def _persist_grant(self, grant: dict) -> None:
         """Liberação aprovada pelo usuário (Ilha/voz/tecla): acrescenta ao config.toml para valer nas próximas vezes."""
@@ -209,7 +228,7 @@ class JarvisApp:
                 save_values(updates)
             except Exception:  # noqa: BLE001
                 log.warning("não consegui salvar %s", ", ".join(updates), exc_info=True)
-        threading.Thread(target=run, name="jarvis-persist", daemon=True).start()
+        threading.Thread(target=run, name="eco-persist", daemon=True).start()
 
     # ------------------------------------------------------------ escuta aberta
     @property
@@ -299,6 +318,12 @@ class JarvisApp:
             failed = catalog.register_everything(registry, cfg)
             if failed:
                 log.error("módulos de ferramentas com falha: %s", ", ".join(failed))
+            try:                                                        # terminal integrado: vigia do painel + parada de emergência
+                from .tools import terminal_tools
+                terminal_tools.start_service(cfg, self.bus)
+                stack.callback(terminal_tools.stop_service)
+            except Exception:  # noqa: BLE001 - o terminal nunca impede o Eco de abrir
+                log.exception("terminal integrado indisponível")
 
             server = LlamaServer(cfg, on_event=lambda kind, text: self.bus.publish("notice", notice_kind=kind, text=text))
             stack.callback(server.stop)
@@ -317,6 +342,10 @@ class JarvisApp:
             voice = Voice(tts, speaker, self.state)
             stack.callback(voice.close)
             agent = Agent(cfg, llm, registry, memory, self.bus, self.state)
+            cloud = CloudBrain(cfg, registry, self.bus, lambda text, risk, cancel: confirmer.ask(text, risk, cancel).allowed,
+                               memory=memory)                         # cérebro em nuvem (ACP): nada inicia até brain.kind = "cloud"
+            stack.callback(cloud.close)
+            agent.set_cloud(cloud)
             hotkeys = HotkeyListener()
             stack.callback(hotkeys.stop)
             parts = _Parts(memory, registry, server, llm, mic, speaker, stt, tts, voice, agent, confirmer, hotkeys)
@@ -331,7 +360,7 @@ class JarvisApp:
             if errors:
                 raise StartupError("não consegui iniciar:\n - " + "\n - ".join(errors))
             self._check_prompt_budget(agent, llm)
-            threading.Thread(target=self._warmup, args=(agent,), name="jarvis-warmup", daemon=True).start()
+            threading.Thread(target=self._warmup, args=(agent,), name="eco-warmup", daemon=True).start()
             self._start_hotkeys()
             stack.pop_all()                                             # tudo certo: o shutdown() assume a limpeza
 
@@ -349,7 +378,7 @@ class JarvisApp:
                 log.debug("pré-aquecimento do modelo: %.1f s", agent.prewake(CancelToken()))
             except Exception:  # noqa: BLE001 - só otimização
                 log.debug("pré-aquecimento falhou (ignorado)", exc_info=True)
-        threading.Thread(target=run, name="jarvis-prewake", daemon=True).start()
+        threading.Thread(target=run, name="eco-prewake", daemon=True).start()
 
     def _warmup(self, agent: Agent) -> None:
         """Aquece o cache do servidor com o prompt fixo (o 1º pedido real não espera o processamento dele)."""
@@ -422,7 +451,7 @@ class JarvisApp:
         try:
             p.hotkeys.add(s.emergency_hotkey, lambda: stop.trigger("tecla de emergência"))
         except HotkeyError as exc:
-            raise StartupError(f"tecla de emergência indisponível: {exc}") from exc    # sem ela o Jarvis NÃO controla o PC
+            raise StartupError(f"tecla de emergência indisponível: {exc}") from exc    # sem ela o Eco NÃO controla o PC
         self.bus.subscribe(lambda ev: self._open_settings(ev.data.get("section", "permissions")), kind="open_settings")
         YOLO.on_change(lambda on, why: self.bus.publish("yolo", on=on, text=f"Modo YOLO {why}"))   # só reflete (Ilha, terminal)
         if s.yolo_hotkey.strip():
@@ -462,11 +491,16 @@ class JarvisApp:
                 except Exception:  # noqa: BLE001 - encerrar o resto mesmo se um falhar
                     log.exception("erro ao encerrar %s", name)
         try:
+            from .tools import terminal_tools
+            terminal_tools.stop_service()                 # derruba o que o terminal integrado iniciou (só isso) e desarma o modo livre
+        except Exception:  # noqa: BLE001
+            log.exception("erro ao encerrar o terminal integrado")
+        try:
             control.clear_runtime(self.cfg.paths.data)
         except Exception:  # noqa: BLE001
             log.exception("erro ao limpar runtime.json")
         self.bus.close()
-        log.info("Jarvis encerrado")
+        log.info("Eco encerrado")
 
     def request_stop(self, exit_code: int = 0) -> None:
         self._exit_code = exit_code
@@ -491,13 +525,13 @@ class JarvisApp:
         code = ("import sys; sys.path.insert(0, r'%s'); from jarvis.__main__ import main; raise SystemExit(main(sys.argv[1:]))"
                 % str(cfgmod.ROOT / "src"))
         try:
-            self._settings_proc = subprocess.Popen([sys.executable, "-I", "-X", "utf8", "-c", code, "settings", "--open", section],
-                                                   cwd=str(cfgmod.ROOT), creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | 0x08000000)
+            from .win.spawn import spawn_gui
+            self._settings_proc = spawn_gui(["-I", "-X", "utf8", "-c", code, "settings", "--open", section], cwd=str(cfgmod.ROOT))
         except OSError:
             log.exception("não consegui abrir as Configurações")
 
     def _toggle_yolo(self) -> None:
-        """Atalho FÍSICO do Bruno. É o único caminho que liga o YOLO (o modelo só pode apertar atalhos da lista, e este é reservado)."""
+        """Atalho FÍSICO do usuário. É o único caminho que liga o YOLO (o modelo só pode apertar atalhos da lista, e este é reservado)."""
         if YOLO.active():
             YOLO.deactivate("atalho")
             return
@@ -521,7 +555,7 @@ class JarvisApp:
         if p is None:
             raise StartupError("chame start() antes de run()")
         talk = KeyHold(self.cfg.safety.talk_key)
-        p.voice.say("Jarvis pronto.")
+        p.voice.say("Eco pronto.")
         next_supervise = next_control = time.monotonic()
         failures: list[float] = []
         try:
@@ -543,7 +577,7 @@ class JarvisApp:
                         self._on_open_listen()
                         continue
                     self._stop.wait(0.02)
-                except Exception as exc:  # noqa: BLE001 - uma falha numa tarefa periódica nunca derruba o Jarvis
+                except Exception as exc:  # noqa: BLE001 - uma falha numa tarefa periódica nunca derruba o Eco
                     log.exception("erro no laço principal")
                     self.bus.publish("error", where="loop", text=str(exc))
                     now = time.monotonic()
@@ -577,7 +611,7 @@ class JarvisApp:
         if p.confirmer.has_pending():
             time.sleep(0.05)                                    # a resposta é por voz/tecla de confirmação; não interromper
             return
-        self._interrupt_request()                               # barge-in: falar por cima interrompe o Jarvis
+        self._interrupt_request()                               # barge-in: falar por cima interrompe o Eco
         session = self._current_session()                       # CAPTURADO: a emergência cancela ESTE token
         if not self.state.go(State.LISTENING):
             log.warning("não consegui entrar em LISTENING (estado %s)", self.state.agent_state.value)
@@ -734,11 +768,11 @@ class JarvisApp:
             p.voice.say("A tecla de emergência parou de funcionar. Não vou mexer no computador até restaurar.")
 
     def _listen_for_answer(self, cancel: CancelToken, timeout_s: float, not_before: float) -> str | None:
-        """Escuta uma resposta curta (Sim/Não) para o ConfirmationBroker, ignorando a fala do próprio Jarvis."""
+        """Escuta uma resposta curta (Sim/Não) para o ConfirmationBroker, ignorando a fala do próprio Eco."""
         p = self._p
         if p is None or self._muted:
             return None
-        while p.voice.speaking and not cancel.cancelled:        # nunca escutar enquanto o Jarvis fala
+        while p.voice.speaking and not cancel.cancelled:        # nunca escutar enquanto o Eco fala
             cancel.wait(0.05)
         if cancel.cancelled:
             return None

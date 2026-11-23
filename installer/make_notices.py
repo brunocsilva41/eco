@@ -16,7 +16,7 @@ for dist in metadata.distributions(path=[str(site)]):
         lic = "; ".join(cls) or lic or "ver metadados do pacote"
     rows.append((md["Name"], md["Version"], lic, md.get("Home-page") or ""))
 rows.sort(key=lambda r: r[0].lower())
-text = ["JARVIS - COMPONENTES DE TERCEIROS (pacotes Python embutidos)", "",
+text = ["ECO - COMPONENTES DE TERCEIROS (pacotes Python embutidos)", "",
         "Cada pacote mantém sua própria licença (arquivos LICENSE dentro de runtime/python/Lib/site-packages/<pacote>-<versão>.dist-info).",
         "Aviso: o pacote piper-tts (GPL-3.0) e o PySide6 (LGPL-3.0) exigem que o texto da licença e o acesso ao código-fonte acompanhem a distribuição;",
         "o código-fonte de cada versão está no PyPI e nos repositórios acima indicados.", ""]

@@ -1,4 +1,4 @@
-"""Memória local do Jarvis (SQLite): conversas em sessões, memória de longo prazo e busca.
+"""Memória local do Eco (SQLite): conversas em sessões, memória de longo prazo e busca.
 
 Uso: `from jarvis.memory import Memory, MemoryError_`; `mem = Memory(db_path, cfg.memory)` e então
 `mem.sessions` (SessionStore), `mem.longterm` (LongTermMemory) e `mem.search` (ConversationSearch).

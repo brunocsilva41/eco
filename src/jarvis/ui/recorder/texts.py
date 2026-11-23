@@ -11,17 +11,17 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Window:
-    title: str = "Jarvis: Minha voz"
+    title: str = "Eco: Minha voz"
     heading: str = "Minha voz"
     set_label: str = "Conjunto"
     set_frases: str = "Frases"
-    set_jarvis: str = "Palavra Jarvis"
+    set_jarvis: str = "Palavra Eco"
     mic_label: str = "Microfone"
     mic_refresh: str = "Atualizar lista de microfones"
     close_hint: str = "Esc cancela a gravação em andamento ou fecha a janela."
 
     def noun(self, set_name: str) -> str:
-        return "Amostra" if set_name == "jarvis" else "Frase"
+        return "Amostra" if set_name == "eco" else "Frase"
 
     def position(self, set_name: str, n: int, total: int) -> str:
         return f"{self.noun(set_name)} {n} de {total}"
@@ -133,10 +133,10 @@ class Failures:
         "Microfone em uso por outro programa", "Dois programas não gravam do mesmo microfone ao mesmo tempo.",
         "Feche chamadas e gravadores que o estejam usando e tente de novo.")
     permission: Message = Message(
-        "O Windows bloqueou o microfone", "Sem permissão o Jarvis só recebe silêncio.",
+        "O Windows bloqueou o microfone", "Sem permissão o Eco só recebe silêncio.",
         "Abra Configurações do Windows, Privacidade e segurança, Microfone, e permita apps de área de trabalho.")
     format: Message = Message(
-        "Este microfone não grava em 16 kHz mono", "O Jarvis precisa desse formato para ouvir bem.",
+        "Este microfone não grava em 16 kHz mono", "O Eco precisa desse formato para ouvir bem.",
         "Escolha outro microfone na lista e tente de novo.")
     stalled: Message = Message(
         "O microfone parou de enviar áudio", "A gravação em andamento foi perdida.",
@@ -166,7 +166,7 @@ class Failures:
         "Corrija o arquivo e reabra o conjunto.")
     load_set: Message = Message(
         "Não consegui montar este conjunto", "Sem ele não há o que gravar.",
-        "Confira a pasta de dados do Jarvis e tente de novo.")
+        "Confira a pasta de dados do Eco e tente de novo.")
 
 
 @dataclass(frozen=True)
@@ -245,7 +245,7 @@ class States:
 
 @dataclass(frozen=True)
 class Api:
-    invalid_set: str = "set_name inválido: {value!r}. Use 'frases' (suas frases) ou 'jarvis' (amostras da palavra Jarvis)."
+    invalid_set: str = "set_name inválido: {value!r}. Use 'frases' (suas frases) ou 'eco' (amostras da palavra Eco)."
     needs_app: str = "open_recorder precisa de um QApplication ativo; use main_recorder(cfg) fora da interface."
 
 

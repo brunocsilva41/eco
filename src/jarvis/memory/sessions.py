@@ -53,7 +53,7 @@ def estimate_tokens(text: str) -> int:
 class Session:
     id: int
     title: str
-    auto_title: bool                  # True = título automático (ainda não renomeado pelo Bruno)
+    auto_title: bool                  # True = título automático (ainda não renomeado pelo usuário)
     created: float
     last_active: float
     ended: float | None
@@ -373,7 +373,7 @@ class SessionStore:
         return title
 
     def auto_title(self, session_id: int) -> str:
-        """Título = primeiras ~6 palavras da primeira fala do Bruno. Não mexe em título renomeado. Devolve o título atual."""
+        """Título = primeiras ~6 palavras da primeira fala do usuário. Não mexe em título renomeado. Devolve o título atual."""
         with self._db.tx() as c:
             return self._auto_title_tx(c, session_id)
 
@@ -459,7 +459,7 @@ class SessionStore:
         if fmt == "json":
             payload = json.dumps(data, ensure_ascii=False, indent=2)
         else:
-            labels = {"user": "Você", "assistant": "Jarvis", "tool": "Ferramenta", "system": "Sistema"}
+            labels = {"user": "Você", "assistant": "Eco", "tool": "Ferramenta", "system": "Sistema"}
             lines = [f"# {data['title']}", "", f"- Criada: {_fmt_ts(data['created'])}",
                      f"- Última atividade: {_fmt_ts(data['last_active'])}", f"- Estado: {data['state']}", ""]
             if data["summary"]:

@@ -1,4 +1,4 @@
-"""Ponto de entrada do Jarvis instalado: python.exe -I -X utf8 jarvis_boot.py [subcomando ...]. Sem dependência do Python do sistema."""
+"""Ponto de entrada do Eco instalado: python.exe -I -X utf8 eco_boot.py [subcomando ...]. Sem dependência do Python do sistema."""
 import os
 import sys
 
