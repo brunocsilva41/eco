@@ -37,7 +37,7 @@ def main() -> int:
         R.check("10 campos do terminal mapeados", len(all_keys) == 10 and all(k in schema.BY_KEY for k in all_keys), str(len(all_keys)))
         R.check("todos os campos têm rótulo e ajuda próprios", all(k in field_texts.FIELDS and field_texts.FIELDS[k][1] for k in all_keys))
         txt = " ".join(field_texts.FIELDS[k][0] + field_texts.FIELDS[k][1] for k in all_keys)
-        R.check("texto novo diz Eco (não Eco)", "Eco" not in txt.replace("Eco.cmd", ""), "")
+        R.check("texto novo diz Eco (não o nome antigo)", "jarvis" not in txt.lower(), "")
         win = SettingsWindow(cfg, None, store, prefs)
         win.show()
         U.settle(400)

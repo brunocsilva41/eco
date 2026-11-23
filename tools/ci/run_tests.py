@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -61,7 +62,14 @@ def main(argv: list[str] | None = None) -> int:
             (out / f"{tag}.log").write_text(text, encoding="utf-8")
             tail = " | ".join([ln for ln in text.splitlines() if ln.strip()][-2:])[:200]
             if r.returncode != 0:
-                status = f"FALHOU (codigo {r.returncode})"
+                # Falha nativa do PySide6 ao descarregar as DLLs do Qt DEPOIS de todos os testes terminarem OK (0xC0000409/0xC0000005):
+                # conhecida, sem relacao com o resultado dos testes. So vale se o resultado final foi OK e nao ha nenhuma falha impressa.
+                nativo = (r.returncode & 0xFFFFFFFF) in (0xC0000409, 0xC0000005)
+                passou = re.search(r"^OK\s*$", text, re.M) is not None and "FAILED" not in text and "[FALHA]" not in text
+                if nativo and passou:
+                    tail = "(aviso: o PySide6 falhou ao encerrar o interpretador, depois de todos os testes OK) " + tail
+                else:
+                    status = f"FALHOU (codigo {r.returncode})"
         except subprocess.TimeoutExpired as e:
             status = f"TEMPO ESGOTADO ({s.get('timeout', 300)} s)"
             txt = (e.stdout or b"")
@@ -69,6 +77,12 @@ def main(argv: list[str] | None = None) -> int:
         dt = time.time() - t0
         if status != "ok":
             failed += 1
+            try:
+                falhas = [ln.strip() for ln in text.splitlines() if ln.lstrip().startswith("[FALHA")][:4]
+                if falhas:
+                    tail = tail + " || " + " ; ".join(x[:140] for x in falhas)
+            except NameError:
+                pass
         print(f"[{'OK ' if status == 'ok' else 'ERRO'}] {tag:38s} {dt:6.1f}s  {tail if status == 'ok' else status + ' :: ' + tail}", flush=True)
         rows.append({"suite": tag, "script": s["script"], "status": status, "seconds": round(dt, 1), "tail": tail})
 
